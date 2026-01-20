@@ -18,6 +18,14 @@ export interface Instance {
   ignore_groups: boolean | null;
 }
 
+export interface UazapiInstance {
+  token: string;
+  name: string;
+  status: string;
+  phone?: string;
+  webhook_url?: string;
+}
+
 export function useInstances(subaccountId?: string) {
   const { user } = useAuth();
   const { settings } = useSettings();
@@ -43,6 +51,148 @@ export function useInstances(subaccountId?: string) {
     enabled: !!user,
   });
 
+  // Fetch all instances from UAZAPI
+  const fetchUazapiInstances = async (): Promise<UazapiInstance[]> => {
+    if (!settings?.uazapi_admin_token || !settings?.uazapi_base_url) {
+      throw new Error("Configurações UAZAPI não encontradas");
+    }
+
+    const response = await fetch(`${settings.uazapi_base_url}/admin/listar`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "admintoken": settings.uazapi_admin_token,
+      },
+    });
+
+    if (!response.ok) {
+      // Try alternative endpoint
+      const altResponse = await fetch(`${settings.uazapi_base_url}/instance/list`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "admintoken": settings.uazapi_admin_token,
+        },
+      });
+
+      if (!altResponse.ok) {
+        throw new Error("Erro ao buscar instâncias da UAZAPI");
+      }
+
+      const altData = await altResponse.json();
+      return altData.instances || altData || [];
+    }
+
+    const data = await response.json();
+    return data.instances || data || [];
+  };
+
+  // Get status of a specific instance
+  const getInstanceStatus = async (instanceToken: string): Promise<string> => {
+    if (!settings?.uazapi_base_url) {
+      throw new Error("URL base da UAZAPI não configurada");
+    }
+
+    try {
+      const response = await fetch(`${settings.uazapi_base_url}/instance/status`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "token": instanceToken,
+        },
+      });
+
+      if (!response.ok) {
+        return "disconnected";
+      }
+
+      const data = await response.json();
+      return data.status || data.state || "disconnected";
+    } catch {
+      return "disconnected";
+    }
+  };
+
+  // Sync status from UAZAPI
+  const syncInstanceStatus = useMutation({
+    mutationFn: async (instance: Instance) => {
+      const status = await getInstanceStatus(instance.uazapi_instance_token);
+      
+      let mappedStatus: InstanceStatus = "disconnected";
+      if (status === "connected" || status === "open" || status === "authenticated") {
+        mappedStatus = "connected";
+      } else if (status === "connecting" || status === "qr" || status === "waiting") {
+        mappedStatus = "connecting";
+      }
+
+      const { error } = await supabase
+        .from("instances")
+        .update({ instance_status: mappedStatus })
+        .eq("id", instance.id);
+
+      if (error) throw error;
+      return mappedStatus;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
+    },
+  });
+
+  // Import existing instance from UAZAPI
+  const importInstance = useMutation({
+    mutationFn: async ({ 
+      uazapiInstance, 
+      subaccountId 
+    }: { 
+      uazapiInstance: UazapiInstance; 
+      subaccountId: string;
+    }) => {
+      if (!user) throw new Error("Não autenticado");
+
+      // Check if already imported
+      const { data: existing } = await supabase
+        .from("instances")
+        .select("id")
+        .eq("uazapi_instance_token", uazapiInstance.token)
+        .maybeSingle();
+
+      if (existing) {
+        throw new Error("Esta instância já foi importada");
+      }
+
+      let mappedStatus: InstanceStatus = "disconnected";
+      if (uazapiInstance.status === "connected" || uazapiInstance.status === "open") {
+        mappedStatus = "connected";
+      } else if (uazapiInstance.status === "connecting" || uazapiInstance.status === "qr") {
+        mappedStatus = "connecting";
+      }
+
+      const { data, error } = await supabase
+        .from("instances")
+        .insert({
+          user_id: user.id,
+          subaccount_id: subaccountId,
+          instance_name: uazapiInstance.name,
+          uazapi_instance_token: uazapiInstance.token,
+          instance_status: mappedStatus,
+          webhook_url: uazapiInstance.webhook_url || settings?.global_webhook_url || null,
+          ignore_groups: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      toast.success("Instância importada com sucesso!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao importar: " + error.message);
+    },
+  });
+
   const createInstance = useMutation({
     mutationFn: async ({ name, subaccountId }: { name: string; subaccountId: string }) => {
       if (!user || !settings?.uazapi_admin_token || !settings?.uazapi_base_url) {
@@ -54,7 +204,7 @@ export function useInstances(subaccountId?: string) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "admin_token": settings.uazapi_admin_token,
+          "admintoken": settings.uazapi_admin_token,
         },
         body: JSON.stringify({
           name,
@@ -64,10 +214,15 @@ export function useInstances(subaccountId?: string) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Erro ao criar instância na UAZAPI");
+        throw new Error(errorData.message || errorData.error || "Erro ao criar instância na UAZAPI");
       }
 
       const uazapiData = await response.json();
+      const instanceToken = uazapiData.token || uazapiData.instance_token || uazapiData.instanceToken;
+
+      if (!instanceToken) {
+        throw new Error("Token da instância não retornado pela API");
+      }
 
       // Save to database
       const { data, error } = await supabase
@@ -76,7 +231,7 @@ export function useInstances(subaccountId?: string) {
           user_id: user.id,
           subaccount_id: subaccountId,
           instance_name: name,
-          uazapi_instance_token: uazapiData.token || uazapiData.instance_token,
+          uazapi_instance_token: instanceToken,
           instance_status: "disconnected" as InstanceStatus,
           webhook_url: settings.global_webhook_url,
           ignore_groups: false,
@@ -97,22 +252,34 @@ export function useInstances(subaccountId?: string) {
   });
 
   const deleteInstance = useMutation({
-    mutationFn: async (instance: Instance) => {
-      if (!settings?.uazapi_admin_token || !settings?.uazapi_base_url) {
-        throw new Error("Configurações UAZAPI não encontradas");
-      }
+    mutationFn: async ({ instance, deleteFromUazapi = false }: { instance: Instance; deleteFromUazapi?: boolean }) => {
+      if (deleteFromUazapi) {
+        if (!settings?.uazapi_admin_token || !settings?.uazapi_base_url) {
+          throw new Error("Configurações UAZAPI não encontradas");
+        }
 
-      // Delete from UAZAPI
-      await fetch(`${settings.uazapi_base_url}/instance/delete`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "admin_token": settings.uazapi_admin_token,
-        },
-        body: JSON.stringify({
-          token: instance.uazapi_instance_token,
-        }),
-      });
+        // Delete from UAZAPI
+        const response = await fetch(`${settings.uazapi_base_url}/instance/delete`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            "admintoken": settings.uazapi_admin_token,
+            "token": instance.uazapi_instance_token,
+          },
+        });
+
+        // Try alternative method if first fails
+        if (!response.ok) {
+          await fetch(`${settings.uazapi_base_url}/admin/delete`, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+              "admintoken": settings.uazapi_admin_token,
+            },
+            body: JSON.stringify({ token: instance.uazapi_instance_token }),
+          });
+        }
+      }
 
       // Delete from database
       const { error } = await supabase
@@ -122,9 +289,11 @@ export function useInstances(subaccountId?: string) {
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
-      toast.success("Instância excluída!");
+      toast.success(variables.deleteFromUazapi 
+        ? "Instância excluída do sistema e da UAZAPI!" 
+        : "Instância removida do sistema!");
     },
     onError: (error) => {
       toast.error("Erro ao excluir: " + error.message);
@@ -137,7 +306,7 @@ export function useInstances(subaccountId?: string) {
     }
 
     const response = await fetch(`${settings.uazapi_base_url}/instance/qrcode`, {
-      method: "POST",
+      method: "GET",
       headers: {
         "Content-Type": "application/json",
         "token": instance.uazapi_instance_token,
@@ -145,24 +314,63 @@ export function useInstances(subaccountId?: string) {
     });
 
     if (!response.ok) {
-      throw new Error("Erro ao obter QR Code");
+      throw new Error("Erro ao obter QR Code - verifique se a instância existe");
     }
 
     const data = await response.json();
-    return data.qrcode || data.base64 || data.qr;
+    return data.qrcode || data.base64 || data.qr || data.code;
   };
 
-  const updateInstanceStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: InstanceStatus }) => {
+  const connectInstance = async (instance: Instance) => {
+    if (!settings?.uazapi_base_url) {
+      throw new Error("URL base da UAZAPI não configurada");
+    }
+
+    // First try to connect/initialize the instance
+    await fetch(`${settings.uazapi_base_url}/instance/connect`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "token": instance.uazapi_instance_token,
+      },
+    });
+
+    // Update status to connecting
+    await supabase
+      .from("instances")
+      .update({ instance_status: "connecting" })
+      .eq("id", instance.id);
+
+    queryClient.invalidateQueries({ queryKey: ["instances"] });
+  };
+
+  const disconnectInstance = useMutation({
+    mutationFn: async (instance: Instance) => {
+      if (!settings?.uazapi_base_url) {
+        throw new Error("URL base da UAZAPI não configurada");
+      }
+
+      await fetch(`${settings.uazapi_base_url}/instance/logout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "token": instance.uazapi_instance_token,
+        },
+      });
+
       const { error } = await supabase
         .from("instances")
-        .update({ instance_status: status })
-        .eq("id", id);
+        .update({ instance_status: "disconnected" })
+        .eq("id", instance.id);
 
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
+      toast.success("Instância desconectada!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao desconectar: " + error.message);
     },
   });
 
@@ -211,8 +419,12 @@ export function useInstances(subaccountId?: string) {
     isLoading,
     createInstance,
     deleteInstance,
+    importInstance,
     getQRCode,
-    updateInstanceStatus,
+    connectInstance,
+    disconnectInstance,
+    syncInstanceStatus,
     updateInstanceWebhook,
+    fetchUazapiInstances,
   };
 }
