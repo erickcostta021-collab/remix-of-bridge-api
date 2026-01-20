@@ -65,9 +65,13 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
   }, [open, subaccount.location_id]);
 
   const loadGHLUsers = async () => {
+    if (!subaccount.ghl_subaccount_token) {
+      console.warn("Subconta sem token configurado");
+      return;
+    }
     setLoadingUsers(true);
     try {
-      const users = await fetchLocationUsers(subaccount.location_id);
+      const users = await fetchLocationUsers(subaccount.location_id, subaccount.ghl_subaccount_token);
       setGhlUsers(users);
     } catch (error: any) {
       console.error("Error loading GHL users:", error);
@@ -267,9 +271,17 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
                 </SelectTrigger>
                 <SelectContent className="bg-popover border-border">
                   <SelectItem value="none">Nenhum usuário</SelectItem>
-                  {loadingUsers ? (
+                  {!subaccount.ghl_subaccount_token ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">
+                      Token da subconta não configurado
+                    </div>
+                  ) : loadingUsers ? (
                     <div className="flex items-center justify-center py-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  ) : ghlUsers.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">
+                      Nenhum usuário encontrado
                     </div>
                   ) : (
                     ghlUsers.map((user) => (
