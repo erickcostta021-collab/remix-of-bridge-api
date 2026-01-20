@@ -58,15 +58,10 @@ export function useInstances(subaccountId?: string) {
     }
 
     const base = settings.uazapi_base_url.replace(/\/$/, "");
+    // Per UAZAPI docs: GET /instance/all for listing all instances
     const candidatePaths = [
-      // Most common layouts
-      "/instance/fetchInstances",
-      "/api/instance/fetchInstances",
-      "/v2/instance/fetchInstances",
-      "/api/v2/instance/fetchInstances",
-      // Older/alt admin layouts
-      "/admin/instancias",
-      "/api/admin/instancias",
+      "/instance/all",
+      "/api/instance/all",
     ];
 
     let response: Response | null = null;
@@ -238,8 +233,10 @@ export function useInstances(subaccountId?: string) {
         throw new Error("Configurações UAZAPI não encontradas");
       }
 
-      // Create instance in UAZAPI
-      const response = await fetch(`${settings.uazapi_base_url}/instance/create`, {
+      const base = settings.uazapi_base_url.replace(/\/$/, "");
+      
+      // Per UAZAPI docs: POST /instance/init to create instance
+      const response = await fetch(`${base}/instance/init`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -247,7 +244,7 @@ export function useInstances(subaccountId?: string) {
         },
         body: JSON.stringify({
           name,
-          webhook_url: settings.global_webhook_url || "",
+          systemName: "lovable-ghl-bridge",
         }),
       });
 
