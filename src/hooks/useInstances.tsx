@@ -16,6 +16,7 @@ export interface Instance {
   instance_status: InstanceStatus;
   webhook_url: string | null;
   ignore_groups: boolean | null;
+  phone?: string; // Fetched from UAZAPI at runtime
 }
 
 export interface UazapiInstance {
@@ -108,8 +109,8 @@ export function useInstances(subaccountId?: string) {
     }));
   };
 
-  // Get status of a specific instance
-  const getInstanceStatus = async (instanceToken: string): Promise<string> => {
+  // Get status of a specific instance (returns status and phone)
+  const getInstanceStatus = async (instanceToken: string): Promise<{ status: string; phone?: string }> => {
     if (!settings?.uazapi_base_url) {
       throw new Error("URL base da UAZAPI não configurada");
     }
@@ -134,28 +135,30 @@ export function useInstances(subaccountId?: string) {
         break;
       }
 
-      if (!response) return "disconnected";
+      if (!response) return { status: "disconnected" };
 
       if (!response.ok) {
-        return "disconnected";
+        return { status: "disconnected" };
       }
 
       const data = await response.json();
-      return data.status || data.state || "disconnected";
+      const status = data.status || data.state || "disconnected";
+      const phone = data.phone || data.number || data.jid?.split("@")?.[0] || "";
+      return { status, phone };
     } catch {
-      return "disconnected";
+      return { status: "disconnected" };
     }
   };
 
   // Sync status from UAZAPI
   const syncInstanceStatus = useMutation({
-    mutationFn: async (instance: Instance) => {
-      const status = await getInstanceStatus(instance.uazapi_instance_token);
+    mutationFn: async (instance: Instance): Promise<{ status: InstanceStatus; phone?: string }> => {
+      const result = await getInstanceStatus(instance.uazapi_instance_token);
       
       let mappedStatus: InstanceStatus = "disconnected";
-      if (status === "connected" || status === "open" || status === "authenticated") {
+      if (result.status === "connected" || result.status === "open" || result.status === "authenticated") {
         mappedStatus = "connected";
-      } else if (status === "connecting" || status === "qr" || status === "waiting") {
+      } else if (result.status === "connecting" || result.status === "qr" || result.status === "waiting") {
         mappedStatus = "connecting";
       }
 
@@ -165,7 +168,7 @@ export function useInstances(subaccountId?: string) {
         .eq("id", instance.id);
 
       if (error) throw error;
-      return mappedStatus;
+      return { status: mappedStatus, phone: result.phone };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,8 @@ import {
   MoreVertical,
   Unlink,
   Power,
-  Copy
+  Copy,
+  Phone
 } from "lucide-react";
 import { Instance, useInstances } from "@/hooks/useInstances";
 import { toast } from "sonner";
@@ -69,6 +70,18 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const [webhookUrl, setWebhookUrl] = useState(instance.webhook_url || "");
   const [ignoreGroups, setIgnoreGroups] = useState(instance.ignore_groups || false);
   const [syncing, setSyncing] = useState(false);
+  const [connectedPhone, setConnectedPhone] = useState<string | null>(instance.phone || null);
+
+  // Fetch phone number on mount if connected
+  useEffect(() => {
+    if (instance.instance_status === "connected" && !connectedPhone) {
+      syncInstanceStatus.mutateAsync(instance).then((result) => {
+        if (result?.phone) {
+          setConnectedPhone(result.phone);
+        }
+      }).catch(() => {});
+    }
+  }, [instance.instance_status]);
 
   const handleConnect = async () => {
     setLoadingQR(true);
@@ -87,7 +100,10 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const handleSyncStatus = async () => {
     setSyncing(true);
     try {
-      await syncInstanceStatus.mutateAsync(instance);
+      const result = await syncInstanceStatus.mutateAsync(instance);
+      if (result?.phone) {
+        setConnectedPhone(result.phone);
+      }
       toast.success("Status atualizado!");
     } catch (error: any) {
       toast.error(error.message);
@@ -115,20 +131,31 @@ export function InstanceCard({ instance }: InstanceCardProps) {
     toast.success("Token copiado!");
   };
 
+  const formatPhoneNumber = (phone: string) => {
+    // Format phone number for display (e.g., +55 11 99999-9999)
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length >= 12) {
+      return `+${cleaned.slice(0, 2)} ${cleaned.slice(2, 4)} ${cleaned.slice(4, 9)}-${cleaned.slice(9)}`;
+    } else if (cleaned.length >= 10) {
+      return `+${cleaned.slice(0, 2)} ${cleaned.slice(2)}`;
+    }
+    return phone;
+  };
+
   const statusConfig = {
     connected: {
       label: "Conectado",
-      className: "bg-success text-success-foreground",
+      className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
       icon: Wifi,
     },
     connecting: {
       label: "Conectando",
-      className: "bg-warning text-warning-foreground animate-pulse",
+      className: "bg-amber-500/20 text-amber-400 border-amber-500/30 animate-pulse",
       icon: Wifi,
     },
     disconnected: {
       label: "Desconectado",
-      className: "bg-muted text-muted-foreground",
+      className: "bg-muted/50 text-muted-foreground border-muted",
       icon: WifiOff,
     },
   };
@@ -139,40 +166,99 @@ export function InstanceCard({ instance }: InstanceCardProps) {
 
   return (
     <>
-      <Card className="bg-card border-border hover:border-primary/30 transition-all group">
-        <CardContent className="p-5">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-accent/10 rounded-xl">
-                <Smartphone className="h-6 w-6 text-accent" />
+      <Card className="bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/40 transition-all duration-300 group overflow-hidden">
+        <CardContent className="p-0">
+          {/* Header Section */}
+          <div className="p-4 pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="p-2.5 bg-gradient-to-br from-primary/20 to-accent/20 rounded-xl shrink-0">
+                  <Smartphone className="h-5 w-5 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold text-card-foreground truncate">
+                      {instance.instance_name}
+                    </h3>
+                    <Badge variant="outline" className={`${status.className} shrink-0`}>
+                      <StatusIcon className="h-3 w-3 mr-1" />
+                      {status.label}
+                    </Badge>
+                  </div>
+                  
+                  {/* Phone number or token */}
+                  {isConnected && connectedPhone ? (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Phone className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-sm text-emerald-400 font-medium">
+                        {formatPhoneNumber(connectedPhone)}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground font-mono mt-1 truncate">
+                      {instance.uazapi_instance_token.slice(0, 16)}...
+                    </p>
+                  )}
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-card-foreground text-lg">
-                  {instance.instance_name}
-                </h3>
-                <p className="text-xs text-muted-foreground font-mono">
-                  {instance.uazapi_instance_token.slice(0, 12)}...
-                </p>
-              </div>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 opacity-60 hover:opacity-100">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-popover border-border">
+                  <DropdownMenuItem onClick={copyToken}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copiar Token
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setWebhookDialogOpen(true)}>
+                    <Settings2 className="h-4 w-4 mr-2" />
+                    Configurar Webhook
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      setDeleteFromUazapi(false);
+                      setDeleteDialogOpen(true);
+                    }}
+                    className="text-amber-400"
+                  >
+                    <Unlink className="h-4 w-4 mr-2" />
+                    Desvincular
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      setDeleteFromUazapi(true);
+                      setDeleteDialogOpen(true);
+                    }}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir Permanentemente
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <Badge className={status.className}>
-              <StatusIcon className="h-3 w-3 mr-1" />
-              {status.label}
-            </Badge>
           </div>
 
-          {/* QR Code Area */}
-          {!isConnected && (
+          {/* Status Section */}
+          {isConnected ? (
+            <div className="mx-4 mb-3 flex items-center justify-center gap-2 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+              <Wifi className="h-4 w-4 text-emerald-400" />
+              <span className="text-emerald-400 font-medium text-sm">WhatsApp Conectado</span>
+            </div>
+          ) : (
             <div 
-              className="flex flex-col items-center justify-center py-6 mb-4 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+              className="mx-4 mb-3 flex flex-col items-center justify-center py-5 border border-dashed border-border/70 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
               onClick={handleConnect}
             >
               {loadingQR ? (
-                <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+                <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
               ) : (
                 <>
-                  <QrCode className="h-12 w-12 text-muted-foreground mb-2" />
+                  <QrCode className="h-10 w-10 text-muted-foreground mb-1.5" />
                   <span className="text-sm text-muted-foreground">
                     Clique para conectar
                   </span>
@@ -181,23 +267,16 @@ export function InstanceCard({ instance }: InstanceCardProps) {
             </div>
           )}
 
-          {isConnected && (
-            <div className="flex items-center justify-center py-4 mb-4 bg-success/10 rounded-xl">
-              <Wifi className="h-6 w-6 text-success mr-2" />
-              <span className="text-success font-medium">WhatsApp Conectado</span>
-            </div>
-          )}
-
           {/* Actions */}
-          <div className="flex items-center gap-2">
+          <div className="px-4 pb-4 flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={handleSyncStatus}
               disabled={syncing}
-              className="flex-1 border-border"
+              className="flex-1 border-border/50 h-9"
             >
-              <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
               Status
             </Button>
 
@@ -207,9 +286,9 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                 size="sm"
                 onClick={() => disconnectInstance.mutate(instance)}
                 disabled={disconnectInstance.isPending}
-                className="flex-1 border-border text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-400 h-9"
               >
-                <Power className="h-4 w-4 mr-1" />
+                <Power className="h-3.5 w-3.5 mr-1.5" />
                 Desconectar
               </Button>
             ) : (
@@ -217,51 +296,12 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                 size="sm"
                 onClick={handleConnect}
                 disabled={loadingQR}
-                className="flex-1 bg-primary hover:bg-primary/90"
+                className="flex-1 bg-primary hover:bg-primary/90 h-9"
               >
-                <QrCode className="h-4 w-4 mr-1" />
+                <QrCode className="h-3.5 w-3.5 mr-1.5" />
                 Conectar
               </Button>
             )}
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-popover border-border">
-                <DropdownMenuItem onClick={copyToken}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copiar Token
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setWebhookDialogOpen(true)}>
-                  <Settings2 className="h-4 w-4 mr-2" />
-                  Configurar Webhook
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => {
-                    setDeleteFromUazapi(false);
-                    setDeleteDialogOpen(true);
-                  }}
-                  className="text-warning"
-                >
-                  <Unlink className="h-4 w-4 mr-2" />
-                  Desvincular
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => {
-                    setDeleteFromUazapi(true);
-                    setDeleteDialogOpen(true);
-                  }}
-                  className="text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir Permanentemente
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </CardContent>
       </Card>
@@ -358,7 +398,7 @@ export function InstanceCard({ instance }: InstanceCardProps) {
             <AlertDialogCancel className="border-border">Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className={deleteFromUazapi ? "bg-destructive hover:bg-destructive/90" : "bg-warning hover:bg-warning/90"}
+              className={deleteFromUazapi ? "bg-destructive hover:bg-destructive/90" : "bg-amber-500 hover:bg-amber-500/90 text-white"}
             >
               {deleteFromUazapi ? "Excluir" : "Desvincular"}
             </AlertDialogAction>
