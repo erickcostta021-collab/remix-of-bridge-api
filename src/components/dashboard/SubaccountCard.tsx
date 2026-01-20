@@ -1,8 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Building2, ChevronRight, Settings } from "lucide-react";
 import { Subaccount } from "@/hooks/useSubaccounts";
 import { useInstances } from "@/hooks/useInstances";
+import { useNavigate } from "react-router-dom";
 
 interface SubaccountCardProps {
   subaccount: Subaccount;
@@ -11,9 +13,17 @@ interface SubaccountCardProps {
 
 export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
   const { instances } = useInstances(subaccount.id);
+  const navigate = useNavigate();
 
   const connectedCount = instances.filter(i => i.instance_status === "connected").length;
   const totalCount = instances.length;
+
+  const handleSettingsClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/subaccount/${subaccount.id}/settings`);
+  };
+
+  const hasToken = !!subaccount.ghl_subaccount_token;
 
   return (
     <Card
@@ -35,11 +45,26 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
               </p>
             </div>
           </div>
-          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleSettingsClick}
+              className="h-8 w-8 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-2">
+          {!hasToken && (
+            <Badge variant="outline" className="border-warning text-warning">
+              Token não configurado
+            </Badge>
+          )}
           {totalCount > 0 ? (
             <>
               <Badge
@@ -54,11 +79,11 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
                 </Badge>
               )}
             </>
-          ) : (
+          ) : hasToken ? (
             <Badge variant="outline" className="border-border text-muted-foreground">
               Sem instâncias
             </Badge>
-          )}
+          ) : null}
         </div>
       </CardContent>
     </Card>
