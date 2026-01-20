@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useSettings } from "./useSettings";
 
 export interface GHLUser {
   id: string;
@@ -12,23 +11,24 @@ export interface GHLUser {
 }
 
 export function useGHLUsers() {
-  const { settings } = useSettings();
   const [loading, setLoading] = useState(false);
 
-  const fetchLocationUsers = async (locationId: string): Promise<GHLUser[]> => {
-    if (!settings?.ghl_agency_token) {
-      throw new Error("Token de agência GHL não configurado");
+  // Fetch users using the subaccount's location token (not agency token)
+  const fetchLocationUsers = async (locationId: string, locationToken?: string | null): Promise<GHLUser[]> => {
+    if (!locationToken) {
+      console.warn("Token de subconta não configurado - não é possível buscar usuários");
+      return [];
     }
 
     setLoading(true);
     try {
-      // Primary endpoint for fetching users by location
+      // Use location-specific token for fetching users
       const response = await fetch(
         `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
         {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${settings.ghl_agency_token}`,
+            "Authorization": `Bearer ${locationToken}`,
             "Version": "2021-07-28",
             "Accept": "application/json",
           },
@@ -42,7 +42,7 @@ export function useGHLUsers() {
           {
             method: "GET",
             headers: {
-              "Authorization": `Bearer ${settings.ghl_agency_token}`,
+              "Authorization": `Bearer ${locationToken}`,
               "Version": "2021-07-28",
               "Accept": "application/json",
             },
