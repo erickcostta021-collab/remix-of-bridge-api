@@ -57,7 +57,8 @@ export function useInstances(subaccountId?: string) {
       throw new Error("Configurações UAZAPI não encontradas");
     }
 
-    const response = await fetch(`${settings.uazapi_base_url}/admin/listar`, {
+    // Primary endpoint: /admin/instancias
+    const response = await fetch(`${settings.uazapi_base_url}/admin/instancias`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -66,25 +67,22 @@ export function useInstances(subaccountId?: string) {
     });
 
     if (!response.ok) {
-      // Try alternative endpoint
-      const altResponse = await fetch(`${settings.uazapi_base_url}/instance/list`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "admintoken": settings.uazapi_admin_token,
-        },
-      });
-
-      if (!altResponse.ok) {
-        throw new Error("Erro ao buscar instâncias da UAZAPI");
-      }
-
-      const altData = await altResponse.json();
-      return altData.instances || altData || [];
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status} ao buscar instâncias`);
     }
 
     const data = await response.json();
-    return data.instances || data || [];
+    
+    // Handle different response formats
+    const instancesArray = Array.isArray(data) ? data : (data.instances || data.data || []);
+    
+    return instancesArray.map((inst: any) => ({
+      token: inst.token || inst.instanceToken || inst.instance_token || "",
+      name: inst.name || inst.instanceName || inst.instance_name || "Sem nome",
+      status: inst.status || inst.state || "disconnected",
+      phone: inst.phone || inst.number || "",
+      webhook_url: inst.webhook_url || inst.webhookUrl || "",
+    }));
   };
 
   // Get status of a specific instance

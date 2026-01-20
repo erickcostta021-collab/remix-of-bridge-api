@@ -22,8 +22,9 @@ export function useGHLUsers() {
 
     setLoading(true);
     try {
+      // Primary endpoint for fetching users by location
       const response = await fetch(
-        `https://services.leadconnectorhq.com/users/search?locationId=${locationId}&limit=100`,
+        `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
         {
           method: "GET",
           headers: {
@@ -35,9 +36,9 @@ export function useGHLUsers() {
       );
 
       if (!response.ok) {
-        // Try alternative endpoint
+        // Try search endpoint as fallback
         const altResponse = await fetch(
-          `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
+          `https://services.leadconnectorhq.com/users/search?locationId=${locationId}&limit=100`,
           {
             method: "GET",
             headers: {
@@ -49,31 +50,34 @@ export function useGHLUsers() {
         );
 
         if (!altResponse.ok) {
-          console.error("Failed to fetch GHL users");
+          const errorData = await altResponse.json().catch(() => ({}));
+          console.error("Failed to fetch GHL users:", errorData);
           return [];
         }
 
         const altData = await altResponse.json();
-        return (altData.users || []).map((u: any) => ({
+        const usersArray = altData.users || altData.data || [];
+        return usersArray.map((u: any) => ({
           id: u.id,
-          name: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+          name: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
           firstName: u.firstName || "",
           lastName: u.lastName || "",
           email: u.email || "",
           phone: u.phone,
-          role: u.role,
+          role: u.role || u.type,
         }));
       }
 
       const data = await response.json();
-      return (data.users || []).map((u: any) => ({
+      const usersArray = data.users || data.data || [];
+      return usersArray.map((u: any) => ({
         id: u.id,
-        name: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+        name: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
         firstName: u.firstName || "",
         lastName: u.lastName || "",
         email: u.email || "",
         phone: u.phone,
-        role: u.role,
+        role: u.role || u.type,
       }));
     } finally {
       setLoading(false);
