@@ -57,8 +57,8 @@ export function useInstances(subaccountId?: string) {
       throw new Error("Configurações UAZAPI não encontradas");
     }
 
-    // Primary endpoint: /admin/instancias
-    const response = await fetch(`${settings.uazapi_base_url}/admin/instancias`, {
+    // Correct endpoint per UAZAPI docs: /instance/fetchInstances
+    const response = await fetch(`${settings.uazapi_base_url}/instance/fetchInstances`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
