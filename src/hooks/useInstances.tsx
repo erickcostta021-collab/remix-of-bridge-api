@@ -57,14 +57,42 @@ export function useInstances(subaccountId?: string) {
       throw new Error("Configurações UAZAPI não encontradas");
     }
 
-    // Correct endpoint per UAZAPI docs: /instance/fetchInstances
-    const response = await fetch(`${settings.uazapi_base_url}/instance/fetchInstances`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "admintoken": settings.uazapi_admin_token,
-      },
-    });
+    const base = settings.uazapi_base_url.replace(/\/$/, "");
+    const candidatePaths = [
+      // Most common layouts
+      "/instance/fetchInstances",
+      "/api/instance/fetchInstances",
+      "/v2/instance/fetchInstances",
+      "/api/v2/instance/fetchInstances",
+      // Older/alt admin layouts
+      "/admin/instancias",
+      "/api/admin/instancias",
+    ];
+
+    let response: Response | null = null;
+    for (const path of candidatePaths) {
+      const url = `${base}${path}`;
+      // eslint-disable-next-line no-await-in-loop
+      const r = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          admintoken: settings.uazapi_admin_token,
+        },
+      });
+
+      // If endpoint doesn't exist on this server, try the next candidate.
+      if (r.status === 404) continue;
+
+      response = r;
+      break;
+    }
+
+    if (!response) {
+      throw new Error(
+        "Não encontrei um endpoint válido para listar instâncias (tente conferir se a API está usando o prefixo /api)."
+      );
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -92,13 +120,26 @@ export function useInstances(subaccountId?: string) {
     }
 
     try {
-      const response = await fetch(`${settings.uazapi_base_url}/instance/status`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "token": instanceToken,
-        },
-      });
+      const base = settings.uazapi_base_url.replace(/\/$/, "");
+      const candidatePaths = ["/instance/status", "/api/instance/status", "/v2/instance/status", "/api/v2/instance/status"];
+
+      let response: Response | null = null;
+      for (const path of candidatePaths) {
+        const url = `${base}${path}`;
+        // eslint-disable-next-line no-await-in-loop
+        const r = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            token: instanceToken,
+          },
+        });
+        if (r.status === 404) continue;
+        response = r;
+        break;
+      }
+
+      if (!response) return "disconnected";
 
       if (!response.ok) {
         return "disconnected";
