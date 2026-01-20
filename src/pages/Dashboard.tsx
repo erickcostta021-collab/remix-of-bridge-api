@@ -3,12 +3,14 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { SubaccountCard } from "@/components/dashboard/SubaccountCard";
 import { InstanceCard } from "@/components/dashboard/InstanceCard";
 import { CreateInstanceDialog } from "@/components/dashboard/CreateInstanceDialog";
+import { ImportInstanceDialog } from "@/components/dashboard/ImportInstanceDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { useSubaccounts, Subaccount } from "@/hooks/useSubaccounts";
 import { useInstances } from "@/hooks/useInstances";
 import { useSettings } from "@/hooks/useSettings";
-import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Dashboard() {
@@ -31,7 +33,7 @@ export default function Dashboard() {
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
@@ -43,16 +45,27 @@ export default function Dashboard() {
               </Button>
               <div>
                 <h1 className="text-2xl font-bold text-foreground">
-                  {selectedSubaccount.account_name}
+                  Minhas Instâncias
                 </h1>
-                <p className="text-sm text-muted-foreground font-mono">
-                  {selectedSubaccount.location_id}
+                <p className="text-muted-foreground">
+                  Gerencie suas conexões do WhatsApp e status em tempo real.
                 </p>
               </div>
             </div>
-            {hasUAZAPIConfig && (
-              <CreateInstanceDialog subaccountId={selectedSubaccount.id} />
-            )}
+            
+            {/* Subaccount Info */}
+            <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-xl border border-border">
+              <div>
+                <p className="font-medium text-foreground">{selectedSubaccount.account_name}</p>
+                <p className="text-xs text-muted-foreground font-mono">{selectedSubaccount.location_id}</p>
+              </div>
+              {hasUAZAPIConfig && (
+                <div className="flex gap-2">
+                  <ImportInstanceDialog subaccountId={selectedSubaccount.id} />
+                  <CreateInstanceDialog subaccountId={selectedSubaccount.id} />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Alert if UAZAPI not configured */}
@@ -66,24 +79,43 @@ export default function Dashboard() {
           )}
 
           {/* Instances Grid */}
-          {instances.length === 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Add Instance Card */}
+            {hasUAZAPIConfig && (
+              <Card 
+                className="border-2 border-dashed border-border hover:border-primary/50 transition-all cursor-pointer group bg-transparent"
+                onClick={() => document.querySelector<HTMLButtonElement>('[data-create-instance]')?.click()}
+              >
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="p-4 bg-muted rounded-full mb-4 group-hover:bg-primary/10 transition-colors">
+                    <Plus className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </div>
+                  <h3 className="font-medium text-foreground mb-1">Adicionar Instância</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Defina os dados e inicie a conexão
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Instance Cards */}
+            {instances.map((instance) => (
+              <InstanceCard key={instance.id} instance={instance} />
+            ))}
+          </div>
+
+          {/* Empty State */}
+          {instances.length === 0 && !hasUAZAPIConfig && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="p-4 bg-muted rounded-full mb-4">
-                <AlertCircle className="h-8 w-8 text-muted-foreground" />
+                <Smartphone className="h-8 w-8 text-muted-foreground" />
               </div>
               <h3 className="text-lg font-medium text-foreground mb-2">
                 Nenhuma instância
               </h3>
               <p className="text-muted-foreground max-w-md">
-                Esta subconta ainda não possui instâncias UAZAPI vinculadas.
-                Clique em "Nova Instância" para criar uma.
+                Configure a UAZAPI nas configurações para começar a criar instâncias.
               </p>
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {instances.map((instance) => (
-                <InstanceCard key={instance.id} instance={instance} />
-              ))}
             </div>
           )}
         </div>
