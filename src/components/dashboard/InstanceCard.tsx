@@ -72,16 +72,16 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const [syncing, setSyncing] = useState(false);
   const [connectedPhone, setConnectedPhone] = useState<string | null>(instance.phone || null);
 
-  // Fetch phone number on mount if connected
+  // Fetch phone number on mount
   useEffect(() => {
-    if (instance.instance_status === "connected" && !connectedPhone) {
+    if (!connectedPhone) {
       syncInstanceStatus.mutateAsync(instance).then((result) => {
         if (result?.phone) {
           setConnectedPhone(result.phone);
         }
       }).catch(() => {});
     }
-  }, [instance.instance_status]);
+  }, []);
 
   const handleConnect = async () => {
     setLoadingQR(true);
@@ -186,8 +186,8 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                     </Badge>
                   </div>
                   
-                  {/* Phone number or token */}
-                  {isConnected && connectedPhone ? (
+                  {/* Phone number - always show if available */}
+                  {connectedPhone ? (
                     <div className="flex items-center gap-1.5 mt-1">
                       <Phone className="h-3.5 w-3.5 text-emerald-400" />
                       <span className="text-sm text-emerald-400 font-medium">
@@ -195,8 +195,8 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                       </span>
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground font-mono mt-1 truncate">
-                      {instance.uazapi_instance_token.slice(0, 16)}...
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Número não disponível
                     </p>
                   )}
                 </div>
@@ -268,13 +268,13 @@ export function InstanceCard({ instance }: InstanceCardProps) {
           )}
 
           {/* Actions */}
-          <div className="px-4 pb-4 flex items-center gap-2">
+          <div className="px-4 pb-4 grid grid-cols-2 gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={handleSyncStatus}
               disabled={syncing}
-              className="flex-1 border-border/50 h-9"
+              className="w-full border-border/50 h-9"
             >
               <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
               Status
@@ -286,7 +286,7 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                 size="sm"
                 onClick={() => disconnectInstance.mutate(instance)}
                 disabled={disconnectInstance.isPending}
-                className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-400 h-9"
+                className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-400 h-9"
               >
                 <Power className="h-3.5 w-3.5 mr-1.5" />
                 Desconectar
@@ -296,7 +296,7 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                 size="sm"
                 onClick={handleConnect}
                 disabled={loadingQR}
-                className="flex-1 bg-primary hover:bg-primary/90 h-9"
+                className="w-full bg-primary hover:bg-primary/90 h-9"
               >
                 <QrCode className="h-3.5 w-3.5 mr-1.5" />
                 Conectar
