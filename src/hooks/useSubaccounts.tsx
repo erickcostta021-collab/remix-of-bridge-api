@@ -40,26 +40,40 @@ export function useSubaccounts() {
         throw new Error("Token de agência GHL não configurado");
       }
 
-      // Call GHL API to get locations
-      const response = await fetch("https://services.leadconnectorhq.com/locations/search", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${settings.ghl_agency_token}`,
-          "Version": "2021-07-28",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          companyId: settings.ghl_agency_token.split("-")[1], // Extract company ID from token
-        }),
-      });
+      // GHL Private Integration Token format: pit-{companyId}-...
+      // Extract companyId from token (second segment after pit-)
+      const tokenParts = settings.ghl_agency_token.split("-");
+      const companyId = tokenParts.length >= 2 ? tokenParts[1] : "";
+
+      if (!companyId) {
+        throw new Error("Token inválido - não foi possível extrair o Company ID");
+      }
+
+      // Call GHL API to get locations using GET method
+      const response = await fetch(
+        `https://services.leadconnectorhq.com/locations/search?companyId=${companyId}&limit=100`,
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${settings.ghl_agency_token}`,
+            "Version": "2021-07-28",
+            "Accept": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Erro ao buscar subcontas do GHL");
+        const errorMsg = errorData.message || errorData.error || `Erro ${response.status}`;
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
       const locations = data.locations || [];
+
+      if (locations.length === 0) {
+        throw new Error("Nenhuma subconta encontrada. Verifique se o token tem permissão de agência.");
+      }
 
       // Upsert locations to database
       for (const location of locations) {
