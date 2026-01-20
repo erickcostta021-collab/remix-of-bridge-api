@@ -2,8 +2,7 @@ import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { SubaccountCard } from "@/components/dashboard/SubaccountCard";
 import { InstanceCard } from "@/components/dashboard/InstanceCard";
-import { CreateInstanceDialog } from "@/components/dashboard/CreateInstanceDialog";
-import { ImportInstanceDialog } from "@/components/dashboard/ImportInstanceDialog";
+import { AddInstanceDialog } from "@/components/dashboard/AddInstanceDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -60,10 +59,7 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground font-mono">{selectedSubaccount.location_id}</p>
               </div>
               {hasUAZAPIConfig && (
-                <div className="flex gap-2">
-                  <ImportInstanceDialog subaccountId={selectedSubaccount.id} />
-                  <CreateInstanceDialog subaccountId={selectedSubaccount.id} />
-                </div>
+                <AddInstanceDialog subaccount={selectedSubaccount} />
               )}
             </div>
           </div>
@@ -81,22 +77,6 @@ export default function Dashboard() {
           {/* Instances Grid */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {/* Add Instance Card */}
-            {hasUAZAPIConfig && (
-              <Card 
-                className="border-2 border-dashed border-border hover:border-primary/50 transition-all cursor-pointer group bg-transparent"
-                onClick={() => document.querySelector<HTMLButtonElement>('[data-create-instance]')?.click()}
-              >
-                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="p-4 bg-muted rounded-full mb-4 group-hover:bg-primary/10 transition-colors">
-                    <Plus className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </div>
-                  <h3 className="font-medium text-foreground mb-1">Adicionar Instância</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Defina os dados e inicie a conexão
-                  </p>
-                </CardContent>
-              </Card>
-            )}
 
             {/* Instance Cards */}
             {instances.map((instance) => (
