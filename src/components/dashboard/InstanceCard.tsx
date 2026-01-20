@@ -83,6 +83,28 @@ export function InstanceCard({ instance }: InstanceCardProps) {
     }
   }, []);
 
+  // Auto-refresh status when QR dialog is open
+  useEffect(() => {
+    if (!qrDialogOpen) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const result = await syncInstanceStatus.mutateAsync(instance);
+        if (result?.status === "connected") {
+          if (result?.phone) {
+            setConnectedPhone(result.phone);
+          }
+          setQrDialogOpen(false);
+          toast.success("WhatsApp conectado com sucesso!");
+        }
+      } catch {
+        // Ignore errors during auto-refresh
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [qrDialogOpen]);
+
   const handleConnect = async () => {
     setLoadingQR(true);
     try {
