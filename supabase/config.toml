@@ -1,1 +1,10 @@
 project_id = "jsupvprudyxyiyxwqxuq"
+
+[functions.send-registration-code]
+verify_jwt = false
+
+[functions.verify-registration-code]
+verify_jwt = false
+
+[functions.mark-code-used]
+verify_jwt = false
