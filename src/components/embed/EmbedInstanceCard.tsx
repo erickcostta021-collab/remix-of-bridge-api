@@ -104,18 +104,49 @@ export function EmbedInstanceCard({
     return statusMap[uazapiStatus] || "disconnected";
   };
 
+  // Fetch GHL user name on mount
   useEffect(() => {
-    // Fetch status on mount if needed
-    if (!connectedPhone || !profilePicUrl) {
-      fetchInstanceStatus().then((result) => {
-        if (result) {
-          if (result.phone) setConnectedPhone(result.phone);
-          if (result.profilePicUrl) setProfilePicUrl(result.profilePicUrl);
-          setCurrentStatus(result.status);
+    const fetchGhlUserName = async () => {
+      if (currentGhlUserId && ghlSubaccountToken && locationId) {
+        try {
+          const response = await fetch(
+            `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
+            {
+              method: "GET",
+              headers: {
+                "Authorization": `Bearer ${ghlSubaccountToken}`,
+                "Version": "2021-07-28",
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            const user = data.users?.find((u: any) => u.id === currentGhlUserId);
+            if (user) {
+              setGhlUserName(user.name);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to fetch GHL user name:", error);
         }
-      });
-    }
-  }, []);
+      }
+    };
+
+    fetchGhlUserName();
+  }, [currentGhlUserId, ghlSubaccountToken, locationId]);
+
+  useEffect(() => {
+    // Fetch status on mount to get phone and profile pic
+    fetchInstanceStatus().then((result) => {
+      if (result) {
+        if (result.phone) setConnectedPhone(result.phone);
+        if (result.profilePicUrl) setProfilePicUrl(result.profilePicUrl);
+        setCurrentStatus(result.status);
+      }
+    });
+  }, [instance.uazapi_instance_token]);
 
   const handleSyncStatus = async () => {
     setSyncing(true);
