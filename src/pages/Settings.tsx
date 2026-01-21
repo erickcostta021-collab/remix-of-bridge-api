@@ -23,6 +23,7 @@ export default function Settings() {
     global_webhook_url: "",
     external_supabase_url: "",
     external_supabase_key: "",
+    external_supabase_pat: "",
   });
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function Settings() {
         global_webhook_url: settings.global_webhook_url || "",
         external_supabase_url: settings.external_supabase_url || "",
         external_supabase_key: settings.external_supabase_key || "",
+        external_supabase_pat: settings.external_supabase_pat || "",
       });
     }
   }, [settings]);
@@ -218,6 +220,21 @@ CREATE POLICY "Allow all access" ON public.unified_instance_ghl FOR ALL USING (t
                   />
                   <p className="text-xs text-muted-foreground">
                     Encontre em: Project Settings → API → service_role (secret)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="supabase-pat">Token de Gerenciamento (PAT) - Opcional</Label>
+                  <Input
+                    id="supabase-pat"
+                    type={showTokens ? "text" : "password"}
+                    value={formData.external_supabase_pat}
+                    onChange={(e) => setFormData({ ...formData, external_supabase_pat: e.target.value })}
+                    placeholder="sbp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="bg-secondary border-border"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Com este token, a tabela será criada automaticamente. 
+                    Gere em: <a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">supabase.com/dashboard/account/tokens</a>
                   </p>
                 </div>
               </CardContent>
