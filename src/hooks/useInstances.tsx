@@ -109,8 +109,8 @@ export function useInstances(subaccountId?: string) {
     }));
   };
 
-  // Get status of a specific instance (returns status and phone)
-  const getInstanceStatus = async (instanceToken: string): Promise<{ status: string; phone?: string }> => {
+  // Get status of a specific instance (returns status, phone and profile pic)
+  const getInstanceStatus = async (instanceToken: string): Promise<{ status: string; phone?: string; profilePicUrl?: string }> => {
     if (!settings?.uazapi_base_url) {
       throw new Error("URL base da UAZAPI não configurada");
     }
@@ -146,6 +146,7 @@ export function useInstances(subaccountId?: string) {
       // Handle nested structure: { instance: {...}, status: { connected: true, jid: "..." } }
       let status = "disconnected";
       let phone = "";
+      let profilePicUrl = "";
       
       // Check nested status object first
       if (data.status?.connected === true || data.status?.loggedIn === true) {
@@ -166,15 +167,23 @@ export function useInstances(subaccountId?: string) {
         || data.jid?.split("@")?.[0] 
         || "";
       
-      return { status, phone };
+      // Extract profile picture URL
+      profilePicUrl = data.instance?.profilePicUrl
+        || data.profilePicUrl
+        || data.profilePic
+        || data.picture
+        || data.imgUrl
+        || "";
+      
+      return { status, phone, profilePicUrl };
     } catch {
-      return { status: "disconnected" };
+      return { status: "disconnected", profilePicUrl: "" };
     }
   };
 
   // Sync status from UAZAPI
   const syncInstanceStatus = useMutation({
-    mutationFn: async (instance: Instance): Promise<{ status: InstanceStatus; phone?: string }> => {
+    mutationFn: async (instance: Instance): Promise<{ status: InstanceStatus; phone?: string; profilePicUrl?: string }> => {
       const result = await getInstanceStatus(instance.uazapi_instance_token);
       
       let mappedStatus: InstanceStatus = "disconnected";
@@ -190,7 +199,7 @@ export function useInstances(subaccountId?: string) {
         .eq("id", instance.id);
 
       if (error) throw error;
-      return { status: mappedStatus, phone: result.phone };
+      return { status: mappedStatus, phone: result.phone, profilePicUrl: result.profilePicUrl };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });

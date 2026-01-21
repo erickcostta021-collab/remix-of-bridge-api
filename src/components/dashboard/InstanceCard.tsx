@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -71,13 +72,17 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const [ignoreGroups, setIgnoreGroups] = useState(instance.ignore_groups || false);
   const [syncing, setSyncing] = useState(false);
   const [connectedPhone, setConnectedPhone] = useState<string | null>(instance.phone || null);
+  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
 
-  // Fetch phone number on mount
+  // Fetch phone number and profile pic on mount
   useEffect(() => {
-    if (!connectedPhone) {
+    if (!connectedPhone || !profilePicUrl) {
       syncInstanceStatus.mutateAsync(instance).then((result) => {
         if (result?.phone) {
           setConnectedPhone(result.phone);
+        }
+        if (result?.profilePicUrl) {
+          setProfilePicUrl(result.profilePicUrl);
         }
       }).catch(() => {});
     }
@@ -93,6 +98,9 @@ export function InstanceCard({ instance }: InstanceCardProps) {
         if (result?.status === "connected") {
           if (result?.phone) {
             setConnectedPhone(result.phone);
+          }
+          if (result?.profilePicUrl) {
+            setProfilePicUrl(result.profilePicUrl);
           }
           setQrDialogOpen(false);
           toast.success("WhatsApp conectado com sucesso!");
@@ -113,6 +121,9 @@ export function InstanceCard({ instance }: InstanceCardProps) {
       if (statusResult?.status === "connected") {
         if (statusResult?.phone) {
           setConnectedPhone(statusResult.phone);
+        }
+        if (statusResult?.profilePicUrl) {
+          setProfilePicUrl(statusResult.profilePicUrl);
         }
         toast.success("Esta instância já está conectada!");
         setLoadingQR(false);
@@ -144,6 +155,9 @@ export function InstanceCard({ instance }: InstanceCardProps) {
       const result = await syncInstanceStatus.mutateAsync(instance);
       if (result?.phone) {
         setConnectedPhone(result.phone);
+      }
+      if (result?.profilePicUrl) {
+        setProfilePicUrl(result.profilePicUrl);
       }
       toast.success("Status atualizado!");
     } catch (error: any) {
@@ -213,9 +227,19 @@ export function InstanceCard({ instance }: InstanceCardProps) {
           <div className="p-4 pb-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="p-2.5 bg-gradient-to-br from-primary/20 to-accent/20 rounded-xl shrink-0">
-                  <Smartphone className="h-5 w-5 text-primary" />
-                </div>
+                {/* Profile Picture or Default Icon */}
+                {profilePicUrl ? (
+                  <Avatar className="h-11 w-11 shrink-0 border-2 border-primary/20">
+                    <AvatarImage src={profilePicUrl} alt="WhatsApp Profile" />
+                    <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
+                      <Smartphone className="h-5 w-5 text-primary" />
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <div className="p-2.5 bg-gradient-to-br from-primary/20 to-accent/20 rounded-xl shrink-0">
+                    <Smartphone className="h-5 w-5 text-primary" />
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-semibold text-card-foreground truncate">
