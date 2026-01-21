@@ -7,31 +7,19 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSettings } from "@/hooks/useSettings";
 import { useExternalSupabase } from "@/hooks/useExternalSupabase";
-import { Save, Loader2, Eye, EyeOff, Database, RefreshCw, Copy, Check, PlugZap, CheckCircle2, XCircle } from "lucide-react";
+import { Save, Loader2, Eye, EyeOff, Database, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 export default function Settings() {
   const { settings, isLoading, updateSettings } = useSettings();
   const { syncToExternal } = useExternalSupabase();
   const [showTokens, setShowTokens] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<{
-    tested: boolean;
-    success: boolean;
-    message: string;
-    patValid?: boolean | null;
-    patMessage?: string | null;
-  } | null>(null);
   
   const [formData, setFormData] = useState({
     ghl_agency_token: "",
     uazapi_admin_token: "",
     uazapi_base_url: "",
     global_webhook_url: "",
-    external_supabase_url: "",
-    external_supabase_key: "",
     external_supabase_pat: "",
   });
 
@@ -42,8 +30,6 @@ export default function Settings() {
         uazapi_admin_token: settings.uazapi_admin_token || "",
         uazapi_base_url: settings.uazapi_base_url || "https://atllassa.uazapi.com",
         global_webhook_url: settings.global_webhook_url || "",
-        external_supabase_url: settings.external_supabase_url || "",
-        external_supabase_key: settings.external_supabase_key || "",
         external_supabase_pat: settings.external_supabase_pat || "",
       });
     }
@@ -54,94 +40,11 @@ export default function Settings() {
   };
 
   const handleSync = () => {
-    syncToExternal.mutate();
-  };
-
-  const handleTestConnection = async () => {
-    if (!formData.external_supabase_url || !formData.external_supabase_key) {
-      toast.error("Preencha a URL e a Service Key primeiro");
+    if (!formData.external_supabase_pat) {
+      toast.error("Configure o Token PAT primeiro");
       return;
     }
-
-    setTestingConnection(true);
-    setConnectionStatus(null);
-
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/test-external-supabase`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            external_supabase_url: formData.external_supabase_url,
-            external_supabase_key: formData.external_supabase_key,
-            external_supabase_pat: formData.external_supabase_pat,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        setConnectionStatus({
-          tested: true,
-          success: true,
-          message: data.message,
-          patValid: data.patValid,
-          patMessage: data.patMessage,
-        });
-        toast.success(data.message);
-      } else {
-        setConnectionStatus({
-          tested: true,
-          success: false,
-          message: data.error,
-        });
-        toast.error(data.error);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao testar conexão";
-      setConnectionStatus({
-        tested: true,
-        success: false,
-        message,
-      });
-      toast.error(message);
-    } finally {
-      setTestingConnection(false);
-    }
-  };
-
-  const createTableSQL = `CREATE TABLE IF NOT EXISTS public.unified_instance_ghl (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  instance_name TEXT NOT NULL,
-  uazapi_instance_token TEXT NOT NULL UNIQUE,
-  instance_status TEXT NOT NULL DEFAULT 'disconnected',
-  location_id TEXT NOT NULL,
-  ghl_user_id TEXT,
-  ghl_subaccount_token TEXT,
-  account_name TEXT NOT NULL,
-  api_base_url TEXT NOT NULL,
-  api_admin_token TEXT NOT NULL,
-  ignore_groups BOOLEAN DEFAULT false,
-  global_webhook_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Enable RLS
-ALTER TABLE public.unified_instance_ghl ENABLE ROW LEVEL SECURITY;
-
--- Create policy for public access (customize as needed)
-CREATE POLICY "Allow all access" ON public.unified_instance_ghl FOR ALL USING (true);`;
-
-  const handleCopySQL = () => {
-    navigator.clipboard.writeText(createTableSQL);
-    setCopied(true);
-    toast.success("SQL copiado para a área de transferência!");
-    setTimeout(() => setCopied(false), 2000);
+    syncToExternal.mutate();
   };
 
   if (isLoading) {
@@ -261,35 +164,7 @@ CREATE POLICY "Allow all access" ON public.unified_instance_ghl FOR ALL USING (t
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="supabase-url">URL do Supabase</Label>
-                  <Input
-                    id="supabase-url"
-                    type="text"
-                    value={formData.external_supabase_url}
-                    onChange={(e) => setFormData({ ...formData, external_supabase_url: e.target.value })}
-                    placeholder="https://seu-projeto.supabase.co"
-                    className="bg-secondary border-border"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Encontre em: Project Settings → API → Project URL
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="supabase-key">Chave de Serviço (Service Role Key)</Label>
-                  <Input
-                    id="supabase-key"
-                    type={showTokens ? "text" : "password"}
-                    value={formData.external_supabase_key}
-                    onChange={(e) => setFormData({ ...formData, external_supabase_key: e.target.value })}
-                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                    className="bg-secondary border-border"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Encontre em: Project Settings → API → service_role (secret)
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="supabase-pat">Token de Gerenciamento (PAT) - Opcional</Label>
+                  <Label htmlFor="supabase-pat">Token de Gerenciamento (PAT)</Label>
                   <Input
                     id="supabase-pat"
                     type={showTokens ? "text" : "password"}
@@ -299,75 +174,8 @@ CREATE POLICY "Allow all access" ON public.unified_instance_ghl FOR ALL USING (t
                     className="bg-secondary border-border"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Com este token, a tabela será criada automaticamente. 
                     Gere em: <a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">supabase.com/dashboard/account/tokens</a>
                   </p>
-                </div>
-
-                {/* Test Connection Button */}
-                <div className="pt-2">
-                  <Button
-                    onClick={handleTestConnection}
-                    disabled={testingConnection || !formData.external_supabase_url || !formData.external_supabase_key}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    {testingConnection ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <PlugZap className="h-4 w-4 mr-2" />
-                    )}
-                    Testar Conexão
-                  </Button>
-                </div>
-
-                {/* Connection Status */}
-                {connectionStatus?.tested && (
-                  <div className={`p-3 rounded-lg border ${connectionStatus.success ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-                    <div className="flex items-center gap-2">
-                      {connectionStatus.success ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-red-500" />
-                      )}
-                      <span className={`text-sm font-medium ${connectionStatus.success ? 'text-green-500' : 'text-red-500'}`}>
-                        {connectionStatus.message}
-                      </span>
-                    </div>
-                    {connectionStatus.patMessage && (
-                      <p className={`text-xs mt-1 ml-7 ${connectionStatus.patValid ? 'text-green-400' : 'text-yellow-400'}`}>
-                        {connectionStatus.patMessage}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-card-foreground">Criar Tabela</CardTitle>
-                <CardDescription>
-                  Execute este SQL no seu Supabase para criar a tabela necessária
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="relative">
-                  <pre className="bg-secondary p-4 rounded-lg text-xs overflow-x-auto text-muted-foreground">
-                    {createTableSQL}
-                  </pre>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="absolute top-2 right-2"
-                    onClick={handleCopySQL}
-                  >
-                    {copied ? (
-                      <Check className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -382,7 +190,7 @@ CREATE POLICY "Allow all access" ON public.unified_instance_ghl FOR ALL USING (t
               <CardContent>
                 <Button
                   onClick={handleSync}
-                  disabled={syncToExternal.isPending || !formData.external_supabase_url || !formData.external_supabase_key}
+                  disabled={syncToExternal.isPending || !formData.external_supabase_pat}
                   className="w-full"
                 >
                   {syncToExternal.isPending ? (
@@ -392,9 +200,9 @@ CREATE POLICY "Allow all access" ON public.unified_instance_ghl FOR ALL USING (t
                   )}
                   Sincronizar Instâncias
                 </Button>
-                {(!formData.external_supabase_url || !formData.external_supabase_key) && (
+                {!formData.external_supabase_pat && (
                   <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Configure a URL e a chave do Supabase primeiro
+                    Configure o Token PAT primeiro
                   </p>
                 )}
               </CardContent>
