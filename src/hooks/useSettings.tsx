@@ -31,6 +31,7 @@ async function configureGlobalWebhook(
       },
       body: JSON.stringify({
         url: webhookUrl,
+        enabled: true,
         events: ["messages", "messages_update"],
         excludeMessages: ["wasSentByApi"],
       }),
