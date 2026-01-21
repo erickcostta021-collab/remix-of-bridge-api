@@ -1,24 +1,21 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Smartphone, Wifi, WifiOff, Phone, Loader2, RefreshCw } from "lucide-react";
+import { Smartphone, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface EmbedInstance {
-  id: string;
-  instance_name: string;
-  instance_status: "connected" | "connecting" | "disconnected";
-  phone?: string;
-  profilePicUrl?: string;
-}
+import { EmbedInstanceCard, EmbedInstance } from "@/components/embed/EmbedInstanceCard";
 
 interface SubaccountData {
   id: string;
   account_name: string;
   location_id: string;
+  ghl_subaccount_token: string | null;
+  user_id: string;
+}
+
+interface UserSettings {
+  uazapi_base_url: string | null;
+  uazapi_admin_token: string | null;
 }
 
 export default function EmbedInstances() {
@@ -29,6 +26,7 @@ export default function EmbedInstances() {
   const [loading, setLoading] = useState(true);
   const [subaccount, setSubaccount] = useState<SubaccountData | null>(null);
   const [instances, setInstances] = useState<EmbedInstance[]>([]);
+  const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -43,7 +41,7 @@ export default function EmbedInstances() {
       // Fetch subaccount by embed token
       const { data: subData, error: subError } = await supabase
         .from("ghl_subaccounts")
-        .select("id, account_name, location_id")
+        .select("id, account_name, location_id, ghl_subaccount_token, user_id")
         .eq("embed_token", embedToken)
         .single();
 
@@ -55,10 +53,19 @@ export default function EmbedInstances() {
 
       setSubaccount(subData);
 
+      // Fetch user settings for UAZAPI config
+      const { data: settingsData } = await supabase
+        .from("user_settings")
+        .select("uazapi_base_url, uazapi_admin_token")
+        .eq("user_id", subData.user_id)
+        .single();
+
+      setUserSettings(settingsData);
+
       // Fetch instances for this subaccount
       const { data: instData, error: instError } = await supabase
         .from("instances")
-        .select("id, instance_name, instance_status")
+        .select("id, instance_name, instance_status, uazapi_instance_token, ghl_user_id")
         .eq("subaccount_id", subData.id)
         .order("instance_name");
 
@@ -84,34 +91,6 @@ export default function EmbedInstances() {
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
-  };
-
-  const formatPhoneNumber = (phone: string) => {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length >= 12) {
-      return `+${cleaned.slice(0, 2)} ${cleaned.slice(2, 4)} ${cleaned.slice(4, 9)}-${cleaned.slice(9)}`;
-    } else if (cleaned.length >= 10) {
-      return `+${cleaned.slice(0, 2)} ${cleaned.slice(2)}`;
-    }
-    return phone;
-  };
-
-  const statusConfig = {
-    connected: {
-      label: "Conectado",
-      className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-      icon: Wifi,
-    },
-    connecting: {
-      label: "Conectando",
-      className: "bg-amber-500/20 text-amber-400 border-amber-500/30 animate-pulse",
-      icon: Wifi,
-    },
-    disconnected: {
-      label: "Desconectado",
-      className: "bg-gray-500/20 text-gray-400 border-gray-500/30",
-      icon: WifiOff,
-    },
   };
 
   if (loading) {
@@ -165,36 +144,18 @@ export default function EmbedInstances() {
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {instances.map((instance) => {
-              const status = statusConfig[instance.instance_status];
-              const StatusIcon = status.icon;
-
-              return (
-                <Card 
-                  key={instance.id} 
-                  className="bg-card/50 backdrop-blur-sm border-border/50 overflow-hidden"
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-gradient-to-br from-primary/20 to-accent/20 rounded-xl shrink-0">
-                        <Smartphone className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-semibold text-card-foreground truncate">
-                            {instance.instance_name}
-                          </h3>
-                        </div>
-                        <Badge variant="outline" className={`${status.className} mt-1`}>
-                          <StatusIcon className="h-3 w-3 mr-1" />
-                          {status.label}
-                        </Badge>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            {instances.map((instance) => (
+              <EmbedInstanceCard
+                key={instance.id}
+                instance={instance}
+                subaccountId={subaccount!.id}
+                locationId={subaccount!.location_id}
+                ghlSubaccountToken={subaccount!.ghl_subaccount_token}
+                uazapiBaseUrl={userSettings?.uazapi_base_url || "https://atllassa.uazapi.com"}
+                uazapiAdminToken={userSettings?.uazapi_admin_token || ""}
+                onStatusChange={handleRefresh}
+              />
+            ))}
           </div>
         )}
       </div>
