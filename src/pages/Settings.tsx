@@ -39,12 +39,25 @@ export default function Settings() {
     updateSettings.mutate(formData);
   };
 
-  const handleSync = () => {
+  const handleSync = async () => {
     if (!formData.external_supabase_pat) {
       toast.error("Configure o Token PAT primeiro");
       return;
     }
-    syncToExternal.mutate();
+    
+    // Save settings first to ensure PAT is in database
+    try {
+      await new Promise<void>((resolve, reject) => {
+        updateSettings.mutate(formData, {
+          onSuccess: () => resolve(),
+          onError: (err) => reject(err),
+        });
+      });
+      // Then sync
+      syncToExternal.mutate();
+    } catch (error) {
+      toast.error("Erro ao salvar configurações antes de sincronizar");
+    }
   };
 
   if (isLoading) {
