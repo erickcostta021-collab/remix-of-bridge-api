@@ -50,6 +50,7 @@ export type Database = {
       instances: {
         Row: {
           created_at: string
+          ghl_user_id: string | null
           id: string
           ignore_groups: boolean | null
           instance_name: string
@@ -62,6 +63,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          ghl_user_id?: string | null
           id?: string
           ignore_groups?: boolean | null
           instance_name: string
@@ -74,6 +76,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          ghl_user_id?: string | null
           id?: string
           ignore_groups?: boolean | null
           instance_name?: string

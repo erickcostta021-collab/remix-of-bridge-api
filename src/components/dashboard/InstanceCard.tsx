@@ -43,10 +43,13 @@ import {
   Unlink,
   Power,
   Copy,
-  Phone
+  Phone,
+  UserPlus
 } from "lucide-react";
 import { Instance, useInstances } from "@/hooks/useInstances";
 import { toast } from "sonner";
+import { AssignGHLUserDialog } from "./AssignGHLUserDialog";
+import { supabase } from "@/integrations/supabase/client";
 
 interface InstanceCardProps {
   instance: Instance;
@@ -59,7 +62,8 @@ export function InstanceCard({ instance }: InstanceCardProps) {
     updateInstanceWebhook, 
     syncInstanceStatus,
     connectInstance,
-    disconnectInstance 
+    disconnectInstance,
+    updateInstanceGHLUser
   } = useInstances();
   
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -73,6 +77,28 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const [syncing, setSyncing] = useState(false);
   const [connectedPhone, setConnectedPhone] = useState<string | null>(instance.phone || null);
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
+  const [assignUserDialogOpen, setAssignUserDialogOpen] = useState(false);
+  const [subaccount, setSubaccount] = useState<{
+    id: string;
+    location_id: string;
+    ghl_subaccount_token: string | null;
+  } | null>(null);
+
+  // Fetch subaccount data for GHL user assignment
+  useEffect(() => {
+    const fetchSubaccount = async () => {
+      const { data } = await supabase
+        .from("ghl_subaccounts")
+        .select("id, location_id, ghl_subaccount_token")
+        .eq("id", instance.subaccount_id)
+        .single();
+      
+      if (data) {
+        setSubaccount(data);
+      }
+    };
+    fetchSubaccount();
+  }, [instance.subaccount_id]);
 
   // Fetch phone number and profile pic on mount
   useEffect(() => {
@@ -282,6 +308,10 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                     <Settings2 className="h-4 w-4 mr-2" />
                     Configurar Webhook
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAssignUserDialogOpen(true)}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Atribuir Usuário GHL
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
                     onClick={() => {
@@ -470,6 +500,20 @@ export function InstanceCard({ instance }: InstanceCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Assign GHL User Dialog */}
+      <AssignGHLUserDialog
+        open={assignUserDialogOpen}
+        onOpenChange={setAssignUserDialogOpen}
+        instanceName={instance.instance_name}
+        currentUserId={instance.ghl_user_id}
+        subaccount={subaccount}
+        onAssign={(userId) => {
+          updateInstanceGHLUser.mutate({ instanceId: instance.id, ghlUserId: userId });
+          setAssignUserDialogOpen(false);
+        }}
+        isAssigning={updateInstanceGHLUser.isPending}
+      />
     </>
   );
 }

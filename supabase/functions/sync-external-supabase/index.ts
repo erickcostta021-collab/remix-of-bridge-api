@@ -264,7 +264,7 @@ Deno.serve(async (req) => {
       uazapi_instance_token: inst.uazapi_instance_token,
       instance_status: inst.instance_status || "disconnected",
       location_id: inst.ghl_subaccounts?.location_id || "",
-      ghl_user_id: null,
+      ghl_user_id: inst.ghl_user_id || null, // Include ghl_user_id from instances table
       ghl_subaccount_token: inst.ghl_subaccounts?.ghl_subaccount_token || null,
       account_name: inst.ghl_subaccounts?.account_name || "",
       api_base_url: settings.uazapi_base_url || "https://atllassa.uazapi.com",
