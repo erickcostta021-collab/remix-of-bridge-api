@@ -15,24 +15,24 @@ export interface UserSettings {
   external_supabase_pat: string | null;
 }
 
-// Configure webhook on a single UAZAPI instance
-async function configureUazapiWebhook(
+// Configure global webhook on UAZAPI (admin level - all instances)
+async function configureGlobalWebhook(
   baseUrl: string,
-  instanceToken: string,
+  adminToken: string,
   webhookUrl: string
 ): Promise<boolean> {
   try {
     const base = baseUrl.replace(/\/$/, "");
-    const response = await fetch(`${base}/instance/webhook`, {
+    const response = await fetch(`${base}/globalwebhook`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        token: instanceToken,
+        admintoken: adminToken,
       },
       body: JSON.stringify({
-        webhook_url: webhookUrl,
-        webhook_enabled: true,
+        url: webhookUrl,
         events: ["messages", "messages_update"],
+        excludeMessages: ["wasSentByApi"],
       }),
     });
     return response.ok;
@@ -84,56 +84,27 @@ export function useSettings() {
     },
   });
 
-  // Apply global webhook to all user instances in UAZAPI
+  // Apply global webhook at admin level in UAZAPI
   const applyGlobalWebhook = useMutation({
     mutationFn: async (webhookUrl: string) => {
       if (!user) throw new Error("Not authenticated");
       if (!settings?.uazapi_base_url) throw new Error("URL base da UAZAPI não configurada");
+      if (!settings?.uazapi_admin_token) throw new Error("Token Admin da UAZAPI não configurado");
 
-      // Fetch all user instances
-      const { data: instances, error } = await supabase
-        .from("instances")
-        .select("id, uazapi_instance_token")
-        .eq("user_id", user.id);
+      const ok = await configureGlobalWebhook(
+        settings.uazapi_base_url,
+        settings.uazapi_admin_token,
+        webhookUrl
+      );
 
-      if (error) throw error;
-      if (!instances || instances.length === 0) {
-        return { success: 0, failed: 0, total: 0 };
+      if (!ok) {
+        throw new Error("Falha ao configurar webhook global na UAZAPI");
       }
 
-      let success = 0;
-      let failed = 0;
-
-      // Configure webhook on each instance
-      for (const instance of instances) {
-        const ok = await configureUazapiWebhook(
-          settings.uazapi_base_url,
-          instance.uazapi_instance_token,
-          webhookUrl
-        );
-        if (ok) {
-          // Update local DB
-          await supabase
-            .from("instances")
-            .update({ webhook_url: webhookUrl })
-            .eq("id", instance.id);
-          success++;
-        } else {
-          failed++;
-        }
-      }
-
-      return { success, failed, total: instances.length };
+      return { success: true };
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["instances"] });
-      if (result.total === 0) {
-        toast.info("Nenhuma instância encontrada para configurar");
-      } else if (result.failed === 0) {
-        toast.success(`Webhook configurado em ${result.success} instância(s)!`);
-      } else {
-        toast.warning(`Webhook configurado em ${result.success}/${result.total} instâncias`);
-      }
+    onSuccess: () => {
+      toast.success("Webhook global configurado com sucesso!");
     },
     onError: (error) => {
       toast.error("Erro ao aplicar webhook: " + error.message);

@@ -171,7 +171,7 @@ export default function Settings() {
                     className="bg-secondary border-border"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Ao salvar, este webhook será configurado em todas as instâncias com os eventos "messages" e "messages_update" habilitados
+                    Ao salvar, será configurado o webhook global (nível admin) que recebe eventos de todas as instâncias com "messages" e "messages_update"
                   </p>
                 </div>
               </CardContent>
