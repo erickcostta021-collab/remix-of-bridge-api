@@ -16,6 +16,7 @@ export interface Instance {
   instance_status: InstanceStatus;
   webhook_url: string | null;
   ignore_groups: boolean | null;
+  ghl_user_id: string | null;
   phone?: string; // Fetched from UAZAPI at runtime
 }
 
@@ -525,6 +526,29 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
+  const updateInstanceGHLUser = useMutation({
+    mutationFn: async ({ instanceId, ghlUserId }: { 
+      instanceId: string; 
+      ghlUserId: string | null;
+    }) => {
+      const { error } = await supabase
+        .from("instances")
+        .update({ ghl_user_id: ghlUserId })
+        .eq("id", instanceId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      toast.success("Usuário GHL atribuído com sucesso!");
+      // Auto-sync to external Supabase
+      syncToExternalSupabase();
+    },
+    onError: (error) => {
+      toast.error("Erro ao atribuir usuário: " + error.message);
+    },
+  });
+
   return {
     instances: instances || [],
     isLoading,
@@ -536,6 +560,7 @@ export function useInstances(subaccountId?: string) {
     disconnectInstance,
     syncInstanceStatus,
     updateInstanceWebhook,
+    updateInstanceGHLUser,
     fetchUazapiInstances,
   };
 }
