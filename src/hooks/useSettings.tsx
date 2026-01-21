@@ -10,6 +10,8 @@ export interface UserSettings {
   uazapi_admin_token: string | null;
   uazapi_base_url: string | null;
   global_webhook_url: string | null;
+  external_supabase_url: string | null;
+  external_supabase_key: string | null;
 }
 
 export function useSettings() {
