@@ -7,14 +7,23 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSettings } from "@/hooks/useSettings";
 import { useExternalSupabase } from "@/hooks/useExternalSupabase";
-import { Save, Loader2, Eye, EyeOff, Database, RefreshCw, Copy, Check } from "lucide-react";
+import { Save, Loader2, Eye, EyeOff, Database, RefreshCw, Copy, Check, PlugZap, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Settings() {
   const { settings, isLoading, updateSettings } = useSettings();
   const { syncToExternal } = useExternalSupabase();
   const [showTokens, setShowTokens] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<{
+    tested: boolean;
+    success: boolean;
+    message: string;
+    patValid?: boolean | null;
+    patMessage?: string | null;
+  } | null>(null);
   
   const [formData, setFormData] = useState({
     ghl_agency_token: "",
@@ -46,6 +55,63 @@ export default function Settings() {
 
   const handleSync = () => {
     syncToExternal.mutate();
+  };
+
+  const handleTestConnection = async () => {
+    if (!formData.external_supabase_url || !formData.external_supabase_key) {
+      toast.error("Preencha a URL e a Service Key primeiro");
+      return;
+    }
+
+    setTestingConnection(true);
+    setConnectionStatus(null);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/test-external-supabase`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            external_supabase_url: formData.external_supabase_url,
+            external_supabase_key: formData.external_supabase_key,
+            external_supabase_pat: formData.external_supabase_pat,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        setConnectionStatus({
+          tested: true,
+          success: true,
+          message: data.message,
+          patValid: data.patValid,
+          patMessage: data.patMessage,
+        });
+        toast.success(data.message);
+      } else {
+        setConnectionStatus({
+          tested: true,
+          success: false,
+          message: data.error,
+        });
+        toast.error(data.error);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao testar conexão";
+      setConnectionStatus({
+        tested: true,
+        success: false,
+        message,
+      });
+      toast.error(message);
+    } finally {
+      setTestingConnection(false);
+    }
   };
 
   const createTableSQL = `CREATE TABLE IF NOT EXISTS public.unified_instance_ghl (
@@ -237,6 +303,44 @@ CREATE POLICY "Allow all access" ON public.unified_instance_ghl FOR ALL USING (t
                     Gere em: <a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">supabase.com/dashboard/account/tokens</a>
                   </p>
                 </div>
+
+                {/* Test Connection Button */}
+                <div className="pt-2">
+                  <Button
+                    onClick={handleTestConnection}
+                    disabled={testingConnection || !formData.external_supabase_url || !formData.external_supabase_key}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {testingConnection ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <PlugZap className="h-4 w-4 mr-2" />
+                    )}
+                    Testar Conexão
+                  </Button>
+                </div>
+
+                {/* Connection Status */}
+                {connectionStatus?.tested && (
+                  <div className={`p-3 rounded-lg border ${connectionStatus.success ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                    <div className="flex items-center gap-2">
+                      {connectionStatus.success ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <XCircle className="h-5 w-5 text-red-500" />
+                      )}
+                      <span className={`text-sm font-medium ${connectionStatus.success ? 'text-green-500' : 'text-red-500'}`}>
+                        {connectionStatus.message}
+                      </span>
+                    </div>
+                    {connectionStatus.patMessage && (
+                      <p className={`text-xs mt-1 ml-7 ${connectionStatus.patValid ? 'text-green-400' : 'text-yellow-400'}`}>
+                        {connectionStatus.patMessage}
+                      </p>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
