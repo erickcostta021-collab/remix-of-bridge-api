@@ -108,12 +108,31 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const handleConnect = async () => {
     setLoadingQR(true);
     try {
+      // First check real status
+      const statusResult = await syncInstanceStatus.mutateAsync(instance);
+      if (statusResult?.status === "connected") {
+        if (statusResult?.phone) {
+          setConnectedPhone(statusResult.phone);
+        }
+        toast.success("Esta instância já está conectada!");
+        setLoadingQR(false);
+        return;
+      }
+      
       await connectInstance(instance);
       const qr = await getQRCode(instance);
+      if (!qr) {
+        throw new Error("QR Code não disponível. Verifique se a instância existe na UAZAPI.");
+      }
       setQrCode(qr);
       setQrDialogOpen(true);
     } catch (error: any) {
-      toast.error(error.message);
+      const errorMsg = error.message || "Erro ao conectar";
+      if (errorMsg.includes("Maximum number of instances") || errorMsg.includes("limite")) {
+        toast.error("Limite de instâncias atingido na UAZAPI");
+      } else {
+        toast.error(errorMsg);
+      }
     } finally {
       setLoadingQR(false);
     }
