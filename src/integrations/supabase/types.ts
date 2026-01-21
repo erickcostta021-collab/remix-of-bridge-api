@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           account_name: string
           created_at: string
+          embed_token: string | null
           ghl_subaccount_token: string | null
           ghl_user_id: string | null
           id: string
@@ -28,6 +29,7 @@ export type Database = {
         Insert: {
           account_name: string
           created_at?: string
+          embed_token?: string | null
           ghl_subaccount_token?: string | null
           ghl_user_id?: string | null
           id?: string
@@ -38,6 +40,7 @@ export type Database = {
         Update: {
           account_name?: string
           created_at?: string
+          embed_token?: string | null
           ghl_subaccount_token?: string | null
           ghl_user_id?: string | null
           id?: string
@@ -198,7 +201,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_embed_token: { Args: never; Returns: string }
     }
     Enums: {
       instance_status: "connected" | "connecting" | "disconnected"
