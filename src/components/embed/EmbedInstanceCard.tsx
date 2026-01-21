@@ -68,6 +68,9 @@ export function EmbedInstanceCard({
 
   const fetchInstanceStatus = async () => {
     try {
+      console.log("[EmbedInstanceCard] Fetching status from:", `${uazapiBaseUrl}/instance/status`);
+      console.log("[EmbedInstanceCard] Using token:", instance.uazapi_instance_token?.substring(0, 10) + "...");
+      
       const response = await fetch(`${uazapiBaseUrl}/instance/status`, {
         method: "GET",
         headers: {
@@ -76,34 +79,49 @@ export function EmbedInstanceCard({
         },
       });
 
-      if (!response.ok) return null;
+      if (!response.ok) {
+        console.error("[EmbedInstanceCard] Response not OK:", response.status, response.statusText);
+        return null;
+      }
 
       const data = await response.json();
+      console.log("[EmbedInstanceCard] Full API response:", JSON.stringify(data, null, 2));
       
-      // Extract status with multiple fallbacks
+      // Extract status with multiple fallbacks - check nested structures
       const rawStatus = data.instance?.status 
         || data.instance?.connectionState 
+        || data.instance?.state
         || data.status 
         || data.state 
         || data.connection 
+        || data.connectionState
         || "disconnected";
       
-      // Extract phone number with multiple fallbacks
+      // Extract phone number with multiple fallbacks - check nested structures
       const phone = data.instance?.phoneNumber 
         || data.instance?.phone 
+        || data.instance?.number
+        || data.instance?.wid?.user
         || data.phone 
         || data.phoneNumber 
         || data.number 
-        || data.jid?.split("@")?.[0] 
+        || data.wid?.user
+        || data.jid?.split("@")?.[0]
+        || data.instance?.jid?.split("@")?.[0]
         || "";
       
-      // Extract profile picture with multiple fallbacks
+      // Extract profile picture with multiple fallbacks - check nested structures
       const pic = data.instance?.profilePicUrl
+        || data.instance?.profilePic
+        || data.instance?.picture
+        || data.instance?.imgUrl
         || data.profilePicUrl
         || data.profilePic
         || data.picture
         || data.imgUrl
         || "";
+      
+      console.log("[EmbedInstanceCard] Extracted - Status:", rawStatus, "Phone:", phone, "Pic:", pic ? "yes" : "no");
       
       return {
         status: mapUazapiStatus(rawStatus),
@@ -111,7 +129,7 @@ export function EmbedInstanceCard({
         profilePicUrl: pic,
       };
     } catch (error) {
-      console.error("Error fetching status:", error);
+      console.error("[EmbedInstanceCard] Error fetching status:", error);
       return null;
     }
   };
