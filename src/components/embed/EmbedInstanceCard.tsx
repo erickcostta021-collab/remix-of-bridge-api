@@ -38,6 +38,7 @@ export interface EmbedInstance {
 interface EmbedInstanceCardProps {
   instance: EmbedInstance;
   subaccountId: string;
+  embedToken: string;
   locationId: string;
   ghlSubaccountToken: string | null;
   uazapiBaseUrl: string;
@@ -48,6 +49,7 @@ interface EmbedInstanceCardProps {
 export function EmbedInstanceCard({ 
   instance, 
   subaccountId,
+  embedToken,
   locationId,
   ghlSubaccountToken,
   uazapiBaseUrl,
@@ -68,24 +70,34 @@ export function EmbedInstanceCard({
 
   const fetchInstanceStatus = async () => {
     try {
-      console.log("[EmbedInstanceCard] Fetching status from:", `${uazapiBaseUrl}/instance/status`);
-      console.log("[EmbedInstanceCard] Using token:", instance.uazapi_instance_token?.substring(0, 10) + "...");
-      
-      const response = await fetch(`${uazapiBaseUrl}/instance/status`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${instance.uazapi_instance_token}`,
-        },
-      });
+      const base = uazapiBaseUrl.replace(/\/$/, "");
+      const candidatePaths = [
+        "/instance/status",
+        "/api/instance/status",
+        "/v2/instance/status",
+        "/api/v2/instance/status",
+      ];
 
-      if (!response.ok) {
-        console.error("[EmbedInstanceCard] Response not OK:", response.status, response.statusText);
-        return null;
+      let response: Response | null = null;
+      for (const path of candidatePaths) {
+        const url = `${base}${path}`;
+        // eslint-disable-next-line no-await-in-loop
+        const r = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            // A UAZAPI costuma esperar o token da instância neste header (não Bearer)
+            token: instance.uazapi_instance_token,
+          },
+        });
+        if (r.status === 404) continue;
+        response = r;
+        break;
       }
 
+      if (!response || !response.ok) return null;
+
       const data = await response.json();
-      console.log("[EmbedInstanceCard] Full API response:", JSON.stringify(data, null, 2));
       
       // Extract status with multiple fallbacks - check nested structures
       // UAZAPI returns: instance.status or status.connected
@@ -126,8 +138,6 @@ export function EmbedInstanceCard({
         || data.picture
         || data.imgUrl
         || "";
-      
-      console.log("[EmbedInstanceCard] Extracted - Status:", rawStatus, "Phone:", phone, "Pic:", pic ? "yes" : "no");
       
       return {
         status: mapUazapiStatus(rawStatus),
@@ -220,11 +230,11 @@ export function EmbedInstanceCard({
   const handleDisconnect = async () => {
     setDisconnecting(true);
     try {
-      const response = await fetch(`${uazapiBaseUrl}/instance/logout`, {
-        method: "DELETE",
+      const response = await fetch(`${uazapiBaseUrl.replace(/\/$/, "")}/instance/logout`, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${instance.uazapi_instance_token}`,
+          token: instance.uazapi_instance_token,
         },
       });
 
@@ -247,21 +257,22 @@ export function EmbedInstanceCard({
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      // First start instance
-      await fetch(`${uazapiBaseUrl}/instance/start`, {
-        method: "GET",
+      const base = uazapiBaseUrl.replace(/\/$/, "");
+      // Primeira tentativa: connect (padrão mais comum)
+      await fetch(`${base}/instance/connect`, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${instance.uazapi_instance_token}`,
+          token: instance.uazapi_instance_token,
         },
       });
 
       // Then get QR code
-      const response = await fetch(`${uazapiBaseUrl}/instance/qrcode`, {
+      const response = await fetch(`${base}/instance/qrcode`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${instance.uazapi_instance_token}`,
+          token: instance.uazapi_instance_token,
         },
       });
 
@@ -489,6 +500,7 @@ export function EmbedInstanceCard({
         instanceId={instance.id}
         instanceName={instance.instance_name}
         currentUserId={currentGhlUserId || null}
+        embedToken={embedToken}
         locationId={locationId}
         ghlSubaccountToken={ghlSubaccountToken}
         onAssigned={handleUserAssigned}
