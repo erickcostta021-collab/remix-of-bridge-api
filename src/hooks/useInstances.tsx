@@ -17,7 +17,8 @@ export interface Instance {
   webhook_url: string | null;
   ignore_groups: boolean | null;
   ghl_user_id: string | null;
-  phone?: string; // Fetched from UAZAPI at runtime
+  phone: string | null; // Cached in DB
+  profile_pic_url: string | null; // Cached in DB
 }
 
 export interface UazapiInstance {
@@ -215,7 +216,7 @@ export function useInstances(subaccountId?: string) {
     }
   };
 
-  // Sync status from UAZAPI
+  // Sync status from UAZAPI and save to DB cache
   const syncInstanceStatus = useMutation({
     mutationFn: async (instance: Instance): Promise<{ status: InstanceStatus; phone?: string; profilePicUrl?: string }> => {
       const result = await getInstanceStatus(instance.uazapi_instance_token);
@@ -227,9 +228,14 @@ export function useInstances(subaccountId?: string) {
         mappedStatus = "connecting";
       }
 
+      // Update status AND cache phone/profile_pic_url in DB
+      const updateData: Record<string, unknown> = { instance_status: mappedStatus };
+      if (result.phone) updateData.phone = result.phone;
+      if (result.profilePicUrl) updateData.profile_pic_url = result.profilePicUrl;
+
       const { error } = await supabase
         .from("instances")
-        .update({ instance_status: mappedStatus })
+        .update(updateData)
         .eq("id", instance.id);
 
       if (error) throw error;
