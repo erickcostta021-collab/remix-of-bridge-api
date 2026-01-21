@@ -58,6 +58,8 @@ export type Database = {
           ignore_groups: boolean | null
           instance_name: string
           instance_status: Database["public"]["Enums"]["instance_status"]
+          phone: string | null
+          profile_pic_url: string | null
           subaccount_id: string
           uazapi_instance_token: string
           updated_at: string
@@ -71,6 +73,8 @@ export type Database = {
           ignore_groups?: boolean | null
           instance_name: string
           instance_status?: Database["public"]["Enums"]["instance_status"]
+          phone?: string | null
+          profile_pic_url?: string | null
           subaccount_id: string
           uazapi_instance_token: string
           updated_at?: string
@@ -84,6 +88,8 @@ export type Database = {
           ignore_groups?: boolean | null
           instance_name?: string
           instance_status?: Database["public"]["Enums"]["instance_status"]
+          phone?: string | null
+          profile_pic_url?: string | null
           subaccount_id?: string
           uazapi_instance_token?: string
           updated_at?: string

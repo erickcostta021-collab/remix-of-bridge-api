@@ -30,8 +30,8 @@ export interface EmbedInstance {
   instance_name: string;
   instance_status: "connected" | "connecting" | "disconnected";
   uazapi_instance_token: string;
-  phone?: string;
-  profilePicUrl?: string;
+  phone?: string | null;
+  profile_pic_url?: string | null;
   ghl_user_id?: string | null;
 }
 
@@ -57,8 +57,9 @@ export function EmbedInstanceCard({
   onStatusChange 
 }: EmbedInstanceCardProps) {
   const [syncing, setSyncing] = useState(false);
+  // Use cached values from DB as initial state
   const [connectedPhone, setConnectedPhone] = useState<string | null>(instance.phone || null);
-  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(instance.profilePicUrl || null);
+  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(instance.profile_pic_url || null);
   const [currentStatus, setCurrentStatus] = useState(instance.instance_status);
   const [ghlUserName, setGhlUserName] = useState<string | null>(null);
   const [assignUserDialogOpen, setAssignUserDialogOpen] = useState(false);
@@ -199,15 +200,37 @@ export function EmbedInstanceCard({
   }, [currentGhlUserId, ghlSubaccountToken, locationId]);
 
   useEffect(() => {
-    // Fetch status on mount to get phone and profile pic
-    fetchInstanceStatus().then((result) => {
-      if (result) {
-        if (result.phone) setConnectedPhone(result.phone);
-        if (result.profilePicUrl) setProfilePicUrl(result.profilePicUrl);
-        setCurrentStatus(result.status);
-      }
-    });
+    // Only fetch from UAZAPI if we don't have cached data
+    if (!instance.phone || !instance.profile_pic_url) {
+      fetchInstanceStatus().then((result) => {
+        if (result) {
+          if (result.phone) setConnectedPhone(result.phone);
+          if (result.profilePicUrl) setProfilePicUrl(result.profilePicUrl);
+          setCurrentStatus(result.status);
+          // Save to DB cache via update
+          updateInstanceCache(result.phone, result.profilePicUrl);
+        }
+      });
+    }
   }, [instance.uazapi_instance_token]);
+
+  // Helper to save phone/pic to DB cache
+  const updateInstanceCache = async (phone?: string, picUrl?: string) => {
+    if (!phone && !picUrl) return;
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const updateData: Record<string, string> = {};
+      if (phone) updateData.phone = phone;
+      if (picUrl) updateData.profile_pic_url = picUrl;
+      
+      await supabase
+        .from("instances")
+        .update(updateData)
+        .eq("id", instance.id);
+    } catch (e) {
+      console.error("Failed to cache instance data:", e);
+    }
+  };
 
   const handleSyncStatus = async () => {
     setSyncing(true);
@@ -217,6 +240,8 @@ export function EmbedInstanceCard({
         if (result.phone) setConnectedPhone(result.phone);
         if (result.profilePicUrl) setProfilePicUrl(result.profilePicUrl);
         setCurrentStatus(result.status);
+        // Update cache in DB
+        await updateInstanceCache(result.phone, result.profilePicUrl);
         toast.success("Status atualizado!");
         onStatusChange?.();
       }
