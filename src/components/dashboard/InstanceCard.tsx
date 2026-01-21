@@ -44,9 +44,11 @@ import {
   Power,
   Copy,
   Phone,
-  UserPlus
+  UserPlus,
+  User
 } from "lucide-react";
 import { Instance, useInstances } from "@/hooks/useInstances";
+import { useGHLUsers, GHLUser } from "@/hooks/useGHLUsers";
 import { toast } from "sonner";
 import { AssignGHLUserDialog } from "./AssignGHLUserDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -65,6 +67,7 @@ export function InstanceCard({ instance }: InstanceCardProps) {
     disconnectInstance,
     updateInstanceGHLUser
   } = useInstances();
+  const { fetchLocationUsers } = useGHLUsers();
   
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [loadingQR, setLoadingQR] = useState(false);
@@ -78,6 +81,7 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const [connectedPhone, setConnectedPhone] = useState<string | null>(instance.phone || null);
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
   const [assignUserDialogOpen, setAssignUserDialogOpen] = useState(false);
+  const [ghlUserName, setGhlUserName] = useState<string | null>(null);
   const [subaccount, setSubaccount] = useState<{
     id: string;
     location_id: string;
@@ -95,10 +99,23 @@ export function InstanceCard({ instance }: InstanceCardProps) {
       
       if (data) {
         setSubaccount(data);
+        
+        // Fetch GHL user name if assigned
+        if (instance.ghl_user_id && data.ghl_subaccount_token) {
+          try {
+            const users = await fetchLocationUsers(data.location_id, data.ghl_subaccount_token);
+            const user = users.find(u => u.id === instance.ghl_user_id);
+            if (user) {
+              setGhlUserName(user.name);
+            }
+          } catch (error) {
+            console.error("Failed to fetch GHL user name:", error);
+          }
+        }
       }
     };
     fetchSubaccount();
-  }, [instance.subaccount_id]);
+  }, [instance.subaccount_id, instance.ghl_user_id]);
 
   // Fetch phone number and profile pic on mount
   useEffect(() => {
@@ -289,6 +306,16 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                     <p className="text-xs text-muted-foreground mt-1">
                       Número não disponível
                     </p>
+                  )}
+                  
+                  {/* GHL User - show if assigned */}
+                  {instance.ghl_user_id && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <User className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-xs text-muted-foreground">
+                        {ghlUserName || instance.ghl_user_id}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
