@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import SubaccountSettings from "./pages/SubaccountSettings";
+import EmbedInstances from "./pages/EmbedInstances";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -63,6 +64,8 @@ const App = () => (
               </ProtectedRoute>
             }
           />
+          {/* Public embed route - no auth required */}
+          <Route path="/embed/:embedToken" element={<EmbedInstances />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
