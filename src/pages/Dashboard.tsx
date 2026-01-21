@@ -9,8 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useSubaccounts, Subaccount } from "@/hooks/useSubaccounts";
 import { useInstances } from "@/hooks/useInstances";
 import { useSettings } from "@/hooks/useSettings";
-import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone } from "lucide-react";
+import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone, Link2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function Dashboard() {
   const [selectedSubaccount, setSelectedSubaccount] = useState<Subaccount | null>(null);
@@ -58,9 +60,41 @@ export default function Dashboard() {
                 <p className="font-medium text-foreground">{selectedSubaccount.account_name}</p>
                 <p className="text-xs text-muted-foreground font-mono">{selectedSubaccount.location_id}</p>
               </div>
-              {hasUAZAPIConfig && (
-                <AddInstanceDialog subaccount={selectedSubaccount} />
-              )}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      let token = selectedSubaccount.embed_token;
+                      
+                      if (!token) {
+                        // Generate token if not exists
+                        const { data: tokenData } = await supabase.rpc("generate_embed_token");
+                        token = tokenData || btoa(crypto.randomUUID()).slice(0, 20);
+                        
+                        await supabase
+                          .from("ghl_subaccounts")
+                          .update({ embed_token: token })
+                          .eq("id", selectedSubaccount.id);
+                      }
+                      
+                      const embedUrl = `${window.location.origin}/embed/${token}?iframe=true`;
+                      await navigator.clipboard.writeText(embedUrl);
+                      toast.success("Link copiado para a área de transferência!");
+                    } catch (error) {
+                      toast.error("Erro ao gerar link");
+                    }
+                  }}
+                  className="border-border"
+                >
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Copiar Link GHL
+                </Button>
+                {hasUAZAPIConfig && (
+                  <AddInstanceDialog subaccount={selectedSubaccount} />
+                )}
+              </div>
             </div>
           </div>
 
