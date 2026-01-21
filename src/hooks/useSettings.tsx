@@ -12,6 +12,7 @@ export interface UserSettings {
   global_webhook_url: string | null;
   external_supabase_url: string | null;
   external_supabase_key: string | null;
+  external_supabase_pat: string | null;
 }
 
 export function useSettings() {

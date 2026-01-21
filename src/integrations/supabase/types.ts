@@ -152,6 +152,7 @@ export type Database = {
         Row: {
           created_at: string
           external_supabase_key: string | null
+          external_supabase_pat: string | null
           external_supabase_url: string | null
           ghl_agency_token: string | null
           global_webhook_url: string | null
@@ -164,6 +165,7 @@ export type Database = {
         Insert: {
           created_at?: string
           external_supabase_key?: string | null
+          external_supabase_pat?: string | null
           external_supabase_url?: string | null
           ghl_agency_token?: string | null
           global_webhook_url?: string | null
@@ -176,6 +178,7 @@ export type Database = {
         Update: {
           created_at?: string
           external_supabase_key?: string | null
+          external_supabase_pat?: string | null
           external_supabase_url?: string | null
           ghl_agency_token?: string | null
           global_webhook_url?: string | null
