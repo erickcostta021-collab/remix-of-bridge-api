@@ -34,15 +34,15 @@ const syncToExternalSupabase = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    // Check if external Supabase is configured
+    // Check if external Supabase PAT is configured
     const { data: settings } = await supabase
       .from("user_settings")
-      .select("external_supabase_url, external_supabase_key")
+      .select("external_supabase_pat")
       .eq("user_id", session.user.id)
       .single();
 
-    if (!settings?.external_supabase_url || !settings?.external_supabase_key) {
-      return; // External Supabase not configured, skip sync
+    if (!settings?.external_supabase_pat) {
+      return; // External Supabase PAT not configured, skip sync
     }
 
     // Call sync function
@@ -237,6 +237,8 @@ export function useInstances(subaccountId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
+      // Auto-sync to external Supabase
+      syncToExternalSupabase();
     },
   });
 
@@ -478,6 +480,8 @@ export function useInstances(subaccountId?: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success("Instância desconectada!");
+      // Auto-sync to external Supabase
+      syncToExternalSupabase();
     },
     onError: (error) => {
       toast.error("Erro ao desconectar: " + error.message);
