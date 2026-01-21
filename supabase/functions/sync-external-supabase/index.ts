@@ -50,8 +50,83 @@ BEGIN
 END $$;
 `;
 
-// Function to create table using Management API
-async function ensureTableExists(projectRef: string, patToken: string): Promise<{ success: boolean; error?: string }> {
+// SQL to upsert data
+function generateUpsertSQL(data: InstanceData[]): string {
+  if (data.length === 0) {
+    return "";
+  }
+
+  const values = data.map(item => `(
+    '${item.instance_name.replace(/'/g, "''")}',
+    '${item.uazapi_instance_token}',
+    '${item.instance_status}',
+    '${item.location_id}',
+    ${item.ghl_user_id ? `'${item.ghl_user_id}'` : 'NULL'},
+    ${item.ghl_subaccount_token ? `'${item.ghl_subaccount_token}'` : 'NULL'},
+    '${item.account_name.replace(/'/g, "''")}',
+    '${item.api_base_url}',
+    '${item.api_admin_token}',
+    ${item.ignore_groups},
+    ${item.global_webhook_url ? `'${item.global_webhook_url}'` : 'NULL'}
+  )`).join(',\n');
+
+  return `
+    INSERT INTO public.unified_instance_ghl (
+      instance_name,
+      uazapi_instance_token,
+      instance_status,
+      location_id,
+      ghl_user_id,
+      ghl_subaccount_token,
+      account_name,
+      api_base_url,
+      api_admin_token,
+      ignore_groups,
+      global_webhook_url
+    ) VALUES ${values}
+    ON CONFLICT (uazapi_instance_token) DO UPDATE SET
+      instance_name = EXCLUDED.instance_name,
+      instance_status = EXCLUDED.instance_status,
+      location_id = EXCLUDED.location_id,
+      ghl_user_id = EXCLUDED.ghl_user_id,
+      ghl_subaccount_token = EXCLUDED.ghl_subaccount_token,
+      account_name = EXCLUDED.account_name,
+      api_base_url = EXCLUDED.api_base_url,
+      api_admin_token = EXCLUDED.api_admin_token,
+      ignore_groups = EXCLUDED.ignore_groups,
+      global_webhook_url = EXCLUDED.global_webhook_url,
+      updated_at = now();
+  `;
+}
+
+// Get user's projects using PAT
+async function getUserProjects(patToken: string): Promise<{ success: boolean; projects?: any[]; error?: string }> {
+  try {
+    const response = await fetch("https://api.supabase.com/v1/projects", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${patToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        return { success: false, error: "Token PAT inválido ou expirado" };
+      }
+      return { success: false, error: `Erro ao buscar projetos: ${response.status}` };
+    }
+
+    const projects = await response.json();
+    return { success: true, projects };
+  } catch (error) {
+    console.error("Error fetching projects:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Erro desconhecido" };
+  }
+}
+
+// Execute SQL using Management API
+async function executeSQL(projectRef: string, patToken: string, sql: string): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const response = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
       method: "POST",
@@ -59,27 +134,21 @@ async function ensureTableExists(projectRef: string, patToken: string): Promise<
         "Authorization": `Bearer ${patToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ query: CREATE_TABLE_SQL }),
+      body: JSON.stringify({ query: sql }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Management API error:", errorText);
-      return { success: false, error: `Failed to create table: ${response.status}` };
+      return { success: false, error: `Erro ao executar SQL: ${response.status}` };
     }
 
-    await response.json();
-    return { success: true };
+    const data = await response.json();
+    return { success: true, data };
   } catch (error) {
-    console.error("Error creating table:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    console.error("Error executing SQL:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Erro desconhecido" };
   }
-}
-
-// Extract project ref from Supabase URL
-function extractProjectRef(supabaseUrl: string): string | null {
-  const match = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/);
-  return match ? match[1] : null;
 }
 
 Deno.serve(async (req) => {
@@ -122,38 +191,52 @@ Deno.serve(async (req) => {
 
     if (settingsError || !settings) {
       return new Response(
-        JSON.stringify({ error: "Settings not found" }),
+        JSON.stringify({ error: "Configurações não encontradas" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!settings.external_supabase_url || !settings.external_supabase_key) {
+    if (!settings.external_supabase_pat) {
       return new Response(
-        JSON.stringify({ error: "External Supabase credentials not configured" }),
+        JSON.stringify({ error: "Token PAT não configurado" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // If PAT token is provided, try to create table automatically
-    if (settings.external_supabase_pat) {
-      const projectRef = extractProjectRef(settings.external_supabase_url);
-      if (projectRef) {
-        console.log("Attempting to create table automatically...");
-        const createResult = await ensureTableExists(projectRef, settings.external_supabase_pat);
-        if (!createResult.success) {
-          console.warn("Auto-create table failed:", createResult.error);
-          // Continue anyway - table might already exist
-        } else {
-          console.log("Table created/verified successfully");
-        }
-      }
+    // Validate PAT and get user's projects
+    console.log("Validating PAT token...");
+    const projectsResult = await getUserProjects(settings.external_supabase_pat);
+    
+    if (!projectsResult.success) {
+      return new Response(
+        JSON.stringify({ error: projectsResult.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // Create external Supabase client
-    const externalSupabase = createClient(
-      settings.external_supabase_url,
-      settings.external_supabase_key
-    );
+    if (!projectsResult.projects || projectsResult.projects.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Nenhum projeto Supabase encontrado para este token" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Use the first active project
+    const activeProject = projectsResult.projects.find((p: any) => p.status === "ACTIVE_HEALTHY") || projectsResult.projects[0];
+    const projectRef = activeProject.id;
+    
+    console.log(`Using project: ${activeProject.name} (${projectRef})`);
+
+    // Create table if not exists
+    console.log("Creating table if not exists...");
+    const createResult = await executeSQL(projectRef, settings.external_supabase_pat, CREATE_TABLE_SQL);
+    
+    if (!createResult.success) {
+      return new Response(
+        JSON.stringify({ error: `Erro ao criar tabela: ${createResult.error}` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Get all instances with their subaccount data
     const { data: instances, error: instancesError } = await supabase
@@ -170,7 +253,7 @@ Deno.serve(async (req) => {
 
     if (instancesError) {
       return new Response(
-        JSON.stringify({ error: "Failed to fetch instances", details: instancesError.message }),
+        JSON.stringify({ error: "Erro ao buscar instâncias", details: instancesError.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -181,7 +264,7 @@ Deno.serve(async (req) => {
       uazapi_instance_token: inst.uazapi_instance_token,
       instance_status: inst.instance_status || "disconnected",
       location_id: inst.ghl_subaccounts?.location_id || "",
-      ghl_user_id: null, // Will be populated if available
+      ghl_user_id: null,
       ghl_subaccount_token: inst.ghl_subaccounts?.ghl_subaccount_token || null,
       account_name: inst.ghl_subaccounts?.account_name || "",
       api_base_url: settings.uazapi_base_url || "https://atllassa.uazapi.com",
@@ -190,30 +273,26 @@ Deno.serve(async (req) => {
       global_webhook_url: settings.global_webhook_url || null,
     }));
 
-    // Try to create the table if it doesn't exist (using service role on external)
-    // First, try to upsert data - if table doesn't exist, we'll get an error
-    const { error: upsertError } = await externalSupabase
-      .from("unified_instance_ghl")
-      .upsert(formattedData, { 
-        onConflict: "uazapi_instance_token",
-        ignoreDuplicates: false 
-      });
-
-    if (upsertError) {
-      // Table might not exist
-      if (upsertError.message.includes("relation") && upsertError.message.includes("does not exist")) {
-        return new Response(
-          JSON.stringify({ 
-            error: "Table 'unified_instance_ghl' does not exist.",
-            hint: "Add the Management API Token (PAT) to create the table automatically, or create it manually.",
-            createTableSQL: CREATE_TABLE_SQL.trim()
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
+    if (formattedData.length === 0) {
       return new Response(
-        JSON.stringify({ error: "Failed to sync data", details: upsertError.message }),
+        JSON.stringify({ 
+          success: true, 
+          message: "Nenhuma instância para sincronizar",
+          project: activeProject.name,
+          count: 0
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Upsert data using SQL
+    console.log(`Syncing ${formattedData.length} instances...`);
+    const upsertSQL = generateUpsertSQL(formattedData);
+    const upsertResult = await executeSQL(projectRef, settings.external_supabase_pat, upsertSQL);
+
+    if (!upsertResult.success) {
+      return new Response(
+        JSON.stringify({ error: `Erro ao sincronizar dados: ${upsertResult.error}` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -221,17 +300,18 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Synced ${formattedData.length} instances to external Supabase`,
-        data: formattedData 
+        message: `${formattedData.length} instância(s) sincronizada(s) com sucesso!`,
+        project: activeProject.name,
+        count: formattedData.length
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
     console.error("Error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
     return new Response(
-      JSON.stringify({ error: "Internal server error", details: errorMessage }),
+      JSON.stringify({ error: "Erro interno do servidor", details: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
