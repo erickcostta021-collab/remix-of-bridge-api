@@ -149,6 +149,7 @@ export default function EmbedInstances() {
                 key={instance.id}
                 instance={instance}
                 subaccountId={subaccount!.id}
+                embedToken={embedToken!}
                 locationId={subaccount!.location_id}
                 ghlSubaccountToken={subaccount!.ghl_subaccount_token}
                 uazapiBaseUrl={userSettings?.uazapi_base_url || "https://atllassa.uazapi.com"}
