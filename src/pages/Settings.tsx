@@ -11,7 +11,7 @@ import { Save, Loader2, Eye, EyeOff, Database, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Settings() {
-  const { settings, isLoading, updateSettings } = useSettings();
+  const { settings, isLoading, updateSettings, applyGlobalWebhook } = useSettings();
   const { syncToExternal } = useExternalSupabase();
   const [showTokens, setShowTokens] = useState(false);
   
@@ -35,8 +35,19 @@ export default function Settings() {
     }
   }, [settings]);
 
-  const handleSave = () => {
-    updateSettings.mutate(formData);
+  const handleSave = async () => {
+    // Save settings first
+    await new Promise<void>((resolve, reject) => {
+      updateSettings.mutate(formData, {
+        onSuccess: () => resolve(),
+        onError: (err) => reject(err),
+      });
+    });
+
+    // If global webhook URL is set, apply it to all instances
+    if (formData.global_webhook_url) {
+      applyGlobalWebhook.mutate(formData.global_webhook_url);
+    }
   };
 
   const handleSync = async () => {
@@ -160,7 +171,7 @@ export default function Settings() {
                     className="bg-secondary border-border"
                   />
                   <p className="text-xs text-muted-foreground">
-                    URL padrão para novos webhooks de instância
+                    Ao salvar, este webhook será configurado em todas as instâncias com os eventos "messages" e "messages_update" habilitados
                   </p>
                 </div>
               </CardContent>
@@ -244,10 +255,10 @@ export default function Settings() {
           </Button>
           <Button
             onClick={handleSave}
-            disabled={updateSettings.isPending}
+            disabled={updateSettings.isPending || applyGlobalWebhook.isPending}
             className="bg-primary hover:bg-primary/90"
           >
-            {updateSettings.isPending ? (
+            {(updateSettings.isPending || applyGlobalWebhook.isPending) ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Save className="h-4 w-4 mr-2" />
