@@ -79,7 +79,7 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const [ignoreGroups, setIgnoreGroups] = useState(instance.ignore_groups || false);
   const [syncing, setSyncing] = useState(false);
   const [connectedPhone, setConnectedPhone] = useState<string | null>(instance.phone || null);
-  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
+  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(instance.profile_pic_url || null);
   const [assignUserDialogOpen, setAssignUserDialogOpen] = useState(false);
   const [ghlUserName, setGhlUserName] = useState<string | null>(null);
   const [subaccount, setSubaccount] = useState<{
