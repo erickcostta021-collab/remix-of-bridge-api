@@ -88,9 +88,11 @@ export function EmbedInstanceCard({
       console.log("[EmbedInstanceCard] Full API response:", JSON.stringify(data, null, 2));
       
       // Extract status with multiple fallbacks - check nested structures
+      // UAZAPI returns: instance.status or status.connected
       const rawStatus = data.instance?.status 
         || data.instance?.connectionState 
         || data.instance?.state
+        || (data.status?.connected ? "connected" : null)
         || data.status 
         || data.state 
         || data.connection 
@@ -98,10 +100,13 @@ export function EmbedInstanceCard({
         || "disconnected";
       
       // Extract phone number with multiple fallbacks - check nested structures
-      const phone = data.instance?.phoneNumber 
+      // UAZAPI returns: instance.owner or status.jid
+      const phone = data.instance?.owner
+        || data.instance?.phoneNumber 
         || data.instance?.phone 
         || data.instance?.number
         || data.instance?.wid?.user
+        || data.status?.jid?.split("@")?.[0]?.split(":")?.[0]
         || data.phone 
         || data.phoneNumber 
         || data.number 
@@ -111,6 +116,7 @@ export function EmbedInstanceCard({
         || "";
       
       // Extract profile picture with multiple fallbacks - check nested structures
+      // UAZAPI returns: instance.profilePicUrl
       const pic = data.instance?.profilePicUrl
         || data.instance?.profilePic
         || data.instance?.picture
