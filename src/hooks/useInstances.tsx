@@ -142,8 +142,30 @@ export function useInstances(subaccountId?: string) {
       }
 
       const data = await response.json();
-      const status = data.status || data.state || "disconnected";
-      const phone = data.phone || data.number || data.jid?.split("@")?.[0] || "";
+      
+      // Handle nested structure: { instance: {...}, status: { connected: true, jid: "..." } }
+      let status = "disconnected";
+      let phone = "";
+      
+      // Check nested status object first
+      if (data.status?.connected === true || data.status?.loggedIn === true) {
+        status = "connected";
+      } else if (data.instance?.status) {
+        status = data.instance.status;
+      } else if (data.status && typeof data.status === 'string') {
+        status = data.status;
+      } else if (data.state) {
+        status = data.state;
+      }
+      
+      // Extract phone from various possible locations
+      phone = data.instance?.owner 
+        || data.status?.jid?.split("@")?.[0]
+        || data.phone 
+        || data.number 
+        || data.jid?.split("@")?.[0] 
+        || "";
+      
       return { status, phone };
     } catch {
       return { status: "disconnected" };
