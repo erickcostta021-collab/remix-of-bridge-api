@@ -79,12 +79,39 @@ export function EmbedInstanceCard({
       if (!response.ok) return null;
 
       const data = await response.json();
+      
+      // Extract status with multiple fallbacks
+      const rawStatus = data.instance?.status 
+        || data.instance?.connectionState 
+        || data.status 
+        || data.state 
+        || data.connection 
+        || "disconnected";
+      
+      // Extract phone number with multiple fallbacks
+      const phone = data.instance?.phoneNumber 
+        || data.instance?.phone 
+        || data.phone 
+        || data.phoneNumber 
+        || data.number 
+        || data.jid?.split("@")?.[0] 
+        || "";
+      
+      // Extract profile picture with multiple fallbacks
+      const pic = data.instance?.profilePicUrl
+        || data.profilePicUrl
+        || data.profilePic
+        || data.picture
+        || data.imgUrl
+        || "";
+      
       return {
-        status: mapUazapiStatus(data.status || data.state),
-        phone: data.phone || data.phoneNumber,
-        profilePicUrl: data.profilePicUrl || data.profilePictureUrl,
+        status: mapUazapiStatus(rawStatus),
+        phone,
+        profilePicUrl: pic,
       };
-    } catch {
+    } catch (error) {
+      console.error("Error fetching status:", error);
       return null;
     }
   };
