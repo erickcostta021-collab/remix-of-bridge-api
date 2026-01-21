@@ -1,5 +1,7 @@
 project_id = "jsupvprudyxyiyxwqxuq"
 
+[functions.sync-external-supabase]
+verify_jwt = false
 [functions.send-registration-code]
 verify_jwt = false
 
