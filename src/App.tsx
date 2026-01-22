@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import SubaccountSettings from "./pages/SubaccountSettings";
 import EmbedInstances from "./pages/EmbedInstances";
+import OAuthCallback from "./pages/OAuthCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -66,6 +67,8 @@ const App = () => (
           />
           {/* Public embed route - no auth required */}
           <Route path="/embed/:embedToken" element={<EmbedInstances />} />
+          {/* OAuth callback - public route for GHL */}
+          <Route path="/oauth/callback" element={<OAuthCallback />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
