@@ -152,12 +152,12 @@ serve(async (req) => {
 
     console.log(`✅ OAuth completed for location ${finalLocationId}`);
 
-    // Redirect to dashboard with success
+    // Redirect to success page (will auto-redirect to dashboard after 3s)
     return new Response(null, {
       status: 302,
       headers: {
         ...corsHeaders,
-        "Location": `${frontendUrl}/dashboard?oauth=success&locationId=${finalLocationId}`,
+        "Location": `${frontendUrl}/oauth/success/${finalLocationId}`,
       },
     });
 
