@@ -5,18 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSettings } from "@/hooks/useSettings";
 import { useExternalSupabase } from "@/hooks/useExternalSupabase";
-import { Save, Loader2, Eye, EyeOff, Database, RefreshCw } from "lucide-react";
+import { Save, Loader2, Eye, EyeOff, Database, RefreshCw, ExternalLink, Info, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Settings() {
-  const { settings, isLoading, updateSettings, applyGlobalWebhook } = useSettings();
+  const { settings, isLoading, updateSettings, applyGlobalWebhook, getOAuthUrl } = useSettings();
   const { syncToExternal } = useExternalSupabase();
   const [showTokens, setShowTokens] = useState(false);
   
   const [formData, setFormData] = useState({
     ghl_agency_token: "",
+    ghl_client_id: "",
+    ghl_client_secret: "",
+    ghl_conversation_provider_id: "",
     uazapi_admin_token: "",
     uazapi_base_url: "",
     global_webhook_url: "",
@@ -27,6 +31,9 @@ export default function Settings() {
     if (settings) {
       setFormData({
         ghl_agency_token: settings.ghl_agency_token || "",
+        ghl_client_id: settings.ghl_client_id || "",
+        ghl_client_secret: settings.ghl_client_secret || "",
+        ghl_conversation_provider_id: settings.ghl_conversation_provider_id || "",
         uazapi_admin_token: settings.uazapi_admin_token || "",
         uazapi_base_url: settings.uazapi_base_url || "https://atllassa.uazapi.com",
         global_webhook_url: settings.global_webhook_url || "",
@@ -66,10 +73,16 @@ export default function Settings() {
       });
       // Then sync
       syncToExternal.mutate();
-    } catch (error) {
+    } catch {
       toast.error("Erro ao salvar configurações antes de sincronizar");
     }
   };
+
+  const oauthUrl = getOAuthUrl();
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const redirectUri = `${supabaseUrl}/functions/v1/ghl-oauth-callback`;
+  const inboundWebhookUrl = `${supabaseUrl}/functions/v1/ghl-webhook-inbound`;
+  const outboundWebhookUrl = `${supabaseUrl}/functions/v1/ghl-webhook-outbound`;
 
   if (isLoading) {
     return (
@@ -87,18 +100,126 @@ export default function Settings() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
           <p className="text-muted-foreground">
-            Configure seus tokens de API e preferências
+            Configure OAuth, tokens de API e preferências
           </p>
         </div>
 
-        <Tabs defaultValue="integrations" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue="oauth" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="oauth">OAuth GHL</TabsTrigger>
             <TabsTrigger value="integrations">Integrações</TabsTrigger>
             <TabsTrigger value="external-supabase">
               <Database className="h-4 w-4 mr-2" />
-              Supabase Externo
+              Supabase
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="oauth" className="space-y-6 mt-6">
+            {/* OAuth Configuration */}
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-card-foreground">Credenciais OAuth 2.0</CardTitle>
+                <CardDescription>
+                  Configure sua app do GHL Marketplace para OAuth automático
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    <strong>Redirect URI:</strong> Use este URL ao configurar sua app no GHL Marketplace:
+                    <code className="block mt-1 p-2 bg-secondary rounded text-xs break-all">
+                      {redirectUri}
+                    </code>
+                  </AlertDescription>
+                </Alert>
+
+                <div className="space-y-2">
+                  <Label htmlFor="ghl-client-id">Client ID</Label>
+                  <Input
+                    id="ghl-client-id"
+                    type={showTokens ? "text" : "password"}
+                    value={formData.ghl_client_id}
+                    onChange={(e) => setFormData({ ...formData, ghl_client_id: e.target.value })}
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ghl-client-secret">Client Secret</Label>
+                  <Input
+                    id="ghl-client-secret"
+                    type={showTokens ? "text" : "password"}
+                    value={formData.ghl_client_secret}
+                    onChange={(e) => setFormData({ ...formData, ghl_client_secret: e.target.value })}
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ghl-provider-id">Conversation Provider ID (opcional)</Label>
+                  <Input
+                    id="ghl-provider-id"
+                    type="text"
+                    value={formData.ghl_conversation_provider_id}
+                    onChange={(e) => setFormData({ ...formData, ghl_conversation_provider_id: e.target.value })}
+                    placeholder="ID do provedor de conversas"
+                    className="bg-secondary border-border"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Necessário apenas se sua app usa Custom Conversation Provider
+                  </p>
+                </div>
+
+                {oauthUrl && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => window.open(oauthUrl, "_blank")}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Instalar App via OAuth
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Webhooks Info */}
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-card-foreground">URLs de Webhook</CardTitle>
+                <CardDescription>
+                  Configure estes webhooks no GHL para mensagens bidirecionais
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    Webhook Inbound (UAZAPI → GHL)
+                  </Label>
+                  <code className="block p-2 bg-secondary rounded text-xs break-all">
+                    {inboundWebhookUrl}
+                  </code>
+                  <p className="text-xs text-muted-foreground">
+                    Configure como Webhook Global da UAZAPI
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    Webhook Outbound (GHL → WhatsApp)
+                  </Label>
+                  <code className="block p-2 bg-secondary rounded text-xs break-all">
+                    {outboundWebhookUrl}
+                  </code>
+                  <p className="text-xs text-muted-foreground">
+                    Configure nas Workflows do GHL para enviar mensagens
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="integrations" className="space-y-6 mt-6">
             {/* GHL Settings */}
@@ -106,7 +227,7 @@ export default function Settings() {
               <CardHeader>
                 <CardTitle className="text-card-foreground">GoHighLevel (GHL)</CardTitle>
                 <CardDescription>
-                  Token de agência para sincronizar subcontas
+                  Token de agência para sincronizar subcontas (alternativo ao OAuth)
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -161,7 +282,7 @@ export default function Settings() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="webhook-url">Webhook URL Global</Label>
+                  <Label htmlFor="webhook-url">Webhook URL Global (UAZAPI)</Label>
                   <Input
                     id="webhook-url"
                     type="text"
@@ -171,7 +292,8 @@ export default function Settings() {
                     className="bg-secondary border-border"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Ao salvar, será configurado o webhook global (nível admin) que recebe eventos de todas as instâncias com "messages" e "messages_update"
+                    Webhook global (nível admin) que recebe eventos de todas as instâncias. 
+                    Use o URL do webhook inbound acima para integração automática com GHL.
                   </p>
                 </div>
               </CardContent>

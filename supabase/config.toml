@@ -10,3 +10,15 @@ verify_jwt = false
 
 [functions.mark-code-used]
 verify_jwt = false
+
+[functions.ghl-oauth-callback]
+verify_jwt = false
+
+[functions.ghl-refresh-token]
+verify_jwt = false
+
+[functions.ghl-webhook-inbound]
+verify_jwt = false
+
+[functions.ghl-webhook-outbound]
+verify_jwt = false

@@ -7,6 +7,9 @@ export interface UserSettings {
   id: string;
   user_id: string;
   ghl_agency_token: string | null;
+  ghl_client_id: string | null;
+  ghl_client_secret: string | null;
+  ghl_conversation_provider_id: string | null;
   uazapi_admin_token: string | null;
   uazapi_base_url: string | null;
   global_webhook_url: string | null;
@@ -112,10 +115,40 @@ export function useSettings() {
     },
   });
 
+  // Generate OAuth URL
+  const getOAuthUrl = () => {
+    if (!settings?.ghl_client_id) return null;
+    
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const redirectUri = `${supabaseUrl}/functions/v1/ghl-oauth-callback`;
+    const state = btoa(JSON.stringify({ userId: user?.id }));
+    
+    const scopes = [
+      "conversations.readonly",
+      "conversations.write",
+      "conversations/message.readonly",
+      "conversations/message.write",
+      "contacts.readonly",
+      "contacts.write",
+      "locations.readonly",
+    ].join(" ");
+    
+    const params = new URLSearchParams({
+      client_id: settings.ghl_client_id,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: scopes,
+      state,
+    });
+    
+    return `https://marketplace.leadconnectorhq.com/oauth/chooselocation?${params.toString()}`;
+  };
+
   return {
     settings,
     isLoading,
     updateSettings,
     applyGlobalWebhook,
+    getOAuthUrl,
   };
 }
