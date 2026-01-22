@@ -11,14 +11,14 @@ verify_jwt = false
 [functions.mark-code-used]
 verify_jwt = false
 
-[functions.ghl-oauth-callback]
+[functions.oauth-callback]
 verify_jwt = false
 
-[functions.ghl-refresh-token]
+[functions.refresh-token]
 verify_jwt = false
 
-[functions.ghl-webhook-inbound]
+[functions.webhook-inbound]
 verify_jwt = false
 
-[functions.ghl-webhook-outbound]
+[functions.webhook-outbound]
 verify_jwt = false

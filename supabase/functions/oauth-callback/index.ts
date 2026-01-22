@@ -63,9 +63,9 @@ serve(async (req) => {
       );
     }
 
-    // Get the base URL for redirect
+    // Get the base URL for redirect - use frontend URL which proxies to this function
     const frontendUrl = Deno.env.get("FRONTEND_URL") || "https://uaz-ghl-bridge.lovable.app";
-    const redirectUri = `${supabaseUrl}/functions/v1/ghl-oauth-callback`;
+    const redirectUri = `${frontendUrl}/oauth/callback`;
 
     // Exchange code for tokens
     const tokenParams = new URLSearchParams({

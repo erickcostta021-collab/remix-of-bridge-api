@@ -13,7 +13,7 @@ const OAuthCallback = () => {
 
     // Redireciona para a Edge Function com todos os parâmetros
     const edgeFunctionUrl = new URL(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ghl-oauth-callback`
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/oauth-callback`
     );
 
     if (code) edgeFunctionUrl.searchParams.set("code", code);
