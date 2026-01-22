@@ -17,34 +17,55 @@ export type Database = {
       ghl_subaccounts: {
         Row: {
           account_name: string
+          company_id: string | null
           created_at: string
           embed_token: string | null
+          ghl_access_token: string | null
+          ghl_refresh_token: string | null
           ghl_subaccount_token: string | null
+          ghl_token_expires_at: string | null
+          ghl_token_scopes: string | null
           ghl_user_id: string | null
           id: string
           location_id: string
+          oauth_installed_at: string | null
+          oauth_last_refresh: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           account_name: string
+          company_id?: string | null
           created_at?: string
           embed_token?: string | null
+          ghl_access_token?: string | null
+          ghl_refresh_token?: string | null
           ghl_subaccount_token?: string | null
+          ghl_token_expires_at?: string | null
+          ghl_token_scopes?: string | null
           ghl_user_id?: string | null
           id?: string
           location_id: string
+          oauth_installed_at?: string | null
+          oauth_last_refresh?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           account_name?: string
+          company_id?: string | null
           created_at?: string
           embed_token?: string | null
+          ghl_access_token?: string | null
+          ghl_refresh_token?: string | null
           ghl_subaccount_token?: string | null
+          ghl_token_expires_at?: string | null
+          ghl_token_scopes?: string | null
           ghl_user_id?: string | null
           id?: string
           location_id?: string
+          oauth_installed_at?: string | null
+          oauth_last_refresh?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -167,6 +188,9 @@ export type Database = {
           external_supabase_pat: string | null
           external_supabase_url: string | null
           ghl_agency_token: string | null
+          ghl_client_id: string | null
+          ghl_client_secret: string | null
+          ghl_conversation_provider_id: string | null
           global_webhook_url: string | null
           id: string
           uazapi_admin_token: string | null
@@ -180,6 +204,9 @@ export type Database = {
           external_supabase_pat?: string | null
           external_supabase_url?: string | null
           ghl_agency_token?: string | null
+          ghl_client_id?: string | null
+          ghl_client_secret?: string | null
+          ghl_conversation_provider_id?: string | null
           global_webhook_url?: string | null
           id?: string
           uazapi_admin_token?: string | null
@@ -193,6 +220,9 @@ export type Database = {
           external_supabase_pat?: string | null
           external_supabase_url?: string | null
           ghl_agency_token?: string | null
+          ghl_client_id?: string | null
+          ghl_client_secret?: string | null
+          ghl_conversation_provider_id?: string | null
           global_webhook_url?: string | null
           id?: string
           uazapi_admin_token?: string | null
