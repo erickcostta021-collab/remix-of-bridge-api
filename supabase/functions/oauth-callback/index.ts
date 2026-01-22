@@ -64,7 +64,7 @@ serve(async (req) => {
     }
 
     // Get the base URL for redirect - use frontend URL which proxies to this function
-    const frontendUrl = Deno.env.get("FRONTEND_URL") || "https://wa-connector.lovable.app";
+    const frontendUrl = Deno.env.get("FRONTEND_URL") || "https://bridge-api.lovable.app";
     const redirectUri = `${frontendUrl}/oauth/callback`;
 
     // Exchange code for tokens
