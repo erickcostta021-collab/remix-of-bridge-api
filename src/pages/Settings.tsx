@@ -80,7 +80,7 @@ export default function Settings() {
 
   const oauthUrl = getOAuthUrl();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const redirectUri = `${supabaseUrl}/functions/v1/oauth-callback`;
+  const redirectUri = `${window.location.origin}/oauth/callback`;
   const inboundWebhookUrl = `${supabaseUrl}/functions/v1/webhook-inbound`;
   const outboundWebhookUrl = `${supabaseUrl}/functions/v1/webhook-outbound`;
 

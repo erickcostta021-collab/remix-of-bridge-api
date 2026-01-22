@@ -118,9 +118,13 @@ export function useSettings() {
   // Generate OAuth URL
   const getOAuthUrl = () => {
     if (!settings?.ghl_client_id) return null;
-    
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const redirectUri = `${supabaseUrl}/functions/v1/ghl-oauth-callback`;
+
+    // IMPORTANT: redirect_uri must point to the frontend bridge route,
+    // not directly to the backend function.
+    const redirectUri = `${window.location.origin}/oauth/callback`;
+
+    // State is used by the backend callback to identify which logged-in user
+    // initiated the installation.
     const state = btoa(JSON.stringify({ userId: user?.id }));
     
     const scopes = [
