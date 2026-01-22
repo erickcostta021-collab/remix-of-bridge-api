@@ -14,13 +14,13 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
-    const locationId = url.searchParams.get("locationId");
+    let locationId = url.searchParams.get("locationId");
     const companyId = url.searchParams.get("companyId");
     const state = url.searchParams.get("state"); // Contains user_id
 
-    if (!code || !locationId) {
+    if (!code) {
       return new Response(
-        JSON.stringify({ error: "Missing required parameters: code or locationId" }),
+        JSON.stringify({ error: "Missing required parameter: code" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -98,7 +98,17 @@ serve(async (req) => {
     const tokenData = await tokenResponse.json();
     const { access_token, refresh_token, expires_in, scope, userId: ghlUserId, locationId: tokenLocationId } = tokenData;
 
+    // Use locationId from token response if not provided in URL
     const finalLocationId = tokenLocationId || locationId;
+    
+    if (!finalLocationId) {
+      console.error("No locationId in URL or token response:", tokenData);
+      return new Response(
+        JSON.stringify({ error: "Could not determine locationId from OAuth response" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     const expiresAt = new Date(Date.now() + expires_in * 1000);
 
     // Get location name from GHL API
