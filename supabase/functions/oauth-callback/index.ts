@@ -161,76 +161,12 @@ serve(async (req) => {
     }
 
     console.log(`✅ OAuth completed for location ${finalLocationId}`);
+    console.log(`ℹ️ Provider activation must be done manually in GHL: Settings > Phone Numbers > Advanced Settings > SMS Provider`);
 
-    // Activate provider in GHL - n8n style with detailed logging
-    // Using the /conversations/providers/config endpoint
-    const providerId = settings.ghl_conversation_provider_id || "6971c2cfdbee9e2d7a8b1401";
-    
-    console.log("🔧 Starting provider activation (n8n style)...");
-    
-    // Build activation payload exactly as n8n does
-    const activationPayload = {
-      locationId: finalLocationId,
-      providerId: providerId,
-      type: "SMS"
-    };
-    
-    console.log("📤 Activation Request:", {
-      url: "https://services.leadconnectorhq.com/conversations/providers/config",
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${access_token.substring(0, 20)}...`,
-        "Content-Type": "application/json",
-        "Version": "2021-07-28"
-      },
-      body: JSON.stringify(activationPayload, null, 2)
-    });
-
-    try {
-      const providerResponse = await fetch(
-        "https://services.leadconnectorhq.com/conversations/providers/config",
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${access_token}`,
-            "Content-Type": "application/json",
-            "Version": "2021-07-28",
-            "Accept": "application/json",
-          },
-          body: JSON.stringify(activationPayload),
-        }
-      );
-
-      const responseStatus = providerResponse.status;
-      const responseText = await providerResponse.text();
-      
-      let responseJson: unknown = null;
-      try {
-        responseJson = responseText ? JSON.parse(responseText) : null;
-      } catch {
-        // Not JSON, keep raw text
-      }
-
-      console.log("📥 Activation Response:", {
-        status: responseStatus,
-        ok: providerResponse.ok,
-        headers: Object.fromEntries(providerResponse.headers.entries()),
-        body: responseJson ?? responseText
-      });
-
-      if (providerResponse.ok) {
-        console.log(`✅ Provider ${providerId} activated successfully for location ${finalLocationId}`);
-      } else {
-        console.error(`❌ Provider activation failed!`, {
-          status: responseStatus,
-          error: responseJson ?? responseText,
-          locationId: finalLocationId,
-          providerId: providerId
-        });
-      }
-    } catch (providerError) {
-      console.error("❌ Exception during provider activation:", providerError);
-    }
+    // NOTE: GHL does not have a public API to activate conversation providers.
+    // The user must manually enable it in the sub-account:
+    // Settings > Phone Numbers > Advanced Settings > SMS Provider
+    // Then select the app and click Save.
 
     // Redirect to success page (will auto-redirect to dashboard after 3s)
     return new Response(null, {
