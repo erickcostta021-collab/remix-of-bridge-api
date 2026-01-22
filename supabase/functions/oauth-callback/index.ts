@@ -162,38 +162,34 @@ serve(async (req) => {
 
     console.log(`✅ OAuth completed for location ${finalLocationId}`);
 
-    // Activate provider in GHL so the app appears in Phone Integration menu
-    // NOTE: keep logs detailed here to diagnose why provider doesn't show in GHL UI.
-    const providerId = settings.ghl_conversation_provider_id;
-    if (providerId) {
-      const requestedScopesRaw = typeof scope === "string" ? scope : "";
-      const requestedScopes = new Set(
-        requestedScopesRaw
-          .split(/[\s,]+/)
-          .map((s: string) => s.trim())
-          .filter(Boolean)
-      );
-      const hasConversationsWrite = requestedScopes.has("conversations.write");
+    // Activate provider in GHL - n8n style with detailed logging
+    // Using the /conversations/providers/config endpoint
+    const providerId = settings.ghl_conversation_provider_id || "6971c2cfdbee9e2d7a8b1401";
+    
+    console.log("🔧 Starting provider activation (n8n style)...");
+    
+    // Build activation payload exactly as n8n does
+    const activationPayload = {
+      locationId: finalLocationId,
+      providerId: providerId,
+      type: "SMS"
+    };
+    
+    console.log("📤 Activation Request:", {
+      url: "https://services.leadconnectorhq.com/conversations/providers/config",
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${access_token.substring(0, 20)}...`,
+        "Content-Type": "application/json",
+        "Version": "2021-07-28"
+      },
+      body: JSON.stringify(activationPayload, null, 2)
+    });
 
-      console.log("🔎 Provider activation attempt (pre-flight)", {
-        locationId: finalLocationId,
-        providerId,
-        type: "SMS",
-        // Helpful to confirm the token really has what we expect
-        tokenHasConversationsWrite: hasConversationsWrite,
-        tokenScopesRaw: requestedScopesRaw,
-        // Helpful to confirm we're using the new client_id
-        clientId: settings.ghl_client_id,
-      });
-
-      try {
-        // Correct endpoint per GHL docs:
-        // POST /conversations/providers/{providerId}/locations/{locationId}
-        const activationUrl = `https://services.leadconnectorhq.com/conversations/providers/${providerId}/locations/${finalLocationId}`;
-
-        console.log("🔗 Activation URL:", activationUrl);
-
-        const providerResponse = await fetch(activationUrl, {
+    try {
+      const providerResponse = await fetch(
+        "https://services.leadconnectorhq.com/conversations/providers/config",
+        {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${access_token}`,
@@ -201,37 +197,39 @@ serve(async (req) => {
             "Version": "2021-07-28",
             "Accept": "application/json",
           },
-          body: JSON.stringify({ type: "SMS" }),
-        });
-
-        const responseText = await providerResponse.text();
-        let responseJson: unknown = null;
-        try {
-          responseJson = responseText ? JSON.parse(responseText) : null;
-        } catch {
-          // Not JSON; keep raw text
+          body: JSON.stringify(activationPayload),
         }
+      );
 
-        console.log("📨 Provider activation response", {
-          status: providerResponse.status,
-          ok: providerResponse.ok,
-          body: responseJson ?? responseText,
-        });
-
-        if (providerResponse.ok) {
-          console.log(`✅ Provider ${providerId} activated for location ${finalLocationId}`);
-        } else {
-          console.error(
-            `⚠️ Failed to activate provider: ${providerResponse.status}`,
-            responseJson ?? responseText
-          );
-        }
-      } catch (providerError) {
-        console.error("⚠️ Error activating provider:", providerError);
-        // Não bloqueia o fluxo - a instalação OAuth ainda é válida
+      const responseStatus = providerResponse.status;
+      const responseText = await providerResponse.text();
+      
+      let responseJson: unknown = null;
+      try {
+        responseJson = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        // Not JSON, keep raw text
       }
-    } else {
-      console.log("⚠️ No ghl_conversation_provider_id configured, skipping provider activation");
+
+      console.log("📥 Activation Response:", {
+        status: responseStatus,
+        ok: providerResponse.ok,
+        headers: Object.fromEntries(providerResponse.headers.entries()),
+        body: responseJson ?? responseText
+      });
+
+      if (providerResponse.ok) {
+        console.log(`✅ Provider ${providerId} activated successfully for location ${finalLocationId}`);
+      } else {
+        console.error(`❌ Provider activation failed!`, {
+          status: responseStatus,
+          error: responseJson ?? responseText,
+          locationId: finalLocationId,
+          providerId: providerId
+        });
+      }
+    } catch (providerError) {
+      console.error("❌ Exception during provider activation:", providerError);
     }
 
     // Redirect to success page (will auto-redirect to dashboard after 3s)
