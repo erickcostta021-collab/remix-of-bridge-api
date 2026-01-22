@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
+import { getOAuthRedirectUri } from "@/lib/canonicalOrigin";
 
 export interface UserSettings {
   id: string;
@@ -119,9 +120,10 @@ export function useSettings() {
   const getOAuthUrl = () => {
     if (!settings?.ghl_client_id) return null;
 
-    // IMPORTANT: redirect_uri must point to the frontend bridge route,
-    // not directly to the backend function.
-    const redirectUri = `${window.location.origin}/oauth/callback`;
+    // IMPORTANT: Use the canonical (published) origin for redirect_uri.
+    // The Preview domain is temporary and will cause "Missing user context in state"
+    // when the provider redirects elsewhere.
+    const redirectUri = getOAuthRedirectUri();
 
     // State is used by the backend callback to identify which logged-in user
     // initiated the installation.

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSettings } from "@/hooks/useSettings";
 import { useExternalSupabase } from "@/hooks/useExternalSupabase";
+import { CANONICAL_APP_ORIGIN, getOAuthRedirectUri } from "@/lib/canonicalOrigin";
 import { Save, Loader2, Eye, EyeOff, Database, RefreshCw, ExternalLink, Info, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -80,9 +81,10 @@ export default function Settings() {
 
   const oauthUrl = getOAuthUrl();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const redirectUri = `${window.location.origin}/oauth/callback`;
+  const redirectUri = getOAuthRedirectUri();
   const inboundWebhookUrl = `${supabaseUrl}/functions/v1/webhook-inbound`;
   const outboundWebhookUrl = `${supabaseUrl}/functions/v1/webhook-outbound`;
+  const isPreviewDomain = window.location.origin !== CANONICAL_APP_ORIGIN;
 
   if (isLoading) {
     return (
@@ -131,6 +133,12 @@ export default function Settings() {
                     <code className="block mt-1 p-2 bg-secondary rounded text-xs break-all">
                       {redirectUri}
                     </code>
+                    {isPreviewDomain && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Você está no <strong>Preview</strong>. Não copie o domínio do preview para o Marketplace.
+                        Use sempre o domínio publicado acima.
+                      </p>
+                    )}
                   </AlertDescription>
                 </Alert>
 
