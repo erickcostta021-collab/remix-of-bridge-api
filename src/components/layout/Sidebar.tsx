@@ -52,7 +52,7 @@ export function Sidebar() {
               <div className="p-1.5 bg-primary/10 rounded-lg">
                 <Zap className="h-5 w-5 text-primary" />
               </div>
-              <span className="font-semibold text-sidebar-foreground">Instance Hub</span>
+              <span className="font-semibold text-sidebar-foreground">Bridge API</span>
             </div>
           )}
           <Button
