@@ -51,7 +51,7 @@ serve(async (req) => {
     // Get user settings to retrieve OAuth credentials
     const { data: settings, error: settingsError } = await supabase
       .from("user_settings")
-      .select("ghl_client_id, ghl_client_secret")
+      .select("ghl_client_id, ghl_client_secret, ghl_conversation_provider_id")
       .eq("user_id", userId)
       .single();
 
@@ -161,6 +161,42 @@ serve(async (req) => {
     }
 
     console.log(`✅ OAuth completed for location ${finalLocationId}`);
+
+    // Activate provider in GHL so the app appears in Phone Integration menu
+    const providerId = settings.ghl_conversation_provider_id;
+    if (providerId) {
+      try {
+        const providerResponse = await fetch(
+          "https://services.leadconnectorhq.com/conversations/providers/config",
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${access_token}`,
+              "Content-Type": "application/json",
+              "Version": "2021-07-28",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify({
+              locationId: finalLocationId,
+              providerId: providerId,
+              type: "SMS",
+            }),
+          }
+        );
+
+        if (providerResponse.ok) {
+          console.log(`✅ Provider ${providerId} activated for location ${finalLocationId}`);
+        } else {
+          const errorText = await providerResponse.text();
+          console.error(`⚠️ Failed to activate provider: ${providerResponse.status} - ${errorText}`);
+        }
+      } catch (providerError) {
+        console.error("⚠️ Error activating provider:", providerError);
+        // Não bloqueia o fluxo - a instalação OAuth ainda é válida
+      }
+    } else {
+      console.log("⚠️ No ghl_conversation_provider_id configured, skipping provider activation");
+    }
 
     // Redirect to success page (will auto-redirect to dashboard after 3s)
     return new Response(null, {
