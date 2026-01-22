@@ -163,9 +163,36 @@ serve(async (req) => {
     console.log(`✅ OAuth completed for location ${finalLocationId}`);
 
     // Activate provider in GHL so the app appears in Phone Integration menu
+    // NOTE: keep logs detailed here to diagnose why provider doesn't show in GHL UI.
     const providerId = settings.ghl_conversation_provider_id;
     if (providerId) {
+      const requestedScopesRaw = typeof scope === "string" ? scope : "";
+      const requestedScopes = new Set(
+        requestedScopesRaw
+          .split(/[\s,]+/)
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+      );
+      const hasConversationsWrite = requestedScopes.has("conversations.write");
+
+      console.log("🔎 Provider activation attempt (pre-flight)", {
+        locationId: finalLocationId,
+        providerId,
+        type: "SMS",
+        // Helpful to confirm the token really has what we expect
+        tokenHasConversationsWrite: hasConversationsWrite,
+        tokenScopesRaw: requestedScopesRaw,
+        // Helpful to confirm we're using the new client_id
+        clientId: settings.ghl_client_id,
+      });
+
       try {
+        const activationPayload = {
+          locationId: finalLocationId,
+          providerId,
+          type: "SMS",
+        };
+
         const providerResponse = await fetch(
           "https://services.leadconnectorhq.com/conversations/providers/config",
           {
@@ -176,19 +203,31 @@ serve(async (req) => {
               "Version": "2021-07-28",
               "Accept": "application/json",
             },
-            body: JSON.stringify({
-              locationId: finalLocationId,
-              providerId: providerId,
-              type: "SMS",
-            }),
+            body: JSON.stringify(activationPayload),
           }
         );
+
+        const responseText = await providerResponse.text();
+        let responseJson: unknown = null;
+        try {
+          responseJson = responseText ? JSON.parse(responseText) : null;
+        } catch {
+          // Not JSON; keep raw text
+        }
+
+        console.log("📨 Provider activation response", {
+          status: providerResponse.status,
+          ok: providerResponse.ok,
+          body: responseJson ?? responseText,
+        });
 
         if (providerResponse.ok) {
           console.log(`✅ Provider ${providerId} activated for location ${finalLocationId}`);
         } else {
-          const errorText = await providerResponse.text();
-          console.error(`⚠️ Failed to activate provider: ${providerResponse.status} - ${errorText}`);
+          console.error(
+            `⚠️ Failed to activate provider: ${providerResponse.status}`,
+            responseJson ?? responseText
+          );
         }
       } catch (providerError) {
         console.error("⚠️ Error activating provider:", providerError);
