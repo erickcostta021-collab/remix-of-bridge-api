@@ -187,25 +187,22 @@ serve(async (req) => {
       });
 
       try {
-        const activationPayload = {
-          locationId: finalLocationId,
-          providerId,
-          type: "SMS",
-        };
+        // Correct endpoint per GHL docs:
+        // POST /conversations/providers/{providerId}/locations/{locationId}
+        const activationUrl = `https://services.leadconnectorhq.com/conversations/providers/${providerId}/locations/${finalLocationId}`;
 
-        const providerResponse = await fetch(
-          "https://services.leadconnectorhq.com/conversations/providers/config",
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${access_token}`,
-              "Content-Type": "application/json",
-              "Version": "2021-07-28",
-              "Accept": "application/json",
-            },
-            body: JSON.stringify(activationPayload),
-          }
-        );
+        console.log("🔗 Activation URL:", activationUrl);
+
+        const providerResponse = await fetch(activationUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${access_token}`,
+            "Content-Type": "application/json",
+            "Version": "2021-07-28",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify({ type: "SMS" }),
+        });
 
         const responseText = await providerResponse.text();
         let responseJson: unknown = null;
