@@ -6,85 +6,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Media content structure from UAZAPI
-interface MediaContent {
-  URL?: string;
-  url?: string;
-  mimetype?: string;
-  Mimetype?: string;
-  fileSHA256?: string;
-  FileSHA256?: string;
-  fileLength?: number;
-  FileLength?: number;
-  mediaKey?: string;
-  MediaKey?: string;
-  fileEncSHA256?: string;
-  FileEncSHA256?: string;
-  directPath?: string;
-  DirectPath?: string;
-}
-
 // Helper to download media from UAZAPI and get public URL
+// Based on n8n workflow: POST /message/download with { "id": messageId }
 async function getPublicMediaUrl(
   baseUrl: string, 
   instanceToken: string, 
-  mediaContent: MediaContent
+  messageId: string
 ): Promise<string | null> {
-  // Extract media info - normalize field names (UAZAPI uses mixed case)
-  const url = mediaContent.URL || mediaContent.url || "";
-  const mimetype = mediaContent.mimetype || mediaContent.Mimetype || "";
-  const fileSHA256 = mediaContent.fileSHA256 || mediaContent.FileSHA256 || "";
-  const fileLength = mediaContent.fileLength || mediaContent.FileLength || 0;
-  const mediaKey = mediaContent.mediaKey || mediaContent.MediaKey || "";
-  const fileEncSHA256 = mediaContent.fileEncSHA256 || mediaContent.FileEncSHA256 || "";
-  const directPath = mediaContent.directPath || mediaContent.DirectPath || "";
-
-  if (!url || !mediaKey) {
-    console.log("Missing required media fields for download");
-    return null;
-  }
-
-  // Determine endpoint based on mimetype
-  let endpoint = "/chat/downloadmedia";
-  if (mimetype.startsWith("image/")) {
-    endpoint = "/chat/downloadimage";
-  } else if (mimetype.startsWith("video/")) {
-    endpoint = "/chat/downloadvideo";
-  } else if (mimetype.startsWith("audio/")) {
-    endpoint = "/chat/downloadaudio";
-  }
-
-  const downloadUrl = `${baseUrl}${endpoint}`;
-  console.log("Trying UAZAPI media download:", { downloadUrl, mimetype });
+  const downloadUrl = `${baseUrl}/message/download`;
+  console.log("Trying UAZAPI media download:", { downloadUrl, messageId });
 
   try {
     const res = await fetch(downloadUrl, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
-        "Token": instanceToken,
+        "token": instanceToken, // lowercase as per n8n
       },
-      body: JSON.stringify({
-        Url: url,
-        DirectPath: directPath,
-        Mimetype: mimetype,
-        FileSHA256: fileSHA256,
-        FileLength: fileLength,
-        MediaKey: mediaKey,
-        FileEncSHA256: fileEncSHA256,
-      }),
+      body: JSON.stringify({ id: messageId }),
     });
 
     const responseText = await res.text();
-    console.log("UAZAPI download response:", { status: res.status, body: responseText.substring(0, 300) });
+    console.log("UAZAPI download response:", { status: res.status, body: responseText.substring(0, 500) });
 
     if (res.ok) {
       try {
         const data = JSON.parse(responseText);
-        // UAZAPI returns various field names for the file URL
-        const fileUrl = data.url || data.URL || data.Url || 
-                       data.fileUrl || data.FileUrl || data.fileURL ||
-                       data.file || data.File || data.Data || null;
+        // n8n uses $json.fileURL
+        const fileUrl = data.fileURL || data.fileUrl || data.url || data.URL || 
+                       data.file || data.File || data.data?.fileURL || null;
         if (fileUrl) {
           console.log("Got public media URL:", fileUrl);
           return fileUrl;
@@ -416,12 +366,13 @@ serve(async (req) => {
     // Send message to GHL - handle media vs text
     if (isMediaMessage && mediaUrl) {
       const baseUrl = settings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
+      const messageId = messageData.messageid || messageData.id || "";
       
-      // Try to get public URL via UAZAPI download endpoint
+      // Try to get public URL via UAZAPI download endpoint (POST /message/download)
       let publicMediaUrl = mediaUrl;
-      if (baseUrl && contentRaw && typeof contentRaw === "object") {
-        console.log("Attempting to get public media URL via UAZAPI download:", { baseUrl, mimetype: contentRaw.mimetype });
-        const downloadedUrl = await getPublicMediaUrl(baseUrl, instanceToken, contentRaw as MediaContent);
+      if (baseUrl && messageId) {
+        console.log("Attempting to get public media URL via UAZAPI download:", { baseUrl, messageId });
+        const downloadedUrl = await getPublicMediaUrl(baseUrl, instanceToken, messageId);
         if (downloadedUrl) {
           publicMediaUrl = downloadedUrl;
         } else {
