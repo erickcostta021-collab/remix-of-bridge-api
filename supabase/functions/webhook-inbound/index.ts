@@ -450,6 +450,29 @@ serve(async (req) => {
     const isAgentIaMessage = wasSentByApi && trackId === "agente_ia" && isFromMe;
     
     console.log("API Agent check:", { wasSentByApi, trackId, isFromMe, isAgentIaMessage });
+
+    // IMPORTANT:
+    // If UAZAPI marks the message as API-sent but it is NOT our AI agent marker,
+    // we must discard it to avoid infinite loops (e.g., messages mirrored from GHL -> UAZAPI).
+    if (wasSentByApi && trackId !== "agente_ia") {
+      console.log("Discarding API-sent message without agente_ia track_id:", {
+        wasSentByApi,
+        trackId,
+        isFromMe,
+        messageid: messageData.messageid || messageData.id,
+      });
+
+      return new Response(
+        JSON.stringify({
+          received: true,
+          ignored: true,
+          reason: "discard_non_agent_api_message",
+          wasSentByApi,
+          trackId,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     // Get sender info - PRIORITY: chatid/wa_chatid contains the real phone number
     // The "sender" field often contains internal LID (linked ID) which is NOT a valid phone
