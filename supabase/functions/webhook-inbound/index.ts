@@ -404,6 +404,13 @@ serve(async (req) => {
     // If fromMe is true, this is a message WE sent - we'll sync it as outbound message in GHL
     const isFromMe = messageData.fromMe === true;
     
+    // Check if message was sent by API (agente_ia) - should be rendered as outbound in GHL
+    const wasSentByApi = body.wasSentByApi === true || messageData.wasSentByApi === true;
+    const trackId = body.track_id || messageData.track_id || "";
+    const isAgentIaMessage = wasSentByApi && trackId === "agente_ia" && isFromMe;
+    
+    console.log("API Agent check:", { wasSentByApi, trackId, isFromMe, isAgentIaMessage });
+    
     // Get sender info - PRIORITY: chatid/wa_chatid contains the real phone number
     // The "sender" field often contains internal LID (linked ID) which is NOT a valid phone
     const from = chatData.wa_chatid || messageData.chatid || eventData.Chat || messageData.sender || "";
@@ -445,6 +452,7 @@ serve(async (req) => {
       mediaType,
       pushName,
       isFromMe,
+      isAgentIaMessage,
       isSticker,
       instanceToken: instanceToken?.substring(0, 20) + "..." 
     });
@@ -558,10 +566,15 @@ serve(async (req) => {
       }
     }
 
-    // Send message to GHL - differentiate between inbound (from lead) and outbound (from us)
-    if (isFromMe) {
-      // This is a message WE sent via WhatsApp - sync as outbound in GHL
-      console.log("Syncing outbound message (fromMe=true):", { 
+    // Send message to GHL - differentiate between inbound (from lead) and outbound (from us/agent)
+    // isAgentIaMessage: message sent by API with track_id="agente_ia" - render as outbound (attendant message)
+    const shouldSyncAsOutbound = isFromMe || isAgentIaMessage;
+    
+    if (shouldSyncAsOutbound) {
+      // This is a message WE sent via WhatsApp OR from AI agent - sync as outbound in GHL
+      console.log("Syncing outbound message:", { 
+        isFromMe,
+        isAgentIaMessage,
         textMessage: textMessage?.substring(0, 50), 
         isMedia: isMediaMessage 
       });
@@ -578,7 +591,8 @@ serve(async (req) => {
         await sendOutboundMessageToGHL(conversationId, textMessage, token);
       }
       
-      console.log(`✅ Outbound message synced to GHL: ${phoneNumber} -> ${contact.id}`);
+      const source = isAgentIaMessage ? "agent_ia" : "manual";
+      console.log(`✅ Outbound message synced to GHL (${source}): ${phoneNumber} -> ${contact.id}`);
     } else {
       // This is a message FROM the lead - send as inbound
       if (isMediaMessage && publicMediaUrl) {
@@ -596,8 +610,9 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         contactId: contact.id,
-        direction: isFromMe ? "outbound" : "inbound",
-        message: isFromMe ? "Outbound message synced to GHL" : "Inbound message forwarded to GHL"
+        direction: shouldSyncAsOutbound ? "outbound" : "inbound",
+        source: isAgentIaMessage ? "agent_ia" : (isFromMe ? "manual" : "lead"),
+        message: shouldSyncAsOutbound ? "Outbound message synced to GHL" : "Inbound message forwarded to GHL"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
