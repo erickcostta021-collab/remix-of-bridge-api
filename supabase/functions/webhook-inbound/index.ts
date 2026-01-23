@@ -157,20 +157,22 @@ serve(async (req) => {
       );
     }
 
-    // Extract message data from UAZAPI payload
-    const data = body.data || body;
-    const from = data.from || data.key?.remoteJid || "";
-    const message = data.message?.conversation || 
-                   data.message?.extendedTextMessage?.text || 
-                   data.body || 
-                   data.text || "";
-    const pushName = data.pushName || data.notifyName || "";
-    const instanceToken = data.instanceToken || body.instanceToken || body.token || "";
+    // Extract message data from UAZAPI payload (new structure)
+    const messageData = body.message || body.data || {};
+    const chatData = body.chat || {};
+    
+    // Get sender info - try multiple paths
+    const from = messageData.sender || messageData.chatid || chatData.wa_chatid || "";
+    const message = messageData.text || messageData.content || messageData.conversation || "";
+    const pushName = messageData.senderName || chatData.wa_name || chatData.name || "";
+    const instanceToken = body.token || body.instanceToken || messageData.instanceToken || "";
+
+    console.log("Extracted data:", { from, message, pushName, instanceToken: instanceToken?.substring(0, 20) + "..." });
 
     if (!from || !message) {
       console.log("Missing from or message in payload");
       return new Response(
-        JSON.stringify({ received: true, ignored: true, reason: "missing data" }),
+        JSON.stringify({ received: true, ignored: true, reason: "missing data", from, message }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
