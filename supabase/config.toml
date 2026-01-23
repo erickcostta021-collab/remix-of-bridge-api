@@ -22,3 +22,9 @@ verify_jwt = false
 
 [functions.webhook-outbound]
 verify_jwt = false
+
+[functions.get-instances]
+verify_jwt = false
+
+[functions.bridge-switcher]
+verify_jwt = false

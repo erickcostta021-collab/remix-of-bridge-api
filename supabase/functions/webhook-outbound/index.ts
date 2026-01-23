@@ -348,19 +348,42 @@ serve(async (req) => {
       );
     }
 
+    // Buscar todas as instâncias da subconta
     const { data: instances, error: instErr } = await supabase
       .from("instances")
       .select("id, uazapi_instance_token")
       .eq("subaccount_id", subaccount.id)
       .order("created_at", { ascending: true });
 
-    const instance = instances?.[0];
-    if (instErr || !instance) {
+    if (instErr || !instances || instances.length === 0) {
       console.error("No instance found for subaccount");
       return new Response(
         JSON.stringify({ success: true, ignored: true, reason: "no instance configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Verificar se há preferência de instância para este contato (Bridge Switcher)
+    let instance = instances[0]; // Default: primeira instância
+    
+    if (contactId) {
+      const { data: preference } = await supabase
+        .from("contact_instance_preferences")
+        .select("instance_id")
+        .eq("contact_id", contactId)
+        .eq("location_id", locationId)
+        .maybeSingle();
+      
+      if (preference?.instance_id) {
+        // Encontrar a instância preferida
+        const preferredInstance = instances.find(i => i.id === preference.instance_id);
+        if (preferredInstance) {
+          instance = preferredInstance;
+          console.log("Using preferred instance from Bridge Switcher:", { instanceId: instance.id, contactId });
+        } else {
+          console.log("Preferred instance not found in subaccount instances, using default");
+        }
+      }
     }
 
     const { data: settings, error: settingsErr } = await supabase

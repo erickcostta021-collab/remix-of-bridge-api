@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      contact_instance_preferences: {
+        Row: {
+          contact_id: string
+          created_at: string
+          id: string
+          instance_id: string
+          location_id: string
+          updated_at: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          id?: string
+          instance_id: string
+          location_id: string
+          updated_at?: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          id?: string
+          instance_id?: string
+          location_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_instance_preferences_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ghl_processed_messages: {
         Row: {
           created_at: string
