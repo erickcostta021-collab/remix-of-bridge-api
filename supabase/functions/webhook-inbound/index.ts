@@ -172,6 +172,34 @@ async function findOrCreateContact(
   return createData.contact;
 }
 
+// Helper to update contact profile photo in GHL
+async function updateContactPhoto(contactId: string, photoUrl: string, token: string): Promise<void> {
+  if (!photoUrl) return;
+  
+  console.log("Updating contact photo:", { contactId, photoUrl: photoUrl.substring(0, 50) });
+  
+  const response = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Version": "2021-07-28",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      profilePhoto: photoUrl,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Failed to update contact photo:", errorText);
+    // Don't throw - photo update is not critical
+  } else {
+    console.log("Contact photo updated successfully");
+  }
+}
+
 // Helper to send text message to GHL
 async function sendMessageToGHL(contactId: string, message: string, token: string): Promise<void> {
   const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
@@ -363,6 +391,11 @@ serve(async (req) => {
       token
     );
 
+    // Update contact photo from WhatsApp profile
+    const profilePhoto = chatData.imagePreview || chatData.image || "";
+    if (profilePhoto && contact.id) {
+      await updateContactPhoto(contact.id, profilePhoto, token);
+    }
     // Send message to GHL - handle media vs text
     if (isMediaMessage && mediaUrl) {
       const baseUrl = settings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
