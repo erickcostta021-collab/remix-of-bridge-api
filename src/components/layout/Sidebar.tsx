@@ -14,6 +14,8 @@ import {
   ExternalLink,
 } from "lucide-react";
 
+const ADMIN_EMAIL = "erickcostta021@gmail.com";
+
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/settings", icon: Settings, label: "Configurações" },
@@ -21,10 +23,11 @@ const navItems = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const { getOAuthUrl } = useSettings();
   const location = useLocation();
 
+  const isAdmin = user?.email === ADMIN_EMAIL;
   const oauthUrl = getOAuthUrl();
 
   const handleSignOut = async () => {
@@ -102,8 +105,8 @@ export function Sidebar() {
               </NavLink>
             );
           })}
-          {/* Install App Button */}
-          {oauthUrl && (
+          {/* Install App Button - Admin only */}
+          {isAdmin && oauthUrl && (
             <button
               onClick={handleInstallApp}
               className={cn(
