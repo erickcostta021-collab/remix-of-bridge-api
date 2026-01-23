@@ -248,6 +248,56 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
+  // Sync ALL instances status from UAZAPI
+  const syncAllInstancesStatus = useMutation({
+    mutationFn: async () => {
+      if (!instances || instances.length === 0) {
+        throw new Error("Nenhuma instância para atualizar");
+      }
+
+      const results = await Promise.allSettled(
+        instances.map(async (instance) => {
+          const result = await getInstanceStatus(instance.uazapi_instance_token);
+          
+          let mappedStatus: InstanceStatus = "disconnected";
+          if (result.status === "connected" || result.status === "open" || result.status === "authenticated") {
+            mappedStatus = "connected";
+          } else if (result.status === "connecting" || result.status === "qr" || result.status === "waiting") {
+            mappedStatus = "connecting";
+          }
+
+          const updateData: Record<string, unknown> = { instance_status: mappedStatus };
+          if (result.phone) updateData.phone = result.phone;
+          if (result.profilePicUrl) updateData.profile_pic_url = result.profilePicUrl;
+
+          await supabase
+            .from("instances")
+            .update(updateData)
+            .eq("id", instance.id);
+
+          return { id: instance.id, status: mappedStatus };
+        })
+      );
+
+      const successful = results.filter(r => r.status === "fulfilled").length;
+      const failed = results.filter(r => r.status === "rejected").length;
+
+      return { successful, failed, total: instances.length };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      syncToExternalSupabase();
+      if (data.failed > 0) {
+        toast.success(`${data.successful} instâncias atualizadas, ${data.failed} falharam`);
+      } else {
+        toast.success(`${data.successful} instâncias atualizadas com sucesso!`);
+      }
+    },
+    onError: (error) => {
+      toast.error("Erro ao atualizar instâncias: " + error.message);
+    },
+  });
+
   // Import existing instance from UAZAPI
   const importInstance = useMutation({
     mutationFn: async ({ 
@@ -569,6 +619,7 @@ export function useInstances(subaccountId?: string) {
     connectInstance,
     disconnectInstance,
     syncInstanceStatus,
+    syncAllInstancesStatus,
     updateInstanceWebhook,
     updateInstanceGHLUser,
     fetchUazapiInstances,

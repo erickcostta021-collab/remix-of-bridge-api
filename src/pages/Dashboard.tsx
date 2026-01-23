@@ -18,7 +18,7 @@ export default function Dashboard() {
   const [selectedSubaccount, setSelectedSubaccount] = useState<Subaccount | null>(null);
   const [search, setSearch] = useState("");
   const { subaccounts, isLoading, syncSubaccounts } = useSubaccounts();
-  const { instances } = useInstances(selectedSubaccount?.id);
+  const { instances, syncAllInstancesStatus } = useInstances(selectedSubaccount?.id);
   const { settings } = useSettings();
 
   const filteredSubaccounts = subaccounts.filter((s) =>
@@ -61,6 +61,20 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground font-mono">{selectedSubaccount.location_id}</p>
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => syncAllInstancesStatus.mutate()}
+                  disabled={syncAllInstancesStatus.isPending || instances.length === 0}
+                  className="border-border"
+                >
+                  {syncAllInstancesStatus.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline ml-2">Atualizar Status</span>
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
