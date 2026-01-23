@@ -6,10 +6,130 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Provider ID from GHL Marketplace
+const GHL_PROVIDER_ID = "6971c2cfdbee9e2d7a8b1401";
+
+// Register Conversation Provider - Método principal (estilo Stevo)
+async function registerConversationProvider(
+  locationId: string,
+  accessToken: string
+): Promise<{ success: boolean; method?: string; error?: string }> {
+  console.log("📞 [PROVIDER] Registering conversation provider for location:", locationId);
+  console.log("📞 [PROVIDER] Provider ID:", GHL_PROVIDER_ID);
+
+  // Método 1: POST /locations/{locationId}/conversation-providers
+  try {
+    const url1 = `https://services.leadconnectorhq.com/locations/${locationId}/conversation-providers`;
+    const body1 = JSON.stringify({
+      providerId: GHL_PROVIDER_ID,
+      enabled: true,
+    });
+
+    console.log("📞 [PROVIDER] Method 1 - URL:", url1);
+    console.log("📞 [PROVIDER] Method 1 - Body:", body1);
+
+    const response1 = await fetch(url1, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Version: "2021-07-28",
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: body1,
+    });
+
+    const response1Text = await response1.text();
+    console.log("📞 [PROVIDER] Method 1 - Status:", response1.status);
+    console.log("📞 [PROVIDER] Method 1 - Response:", response1Text);
+
+    if (response1.ok) {
+      console.log("✅ [PROVIDER] Method 1 SUCCESS!");
+      return { success: true, method: "locations/conversation-providers" };
+    }
+  } catch (e) {
+    console.error("❌ [PROVIDER] Method 1 error:", e);
+  }
+
+  // Método 2: POST /conversations/providers/install
+  try {
+    const url2 = "https://services.leadconnectorhq.com/conversations/providers/install";
+    const body2 = JSON.stringify({
+      locationId: locationId,
+      providerId: GHL_PROVIDER_ID,
+    });
+
+    console.log("📞 [PROVIDER] Method 2 - URL:", url2);
+    console.log("📞 [PROVIDER] Method 2 - Body:", body2);
+
+    const response2 = await fetch(url2, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Version: "2021-07-28",
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: body2,
+    });
+
+    const response2Text = await response2.text();
+    console.log("📞 [PROVIDER] Method 2 - Status:", response2.status);
+    console.log("📞 [PROVIDER] Method 2 - Response:", response2Text);
+
+    if (response2.ok) {
+      console.log("✅ [PROVIDER] Method 2 SUCCESS!");
+      return { success: true, method: "conversations/providers/install" };
+    }
+  } catch (e) {
+    console.error("❌ [PROVIDER] Method 2 error:", e);
+  }
+
+  // Método 3: POST /conversations/providers/config (tentado anteriormente)
+  try {
+    const url3 = "https://services.leadconnectorhq.com/conversations/providers/config";
+    const body3 = JSON.stringify({
+      locationId: locationId,
+      providerId: GHL_PROVIDER_ID,
+      type: "SMS",
+    });
+
+    console.log("📞 [PROVIDER] Method 3 - URL:", url3);
+    console.log("📞 [PROVIDER] Method 3 - Body:", body3);
+
+    const response3 = await fetch(url3, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Version: "2021-07-28",
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: body3,
+    });
+
+    const response3Text = await response3.text();
+    console.log("📞 [PROVIDER] Method 3 - Status:", response3.status);
+    console.log("📞 [PROVIDER] Method 3 - Response:", response3Text);
+
+    if (response3.ok) {
+      console.log("✅ [PROVIDER] Method 3 SUCCESS!");
+      return { success: true, method: "conversations/providers/config" };
+    }
+  } catch (e) {
+    console.error("❌ [PROVIDER] Method 3 error:", e);
+  }
+
+  console.error("❌ [PROVIDER] All methods failed");
+  return { success: false, error: "All provider registration methods failed" };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  console.log("=== OAUTH CALLBACK START ===");
 
   try {
     const url = new URL(req.url);
@@ -17,6 +137,11 @@ serve(async (req) => {
     let locationId = url.searchParams.get("locationId");
     const companyId = url.searchParams.get("companyId");
     const state = url.searchParams.get("state"); // Contains user_id
+
+    console.log("Code:", code?.substring(0, 20) + "...");
+    console.log("Location ID (URL):", locationId);
+    console.log("Company ID:", companyId);
+    console.log("State:", state?.substring(0, 30) + "...");
 
     if (!code) {
       return new Response(
@@ -31,6 +156,7 @@ serve(async (req) => {
       try {
         const stateData = JSON.parse(atob(state));
         userId = stateData.userId;
+        console.log("User ID from state:", userId);
       } catch {
         console.log("Could not parse state parameter");
       }
@@ -63,6 +189,8 @@ serve(async (req) => {
       );
     }
 
+    console.log("Step 1: Settings retrieved - OK");
+
     // Get the base URL for redirect - use frontend URL which proxies to this function
     const frontendUrl = Deno.env.get("FRONTEND_URL") || "https://bridge-api.lovable.app";
     const redirectUri = `${frontendUrl}/oauth/callback`;
@@ -81,7 +209,7 @@ serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "application/json",
+        Accept: "application/json",
       },
       body: tokenParams.toString(),
     });
@@ -96,11 +224,14 @@ serve(async (req) => {
     }
 
     const tokenData = await tokenResponse.json();
-    const { access_token, refresh_token, expires_in, scope, userId: ghlUserId, locationId: tokenLocationId } = tokenData;
+    const { access_token, refresh_token, expires_in, scope, locationId: tokenLocationId } = tokenData;
+
+    console.log("Step 2: Token exchange - OK");
+    console.log("Location ID (token):", tokenLocationId);
 
     // Use locationId from token response if not provided in URL
     const finalLocationId = tokenLocationId || locationId;
-    
+
     if (!finalLocationId) {
       console.error("No locationId in URL or token response:", tokenData);
       return new Response(
@@ -108,7 +239,9 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    
+
+    console.log("Final Location ID:", finalLocationId);
+
     const expiresAt = new Date(Date.now() + expires_in * 1000);
 
     // Get location name from GHL API
@@ -118,9 +251,9 @@ serve(async (req) => {
         `https://services.leadconnectorhq.com/locations/${finalLocationId}`,
         {
           headers: {
-            "Authorization": `Bearer ${access_token}`,
-            "Version": "2021-07-28",
-            "Accept": "application/json",
+            Authorization: `Bearer ${access_token}`,
+            Version: "2021-07-28",
+            Accept: "application/json",
           },
         }
       );
@@ -133,24 +266,30 @@ serve(async (req) => {
       console.log("Could not fetch location name:", e);
     }
 
+    console.log("Step 3: Location name fetched - OK");
+    console.log("Account Name:", accountName);
+
     // Upsert integration record
     const { error: upsertError } = await supabase
       .from("ghl_subaccounts")
-      .upsert({
-        user_id: userId,
-        location_id: finalLocationId,
-        company_id: companyId || null,
-        account_name: accountName,
-        ghl_access_token: access_token,
-        ghl_refresh_token: refresh_token,
-        ghl_token_expires_at: expiresAt.toISOString(),
-        ghl_token_scopes: scope,
-        ghl_subaccount_token: access_token, // Also set as subaccount token for existing functionality
-        oauth_installed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: "user_id,location_id",
-      });
+      .upsert(
+        {
+          user_id: userId,
+          location_id: finalLocationId,
+          company_id: companyId || null,
+          account_name: accountName,
+          ghl_access_token: access_token,
+          ghl_refresh_token: refresh_token,
+          ghl_token_expires_at: expiresAt.toISOString(),
+          ghl_token_scopes: scope,
+          ghl_subaccount_token: access_token, // Also set as subaccount token for existing functionality
+          oauth_installed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "user_id,location_id",
+        }
+      );
 
     if (upsertError) {
       console.error("Failed to save integration:", upsertError);
@@ -160,23 +299,28 @@ serve(async (req) => {
       );
     }
 
-    console.log(`✅ OAuth completed for location ${finalLocationId}`);
-    console.log(`ℹ️ Provider activation must be done manually in GHL: Settings > Phone Numbers > Advanced Settings > SMS Provider`);
+    console.log("Step 4: Save to DB - OK");
 
-    // NOTE: GHL does not have a public API to activate conversation providers.
-    // The user must manually enable it in the sub-account:
-    // Settings > Phone Numbers > Advanced Settings > SMS Provider
-    // Then select the app and click Save.
+    // 🔥 CRITICAL: Register Conversation Provider (estilo Stevo)
+    const providerResult = await registerConversationProvider(finalLocationId, access_token);
+    console.log("Step 5: Register provider -", providerResult.success ? "OK" : "FAILED");
+    if (providerResult.success) {
+      console.log("✅ Provider registered via:", providerResult.method);
+    } else {
+      console.log("⚠️ Provider registration failed, user may need manual activation");
+    }
+
+    console.log("Step 6: Redirect - OK");
+    console.log("=== OAUTH CALLBACK END ===");
 
     // Redirect to success page (will auto-redirect to dashboard after 3s)
     return new Response(null, {
       status: 302,
       headers: {
         ...corsHeaders,
-        "Location": `${frontendUrl}/oauth/success/${finalLocationId}`,
+        Location: `${frontendUrl}/oauth/success/${finalLocationId}`,
       },
     });
-
   } catch (error: unknown) {
     console.error("OAuth callback error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
