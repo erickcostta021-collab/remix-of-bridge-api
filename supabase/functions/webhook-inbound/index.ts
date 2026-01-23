@@ -209,7 +209,7 @@ async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token
     body: JSON.stringify({
       type: "SMS",
       contactId,
-      message: caption || "[Media]",
+      message: caption || "", // Empty string instead of [Media]
       attachments: attachmentUrls,
     }),
   });
