@@ -173,13 +173,21 @@ export function InstanceCard({ instance }: InstanceCardProps) {
         return;
       }
       
-      await connectInstance(instance);
-      const qr = await getQRCode(instance);
-      if (!qr) {
-        throw new Error("QR Code não disponível. Verifique se a instância existe na UAZAPI.");
+      // Connect and get QR code in one call
+      const qr = await connectInstance(instance);
+      if (qr) {
+        setQrCode(qr);
+        setQrDialogOpen(true);
+      } else {
+        // Fallback: try getQRCode if connect didn't return QR
+        const qrFallback = await getQRCode(instance);
+        if (qrFallback) {
+          setQrCode(qrFallback);
+          setQrDialogOpen(true);
+        } else {
+          throw new Error("QR Code não disponível. Verifique se a instância existe na UAZAPI.");
+        }
       }
-      setQrCode(qr);
-      setQrDialogOpen(true);
     } catch (error: any) {
       const errorMsg = error.message || "Erro ao conectar";
       if (errorMsg.includes("Maximum number of instances") || errorMsg.includes("limite")) {

@@ -532,40 +532,89 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
-  const getQRCode = async (instance: Instance) => {
+  const getQRCode = async (instance: Instance): Promise<string> => {
     if (!settings?.uazapi_base_url) {
       throw new Error("URL base da UAZAPI não configurada");
     }
 
-    const response = await fetch(`${settings.uazapi_base_url}/instance/qrcode`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "token": instance.uazapi_instance_token,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error("Erro ao obter QR Code - verifique se a instância existe");
-    }
-
-    const data = await response.json();
-    return data.qrcode || data.base64 || data.qr || data.code;
-  };
-
-  const connectInstance = async (instance: Instance) => {
-    if (!settings?.uazapi_base_url) {
-      throw new Error("URL base da UAZAPI não configurada");
-    }
-
-    // First try to connect/initialize the instance
-    await fetch(`${settings.uazapi_base_url}/instance/connect`, {
+    const base = settings.uazapi_base_url.replace(/\/$/, "");
+    
+    // Some UAZAPI servers return QR code from /instance/connect directly
+    // Others have a separate /instance/qrcode endpoint
+    // Try connect first as it usually generates fresh QR
+    const connectResponse = await fetch(`${base}/instance/connect`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "token": instance.uazapi_instance_token,
+        token: instance.uazapi_instance_token,
       },
     });
+
+    if (connectResponse.ok) {
+      const connectData = await connectResponse.json();
+      // Check if QR code is in the connect response
+      const qrFromConnect = connectData.qrcode || connectData.instance?.qrcode || connectData.qr || connectData.base64;
+      if (qrFromConnect) {
+        // Update status to connecting
+        await supabase
+          .from("instances")
+          .update({ instance_status: "connecting" })
+          .eq("id", instance.id);
+        queryClient.invalidateQueries({ queryKey: ["instances"] });
+        return qrFromConnect;
+      }
+    }
+
+    // Fallback: try dedicated qrcode endpoint(s)
+    const qrEndpoints = ["/instance/qrcode", "/qrcode", "/instance/qr"];
+    
+    for (const endpoint of qrEndpoints) {
+      try {
+        const response = await fetch(`${base}${endpoint}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            token: instance.uazapi_instance_token,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const qr = data.qrcode || data.base64 || data.qr || data.code || data.instance?.qrcode;
+          if (qr) {
+            return qr;
+          }
+        }
+      } catch {
+        // Continue to next endpoint
+      }
+    }
+
+    throw new Error("QR Code não disponível - a instância pode já estar conectada ou o servidor não suporta este endpoint");
+  };
+
+  const connectInstance = async (instance: Instance): Promise<string | null> => {
+    if (!settings?.uazapi_base_url) {
+      throw new Error("URL base da UAZAPI não configurada");
+    }
+
+    const base = settings.uazapi_base_url.replace(/\/$/, "");
+
+    // Connect and get QR code in one call
+    const response = await fetch(`${base}/instance/connect`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        token: instance.uazapi_instance_token,
+      },
+    });
+
+    let qrCode: string | null = null;
+
+    if (response.ok) {
+      const data = await response.json();
+      qrCode = data.qrcode || data.instance?.qrcode || data.qr || data.base64 || null;
+    }
 
     // Update status to connecting
     await supabase
@@ -574,6 +623,8 @@ export function useInstances(subaccountId?: string) {
       .eq("id", instance.id);
 
     queryClient.invalidateQueries({ queryKey: ["instances"] });
+    
+    return qrCode;
   };
 
   const disconnectInstance = useMutation({
