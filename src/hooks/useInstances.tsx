@@ -637,29 +637,49 @@ export function useInstances(subaccountId?: string) {
 
       const base = settings.uazapi_base_url.replace(/\/$/, "");
       
-      // Try DELETE method first (most common for logout)
-      let response = await fetch(`${base}/instance/logout`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "token": instance.uazapi_instance_token,
-        },
-      });
+      // Try multiple endpoints and methods as different UAZAPI versions use different endpoints
+      const endpoints = [
+        { path: "/instance/disconnect", method: "POST" },
+        { path: "/instance/disconnect", method: "DELETE" },
+        { path: "/instance/disconnect", method: "GET" },
+        { path: "/instance/logout", method: "POST" },
+        { path: "/instance/logout", method: "DELETE" },
+        { path: "/instance/logout", method: "GET" },
+      ];
 
-      // If DELETE doesn't work, try GET (some UAZAPI versions use GET)
-      if (!response.ok && response.status === 405) {
-        response = await fetch(`${base}/instance/logout`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "token": instance.uazapi_instance_token,
-          },
-        });
+      let success = false;
+      let lastError = "";
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${base}${endpoint.path}`, {
+            method: endpoint.method,
+            headers: {
+              "Content-Type": "application/json",
+              "token": instance.uazapi_instance_token,
+            },
+          });
+
+          if (response.ok || response.status === 200) {
+            success = true;
+            break;
+          }
+
+          // If we get 404/405, try next endpoint
+          if (response.status === 404 || response.status === 405) {
+            continue;
+          }
+
+          const errorData = await response.json().catch(() => ({}));
+          lastError = errorData.message || `Erro ${response.status}`;
+        } catch (err) {
+          // Network error, try next
+          continue;
+        }
       }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Erro ${response.status} ao desconectar`);
+      if (!success) {
+        throw new Error(lastError || "Nenhum endpoint de desconexão funcionou neste servidor UAZAPI");
       }
 
       // Clear status, phone and profile pic when disconnecting
