@@ -428,6 +428,9 @@ serve(async (req) => {
     let textMessage = "";
     if (typeof contentRaw === "string") {
       textMessage = contentRaw;
+    } else if (typeof contentRaw === "object" && contentRaw?.text) {
+      // Content can be an object with a text field (e.g., ExtendedTextMessage)
+      textMessage = contentRaw.text;
     } else if (messageData.text) {
       textMessage = messageData.text;
     } else if (messageData.conversation) {
