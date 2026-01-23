@@ -27,19 +27,41 @@ async function configureGlobalWebhook(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const base = baseUrl.replace(/\/$/, "");
-    const response = await fetch(`${base}/globalwebhook`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        admintoken: adminToken,
-      },
-      body: JSON.stringify({
-        url: webhookUrl,
-        enabled: true,
-        events: ["messages", "messages_update"],
-        excludeMessages: ["wasSentByApi"],
-      }),
-    });
+
+    // Some UAZAPI servers expose this route with different prefixes.
+    // We try a small set of candidates to avoid the user needing to guess.
+    const candidatePaths = ["/globalwebhook", "/api/globalwebhook"];
+
+    const body = {
+      url: webhookUrl,
+      enabled: true,
+      events: ["messages", "messages_update"],
+      // Attempt to reduce loop risk on servers that support it.
+      excludeMessages: ["wasSentByApi"],
+    };
+
+    let response: Response | null = null;
+    for (const path of candidatePaths) {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await fetch(`${base}${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          admintoken: adminToken,
+        },
+        body: JSON.stringify(body),
+      });
+
+      // If the endpoint doesn't exist on this server, try the next.
+      if (r.status === 404) continue;
+
+      response = r;
+      break;
+    }
+
+    if (!response) {
+      return { success: false, error: "Endpoint /globalwebhook não encontrado (tente conferir se a API usa /api)" };
+    }
     
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));

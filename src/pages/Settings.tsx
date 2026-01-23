@@ -10,7 +10,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useExternalSupabase } from "@/hooks/useExternalSupabase";
 import { useAuth } from "@/hooks/useAuth";
 import { CANONICAL_APP_ORIGIN, getOAuthRedirectUri } from "@/lib/canonicalOrigin";
-import { Save, Loader2, Eye, EyeOff, Database, RefreshCw, Info, CheckCircle2 } from "lucide-react";
+import { Save, Loader2, Eye, EyeOff, Info, CheckCircle2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 const ADMIN_EMAIL = "erickcostta021@gmail.com";
@@ -90,6 +90,10 @@ export default function Settings() {
   const inboundWebhookUrl = `${supabaseUrl}/functions/v1/webhook-inbound`;
   const outboundWebhookUrl = `${supabaseUrl}/functions/v1/webhook-outbound`;
   const isPreviewDomain = window.location.origin !== CANONICAL_APP_ORIGIN;
+
+  const isWrongWebhookConfigured =
+    !!formData.global_webhook_url &&
+    /webhook\.dev\.atllassa\.com/i.test(formData.global_webhook_url);
 
   // Set default webhook URL if not set
   useEffect(() => {
@@ -267,6 +271,33 @@ export default function Settings() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {isWrongWebhookConfigured && (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      Detectei que o <strong>Webhook Global</strong> está apontando para um endpoint de outro fluxo.
+                      Para evitar loop infinito, use apenas o webhook do sistema abaixo.
+                      <div className="mt-3 flex flex-col gap-2">
+                        <code className="block p-2 bg-secondary rounded text-xs break-all">
+                          {inboundWebhookUrl}
+                        </code>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-border w-fit"
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, global_webhook_url: inboundWebhookUrl }));
+                            toast.success("Webhook do sistema selecionado. Clique em 'Salvar Configurações' para aplicar.");
+                          }}
+                        >
+                          <Wand2 className="h-4 w-4 mr-2" />
+                          Usar webhook do sistema
+                        </Button>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="uazapi-url">URL Base da API</Label>
                   <Input
