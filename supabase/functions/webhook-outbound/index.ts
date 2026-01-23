@@ -233,27 +233,32 @@ async function sendMediaMessage(base: string, instanceToken: string, phone: stri
   return { sent: false, status: lastStatus, body: lastBody };
 }
 
-// In-memory deduplication cache (messageId -> timestamp)
-const processedMessages = new Map<string, number>();
-const DEDUP_WINDOW_MS = 30000; // 30 seconds
-
-function isDuplicate(messageId: string): boolean {
+// Database-based deduplication using ghl_processed_messages table
+async function isDuplicate(supabase: any, messageId: string): Promise<boolean> {
   if (!messageId) return false;
   
-  const now = Date.now();
-  // Clean old entries
-  for (const [id, ts] of processedMessages.entries()) {
-    if (now - ts > DEDUP_WINDOW_MS) {
-      processedMessages.delete(id);
+  try {
+    // Try to insert the messageId - if it already exists, it's a duplicate
+    const { error } = await supabase
+      .from("ghl_processed_messages")
+      .insert({ message_id: messageId });
+    
+    if (error) {
+      // If unique constraint violation, it's a duplicate
+      if (error.code === "23505") {
+        console.log("Duplicate detected via DB:", { messageId });
+        return true;
+      }
+      console.error("Error checking duplicate:", error);
+      // On other errors, allow processing to avoid blocking messages
+      return false;
     }
+    
+    return false;
+  } catch (e) {
+    console.error("Dedup check failed:", e);
+    return false;
   }
-  
-  if (processedMessages.has(messageId)) {
-    return true;
-  }
-  
-  processedMessages.set(messageId, now);
-  return false;
 }
 
 serve(async (req) => {
