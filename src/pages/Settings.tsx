@@ -119,13 +119,9 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue={isAdmin ? "oauth" : "integrations"} className="w-full">
-          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-3" : "grid-cols-2"}`}>
+          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-2" : "grid-cols-1"}`}>
             {isAdmin && <TabsTrigger value="oauth">OAuth GHL</TabsTrigger>}
             <TabsTrigger value="integrations">Integrações</TabsTrigger>
-            <TabsTrigger value="external-supabase">
-              <Database className="h-4 w-4 mr-2" />
-              Supabase
-            </TabsTrigger>
           </TabsList>
 
           {isAdmin && (
@@ -308,61 +304,6 @@ export default function Settings() {
                     Use o URL do webhook inbound acima para integração automática com GHL.
                   </p>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="external-supabase" className="space-y-6 mt-6">
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-card-foreground">Configuração do Supabase Externo</CardTitle>
-                <CardDescription>
-                  Configure seu Supabase para sincronizar as instâncias automaticamente
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="supabase-pat">Token de Gerenciamento (PAT)</Label>
-                  <Input
-                    id="supabase-pat"
-                    type={showTokens ? "text" : "password"}
-                    value={formData.external_supabase_pat}
-                    onChange={(e) => setFormData({ ...formData, external_supabase_pat: e.target.value })}
-                    placeholder="sbp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="bg-secondary border-border"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Gere em: <a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">supabase.com/dashboard/account/tokens</a>
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-card-foreground">Sincronizar Dados</CardTitle>
-                <CardDescription>
-                  Sincronize as instâncias do dashboard para o seu Supabase externo
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  onClick={handleSync}
-                  disabled={syncToExternal.isPending || !formData.external_supabase_pat}
-                  className="w-full"
-                >
-                  {syncToExternal.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
-                  Sincronizar Instâncias
-                </Button>
-                {!formData.external_supabase_pat && (
-                  <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Configure o Token PAT primeiro
-                  </p>
-                )}
               </CardContent>
             </Card>
           </TabsContent>
