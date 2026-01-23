@@ -250,14 +250,26 @@ export function useInstances(subaccountId?: string) {
 
   // Sync ALL instances status from UAZAPI
   const syncAllInstancesStatus = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<{ successful: number; failed: number; notFound: string[]; total: number }> => {
       if (!instances || instances.length === 0) {
         throw new Error("Nenhuma instância para atualizar");
       }
 
+      const notFoundInstances: string[] = [];
+
       const results = await Promise.allSettled(
         instances.map(async (instance) => {
           const result = await getInstanceStatus(instance.uazapi_instance_token);
+          
+          // Check if instance doesn't exist on UAZAPI server
+          // When token is invalid/not found, UAZAPI typically returns disconnected with no phone
+          // We also check if the instance responds at all
+          const instanceExists = await checkInstanceExists(instance.uazapi_instance_token);
+          
+          if (!instanceExists) {
+            notFoundInstances.push(instance.id);
+            return { id: instance.id, status: "not_found" as const };
+          }
           
           let mappedStatus: InstanceStatus = "disconnected";
           if (result.status === "connected" || result.status === "open" || result.status === "authenticated") {
@@ -279,15 +291,31 @@ export function useInstances(subaccountId?: string) {
         })
       );
 
-      const successful = results.filter(r => r.status === "fulfilled").length;
+      const successful = results.filter(r => r.status === "fulfilled" && (r.value as any).status !== "not_found").length;
       const failed = results.filter(r => r.status === "rejected").length;
 
-      return { successful, failed, total: instances.length };
+      return { successful, failed, notFound: notFoundInstances, total: instances.length };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       syncToExternalSupabase();
-      if (data.failed > 0) {
+      
+      if (data.notFound.length > 0) {
+        toast.warning(`${data.notFound.length} instância(s) não encontrada(s) no servidor UAZAPI`, {
+          description: "Clique em 'Limpar' para removê-las",
+          action: {
+            label: "Limpar",
+            onClick: () => {
+              data.notFound.forEach(async (id) => {
+                await supabase.from("instances").delete().eq("id", id);
+              });
+              queryClient.invalidateQueries({ queryKey: ["instances"] });
+              toast.success("Instâncias inexistentes removidas!");
+            },
+          },
+          duration: 10000,
+        });
+      } else if (data.failed > 0) {
         toast.success(`${data.successful} instâncias atualizadas, ${data.failed} falharam`);
       } else {
         toast.success(`${data.successful} instâncias atualizadas com sucesso!`);
@@ -297,6 +325,42 @@ export function useInstances(subaccountId?: string) {
       toast.error("Erro ao atualizar instâncias: " + error.message);
     },
   });
+
+  // Check if instance exists on UAZAPI server
+  const checkInstanceExists = async (instanceToken: string): Promise<boolean> => {
+    if (!settings?.uazapi_base_url) return false;
+
+    try {
+      const base = settings.uazapi_base_url.replace(/\/$/, "");
+      
+      // Try to get instance info - if it doesn't exist, we'll get an error
+      const response = await fetch(`${base}/instance/status`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          token: instanceToken,
+        },
+      });
+
+      // 401/403/404 means instance doesn't exist or token is invalid
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        return false;
+      }
+
+      const data = await response.json();
+      
+      // Check for error responses that indicate instance doesn't exist
+      if (data.error === true || data.message?.toLowerCase().includes("not found") || 
+          data.message?.toLowerCase().includes("invalid") || data.message?.toLowerCase().includes("não encontrad")) {
+        return false;
+      }
+
+      return true;
+    } catch {
+      // Network error or other issue - assume exists to be safe
+      return true;
+    }
+  };
 
   // Import existing instance from UAZAPI
   const importInstance = useMutation({
