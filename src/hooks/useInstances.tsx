@@ -635,13 +635,32 @@ export function useInstances(subaccountId?: string) {
         throw new Error("URL base da UAZAPI não configurada");
       }
 
-      await fetch(`${settings.uazapi_base_url}/instance/logout`, {
-        method: "POST",
+      const base = settings.uazapi_base_url.replace(/\/$/, "");
+      
+      // Try DELETE method first (most common for logout)
+      let response = await fetch(`${base}/instance/logout`, {
+        method: "DELETE",
         headers: {
           "Content-Type": "application/json",
           "token": instance.uazapi_instance_token,
         },
       });
+
+      // If DELETE doesn't work, try GET (some UAZAPI versions use GET)
+      if (!response.ok && response.status === 405) {
+        response = await fetch(`${base}/instance/logout`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "token": instance.uazapi_instance_token,
+          },
+        });
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Erro ${response.status} ao desconectar`);
+      }
 
       // Clear status, phone and profile pic when disconnecting
       const { error } = await supabase
