@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Save, Loader2, Eye, EyeOff, CheckCircle2, Info } from "lucide-react";
+import { ArrowLeft, Save, Loader2, CheckCircle2, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettings } from "@/hooks/useSettings";
@@ -18,7 +18,7 @@ interface SubaccountData {
   id: string;
   account_name: string;
   location_id: string;
-  ghl_subaccount_token: string | null;
+  ghl_access_token: string | null;
   ghl_user_id: string | null;
 }
 
@@ -31,26 +31,12 @@ export default function SubaccountSettings() {
   const [subaccount, setSubaccount] = useState<SubaccountData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showToken, setShowToken] = useState(false);
-
-  // Form state
-  const [formData, setFormData] = useState({
-    ghl_subaccount_token: "",
-  });
 
   useEffect(() => {
     if (id && user) {
       loadSubaccount();
     }
   }, [id, user]);
-
-  useEffect(() => {
-    if (subaccount) {
-      setFormData({
-        ghl_subaccount_token: subaccount.ghl_subaccount_token || "",
-      });
-    }
-  }, [subaccount]);
 
   const loadSubaccount = async () => {
     try {
@@ -74,26 +60,7 @@ export default function SubaccountSettings() {
 
   const handleSave = async () => {
     if (!subaccount) return;
-
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from("ghl_subaccounts")
-        .update({
-          ghl_subaccount_token: formData.ghl_subaccount_token || null,
-        })
-        .eq("id", subaccount.id)
-        .eq("user_id", user?.id);
-
-      if (error) throw error;
-      toast.success("Configurações salvas com sucesso!");
-      await loadSubaccount();
-    } catch (error: any) {
-      console.error("Error saving settings:", error);
-      toast.error("Erro ao salvar configurações: " + error.message);
-    } finally {
-      setSaving(false);
-    }
+    toast.success("Configurações salvas!");
   };
 
   if (loading) {
@@ -116,7 +83,7 @@ export default function SubaccountSettings() {
     );
   }
 
-  const isConnected = !!subaccount.ghl_subaccount_token;
+  const isAppInstalled = !!subaccount.ghl_access_token;
 
   return (
     <DashboardLayout>
@@ -138,16 +105,16 @@ export default function SubaccountSettings() {
                   Integração & Servidor
                 </h1>
                 <Badge 
-                  variant={isConnected ? "default" : "secondary"}
-                  className={isConnected ? "bg-success text-success-foreground" : ""}
+                  variant={isAppInstalled ? "default" : "secondary"}
+                  className={isAppInstalled ? "bg-success text-success-foreground" : ""}
                 >
-                  {isConnected ? (
+                  {isAppInstalled ? (
                     <>
                       <CheckCircle2 className="h-3 w-3 mr-1" />
-                      SUBCONTA CONECTADA
+                      APP INSTALADO
                     </>
                   ) : (
-                    "NÃO CONFIGURADA"
+                    "APP NÃO INSTALADO"
                   )}
                 </Badge>
               </div>
@@ -197,34 +164,16 @@ export default function SubaccountSettings() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="bearer-token">Bearer Token</Label>
-                    <div className="relative">
-                      <Input
-                        id="bearer-token"
-                        type={showToken ? "text" : "password"}
-                        value={formData.ghl_subaccount_token}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            ghl_subaccount_token: e.target.value,
-                          }))
-                        }
-                        placeholder="Cole o token da subconta aqui..."
-                        className="bg-background border-border pr-10"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
-                        onClick={() => setShowToken(!showToken)}
-                      >
-                        {showToken ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
+                    <Label>Status do App</Label>
+                    <div className={`p-3 rounded-lg border ${isAppInstalled ? "bg-success/10 border-success/30" : "bg-warning/10 border-warning/30"}`}>
+                      <p className={`text-sm font-medium ${isAppInstalled ? "text-success" : "text-warning"}`}>
+                        {isAppInstalled ? "✓ App instalado via OAuth" : "⚠ App não instalado"}
+                      </p>
+                      {!isAppInstalled && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Instale o app no Marketplace do GHL para habilitar a integração.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </CardContent>
