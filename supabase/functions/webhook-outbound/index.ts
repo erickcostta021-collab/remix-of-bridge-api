@@ -315,6 +315,7 @@ serve(async (req) => {
 
     const locationId: string | undefined = body.locationId;
     const contactId: string | undefined = body.contactId;
+    const conversationId: string | undefined = body.conversationId;
 
     // Validation ping check
     if (!messageText && !phoneRaw && !contactId && attachments.length === 0) {
@@ -364,13 +365,16 @@ serve(async (req) => {
     }
 
     // Verificar se há preferência de instância para este contato (Bridge Switcher)
+    // O script GHL salva usando conversationId (que é o que aparece na URL do GHL)
+    // então precisamos buscar por conversationId primeiro, depois por contactId
     let instance = instances[0]; // Default: primeira instância
     
-    if (contactId) {
+    const lookupId = conversationId || contactId;
+    if (lookupId) {
       const { data: preference } = await supabase
         .from("contact_instance_preferences")
         .select("instance_id")
-        .eq("contact_id", contactId)
+        .eq("contact_id", lookupId)
         .eq("location_id", locationId)
         .maybeSingle();
       
@@ -379,10 +383,12 @@ serve(async (req) => {
         const preferredInstance = instances.find(i => i.id === preference.instance_id);
         if (preferredInstance) {
           instance = preferredInstance;
-          console.log("Using preferred instance from Bridge Switcher:", { instanceId: instance.id, contactId });
+          console.log("Using preferred instance from Bridge Switcher:", { instanceId: instance.id, lookupId });
         } else {
           console.log("Preferred instance not found in subaccount instances, using default");
         }
+      } else {
+        console.log("No preference found for:", { lookupId, locationId });
       }
     }
 
