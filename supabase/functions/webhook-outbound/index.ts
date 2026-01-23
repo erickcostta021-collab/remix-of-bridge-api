@@ -233,6 +233,29 @@ async function sendMediaMessage(base: string, instanceToken: string, phone: stri
   return { sent: false, status: lastStatus, body: lastBody };
 }
 
+// In-memory deduplication cache (messageId -> timestamp)
+const processedMessages = new Map<string, number>();
+const DEDUP_WINDOW_MS = 30000; // 30 seconds
+
+function isDuplicate(messageId: string): boolean {
+  if (!messageId) return false;
+  
+  const now = Date.now();
+  // Clean old entries
+  for (const [id, ts] of processedMessages.entries()) {
+    if (now - ts > DEDUP_WINDOW_MS) {
+      processedMessages.delete(id);
+    }
+  }
+  
+  if (processedMessages.has(messageId)) {
+    return true;
+  }
+  
+  processedMessages.set(messageId, now);
+  return false;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -247,6 +270,17 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
+    const messageId: string = String(body.messageId ?? "");
+    
+    // Check for duplicate webhook calls (GHL sometimes sends same message twice)
+    if (isDuplicate(messageId)) {
+      console.log("Duplicate webhook ignored:", { messageId });
+      return new Response(JSON.stringify({ success: true, ignored: true, reason: "duplicate" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
     console.log("GHL Outbound payload:", JSON.stringify(body, null, 2));
 
     // Only handle outbound messages
