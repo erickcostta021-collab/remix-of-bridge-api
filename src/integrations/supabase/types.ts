@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      ghl_processed_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+        }
+        Relationships: []
+      }
       ghl_subaccounts: {
         Row: {
           account_name: string
@@ -237,6 +255,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_old_processed_messages: { Args: never; Returns: undefined }
       generate_embed_token: { Args: never; Returns: string }
     }
     Enums: {

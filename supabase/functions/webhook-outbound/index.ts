@@ -277,8 +277,12 @@ serve(async (req) => {
     const body = await req.json();
     const messageId: string = String(body.messageId ?? "");
     
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
     // Check for duplicate webhook calls (GHL sometimes sends same message twice)
-    if (isDuplicate(messageId)) {
+    if (await isDuplicate(supabase, messageId)) {
       console.log("Duplicate webhook ignored:", { messageId });
       return new Response(JSON.stringify({ success: true, ignored: true, reason: "duplicate" }), {
         status: 200,
@@ -313,10 +317,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     if (!locationId) {
       console.error("Missing locationId in payload");
