@@ -144,51 +144,75 @@ serve(async (req) => {
       });
     }
 
-    // Send message via UAZAPI (try common endpoints + header styles)
+    // Send message via UAZAPI
+    // Based on wuzapi/UAZAPI docs, the endpoint is /chat/send/text with Token header
+    // Body format: { "Phone": "...", "Body": "..." }
     const base = settings.uazapi_base_url.replace(/\/$/, "");
-    const candidatePaths = [
-      "/chat/send-text",
-      "/chat/sendText",
-      "/chat/send-message",
-      "/message/send-text",
-      "/message/sendText",
-      "/send-text",
-    ];
-
     const instanceToken = instance.uazapi_instance_token;
-    const payload = {
-      phone: targetPhone,
-      message: messageText,
-      text: messageText,
-      token: instanceToken,
-    };
+
+    // Try multiple endpoint/payload combinations based on different UAZAPI versions
+    const attempts: Array<{ path: string; headers: Record<string, string>; body: Record<string, string> }> = [
+      // wuzapi style: /chat/send/text with Phone/Body
+      {
+        path: "/chat/send/text",
+        headers: { "Token": instanceToken },
+        body: { Phone: targetPhone, Body: messageText },
+      },
+      // Alternative: with @s.whatsapp.net suffix
+      {
+        path: "/chat/send/text",
+        headers: { "Token": instanceToken },
+        body: { Phone: `${targetPhone}@s.whatsapp.net`, Body: messageText },
+      },
+      // Alternative header style
+      {
+        path: "/chat/send/text",
+        headers: { "Authorization": `Bearer ${instanceToken}` },
+        body: { Phone: targetPhone, Body: messageText },
+      },
+      // message/text style
+      {
+        path: "/message/text",
+        headers: { "Token": instanceToken },
+        body: { id: targetPhone, message: messageText },
+      },
+      // api/sendText style
+      {
+        path: "/api/sendText",
+        headers: { "Authorization": `Bearer ${instanceToken}` },
+        body: { chatId: `${targetPhone}@c.us`, text: messageText },
+      },
+    ];
 
     let sent = false;
     let lastStatus = 0;
     let lastBody = "";
     
-    for (const path of candidatePaths) {
-      const url = `${base}${path}`;
-      console.log("Trying UAZAPI send:", { url, phone: targetPhone });
+    for (const attempt of attempts) {
+      const url = `${base}${attempt.path}`;
+      console.log("Trying UAZAPI send:", { url, phone: targetPhone, headers: Object.keys(attempt.headers) });
 
       const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // Some servers accept one of these header formats
-          "Authorization": `Bearer ${instanceToken}`,
-          "token": instanceToken,
+          ...attempt.headers,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(attempt.body),
       });
 
       lastStatus = res.status;
       lastBody = await res.text();
-      console.log("UAZAPI response:", { url, status: lastStatus, body: lastBody });
+      console.log("UAZAPI response:", { url, status: lastStatus, body: lastBody.substring(0, 200) });
 
       if (res.ok) {
         sent = true;
         break;
+      }
+      
+      // If we get 404, try next. If we get 401/403, might be auth issue
+      if (lastStatus === 401 || lastStatus === 403) {
+        console.log("Auth issue, trying next method...");
       }
     }
 
