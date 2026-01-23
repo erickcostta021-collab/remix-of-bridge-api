@@ -179,27 +179,6 @@ export default function Settings() {
                   </p>
                 </div>
 
-                {oauthUrl && (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      try {
-                        // Store the state locally so the callback can recover it
-                        // if the provider redirects back without the `state` param.
-                        const url = new URL(oauthUrl);
-                        const state = url.searchParams.get("state");
-                        if (state) localStorage.setItem("ghl_oauth_state", state);
-                      } catch {
-                        // ignore
-                      }
-                      window.open(oauthUrl, "_blank");
-                    }}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Instalar App via OAuth
-                  </Button>
-                )}
               </CardContent>
             </Card>
 
