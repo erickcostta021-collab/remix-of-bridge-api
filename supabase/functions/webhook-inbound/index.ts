@@ -200,6 +200,34 @@ async function updateContactPhoto(contactId: string, photoUrl: string, token: st
   }
 }
 
+// Helper to assign contact to a GHL user
+async function assignContactToUser(contactId: string, userId: string, token: string): Promise<void> {
+  if (!userId) return;
+  
+  console.log("Assigning contact to user:", { contactId, userId });
+  
+  const response = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Version": "2021-07-28",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      assignedTo: userId,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Failed to assign contact to user:", errorText);
+    // Don't throw - assignment is not critical for message flow
+  } else {
+    console.log("Contact assigned to user successfully:", userId);
+  }
+}
+
 // Helper to send text message to GHL
 async function sendMessageToGHL(contactId: string, message: string, token: string): Promise<void> {
   const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
@@ -395,6 +423,12 @@ serve(async (req) => {
     const profilePhoto = chatData.imagePreview || chatData.image || "";
     if (profilePhoto && contact.id) {
       await updateContactPhoto(contact.id, profilePhoto, token);
+    }
+
+    // Auto-assign contact to GHL user if configured on this instance
+    if (instance.ghl_user_id && contact.id) {
+      console.log("Auto-assigning contact to GHL user:", instance.ghl_user_id);
+      await assignContactToUser(contact.id, instance.ghl_user_id, token);
     }
     // Send message to GHL - handle media vs text
     if (isMediaMessage && mediaUrl) {
