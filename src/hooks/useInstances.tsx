@@ -177,15 +177,31 @@ export function useInstances(subaccountId?: string) {
       }
 
       const data = await response.json();
+      console.log("[UAZAPI] Status response:", JSON.stringify(data));
       
-      // Handle nested structure: { instance: {...}, status: { connected: true, jid: "..." } }
+      // Extract phone FIRST from various possible locations
+      const phone = data.instance?.owner 
+        || data.status?.jid?.split("@")?.[0]
+        || data.phone 
+        || data.number 
+        || data.jid?.split("@")?.[0] 
+        || "";
+      
+      // Extract profile picture URL
+      const profilePicUrl = data.instance?.profilePicUrl
+        || data.profilePicUrl
+        || data.profilePic
+        || data.picture
+        || data.imgUrl
+        || "";
+      
+      // Determine status - be STRICT: only consider connected if UAZAPI says connected AND phone exists
       let status = "disconnected";
-      let phone = "";
-      let profilePicUrl = "";
+      const uazapiConnected = data.status?.connected === true || data.status?.loggedIn === true;
       
-      // Check nested status object first
-      if (data.status?.connected === true || data.status?.loggedIn === true) {
-        status = "connected";
+      if (uazapiConnected) {
+        // Only truly connected if we have a valid phone number
+        status = phone ? "connected" : "connecting";
       } else if (data.instance?.status) {
         status = data.instance.status;
       } else if (data.status && typeof data.status === 'string') {
@@ -194,21 +210,7 @@ export function useInstances(subaccountId?: string) {
         status = data.state;
       }
       
-      // Extract phone from various possible locations
-      phone = data.instance?.owner 
-        || data.status?.jid?.split("@")?.[0]
-        || data.phone 
-        || data.number 
-        || data.jid?.split("@")?.[0] 
-        || "";
-      
-      // Extract profile picture URL
-      profilePicUrl = data.instance?.profilePicUrl
-        || data.profilePicUrl
-        || data.profilePic
-        || data.picture
-        || data.imgUrl
-        || "";
+      console.log("[UAZAPI] Parsed status:", status, "phone:", phone, "uazapiConnected:", uazapiConnected);
       
       return { status, phone, profilePicUrl };
     } catch {
