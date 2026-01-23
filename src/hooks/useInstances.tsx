@@ -747,6 +747,83 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
+  // Force reconfigure webhook on UAZAPI with the correct URL from database
+  const reconfigureWebhook = useMutation({
+    mutationFn: async (instance: Instance) => {
+      if (!settings?.uazapi_base_url) {
+        throw new Error("URL base da UAZAPI não configurada");
+      }
+
+      // Use the global webhook URL if instance doesn't have one
+      const webhookUrl = instance.webhook_url || settings.global_webhook_url || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-inbound`;
+      const ignoreGroups = instance.ignore_groups ?? false;
+
+      const base = settings.uazapi_base_url.replace(/\/$/, "");
+      
+      // Try multiple endpoint variations
+      const endpoints = [
+        { path: "/instance/webhook", method: "POST" },
+        { path: "/api/instance/webhook", method: "POST" },
+        { path: "/webhook/set", method: "POST" },
+      ];
+
+      let success = false;
+      let lastError = "";
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${base}${endpoint.path}`, {
+            method: endpoint.method,
+            headers: {
+              "Content-Type": "application/json",
+              "token": instance.uazapi_instance_token,
+            },
+            body: JSON.stringify({
+              webhook_url: webhookUrl,
+              ignore_groups: ignoreGroups,
+            }),
+          });
+
+          if (response.ok || response.status === 200) {
+            success = true;
+            break;
+          }
+
+          if (response.status === 404 || response.status === 405) {
+            continue;
+          }
+
+          const errorData = await response.json().catch(() => ({}));
+          lastError = errorData.message || `Erro ${response.status}`;
+        } catch (err) {
+          continue;
+        }
+      }
+
+      if (!success) {
+        throw new Error(lastError || "Nenhum endpoint de webhook funcionou neste servidor UAZAPI");
+      }
+
+      // Also update in database to ensure sync
+      const { error } = await supabase
+        .from("instances")
+        .update({ webhook_url: webhookUrl, ignore_groups: ignoreGroups })
+        .eq("id", instance.id);
+
+      if (error) throw error;
+      
+      return { webhookUrl };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      toast.success(`Webhook reconfigurado! URL: ${data.webhookUrl.substring(0, 50)}...`);
+      syncToExternalSupabase();
+    },
+    onError: (error) => {
+      toast.error("Erro ao reconfigurar webhook: " + error.message);
+    },
+  });
+
   const updateInstanceGHLUser = useMutation({
     mutationFn: async ({ instanceId, ghlUserId }: { 
       instanceId: string; 
@@ -783,6 +860,7 @@ export function useInstances(subaccountId?: string) {
     syncAllInstancesStatus,
     updateInstanceWebhook,
     updateInstanceGHLUser,
+    reconfigureWebhook,
     fetchUazapiInstances,
   };
 }
