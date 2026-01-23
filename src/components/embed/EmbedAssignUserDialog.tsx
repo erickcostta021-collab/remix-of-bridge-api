@@ -27,7 +27,7 @@ interface EmbedAssignUserDialogProps {
   currentUserId: string | null;
   embedToken: string;
   locationId: string;
-  ghlSubaccountToken: string | null;
+  ghlAccessToken: string | null;
   onAssigned: (userId: string | null, userName: string | null) => void;
 }
 
@@ -39,7 +39,7 @@ export function EmbedAssignUserDialog({
   currentUserId,
   embedToken,
   locationId,
-  ghlSubaccountToken,
+  ghlAccessToken,
   onAssigned,
 }: EmbedAssignUserDialogProps) {
   const [ghlUsers, setGhlUsers] = useState<GHLUser[]>([]);
@@ -48,8 +48,8 @@ export function EmbedAssignUserDialog({
   const [saving, setSaving] = useState(false);
 
   const fetchUsers = async () => {
-    if (!ghlSubaccountToken) {
-      toast.error("Token da subconta não configurado");
+    if (!ghlAccessToken) {
+      toast.error("App não instalado na subconta");
       return;
     }
 
@@ -60,7 +60,7 @@ export function EmbedAssignUserDialog({
         {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${ghlSubaccountToken}`,
+            "Authorization": `Bearer ${ghlAccessToken}`,
             "Version": "2021-07-28",
             "Content-Type": "application/json",
           },
@@ -140,10 +140,10 @@ export function EmbedAssignUserDialog({
           Vincule um usuário do GoHighLevel à instância <strong>{instanceName}</strong>
         </p>
 
-        {!ghlSubaccountToken ? (
+        {!ghlAccessToken ? (
           <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/30 rounded-lg mb-4">
             <AlertCircle className="h-4 w-4 text-warning" />
-            <span className="text-sm text-warning">Token da subconta não configurado</span>
+            <span className="text-sm text-warning">App não instalado na subconta</span>
           </div>
         ) : (
           <div className="space-y-4">
@@ -192,7 +192,7 @@ export function EmbedAssignUserDialog({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={saving || !ghlSubaccountToken}
+            disabled={saving || !ghlAccessToken}
             className="bg-primary hover:bg-primary/90"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

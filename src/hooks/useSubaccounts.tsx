@@ -11,6 +11,7 @@ export interface Subaccount {
   account_name: string;
   ghl_user_id: string | null;
   ghl_subaccount_token: string | null;
+  ghl_access_token: string | null;
   embed_token: string | null;
 }
 

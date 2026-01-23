@@ -13,22 +13,22 @@ export interface GHLUser {
 export function useGHLUsers() {
   const [loading, setLoading] = useState(false);
 
-  // Fetch users using the subaccount's location token (not agency token)
-  const fetchLocationUsers = async (locationId: string, locationToken?: string | null): Promise<GHLUser[]> => {
-    if (!locationToken) {
-      console.warn("Token de subconta não configurado - não é possível buscar usuários");
+  // Fetch users using the subaccount's OAuth access token (automatic from OAuth flow)
+  const fetchLocationUsers = async (locationId: string, accessToken?: string | null): Promise<GHLUser[]> => {
+    if (!accessToken) {
+      console.warn("Token OAuth não disponível - instale o app na subconta primeiro");
       return [];
     }
 
     setLoading(true);
     try {
-      // Use location-specific token for fetching users
+      // Use OAuth access token from app installation
       const response = await fetch(
         `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
         {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${locationToken}`,
+            "Authorization": `Bearer ${accessToken}`,
             "Version": "2021-07-28",
             "Accept": "application/json",
           },
@@ -42,7 +42,7 @@ export function useGHLUsers() {
           {
             method: "GET",
             headers: {
-              "Authorization": `Bearer ${locationToken}`,
+              "Authorization": `Bearer ${accessToken}`,
               "Version": "2021-07-28",
               "Accept": "application/json",
             },

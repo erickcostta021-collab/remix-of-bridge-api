@@ -9,7 +9,7 @@ interface SubaccountData {
   id: string;
   account_name: string;
   location_id: string;
-  ghl_subaccount_token: string | null;
+  ghl_access_token: string | null;
   user_id: string;
 }
 
@@ -41,7 +41,7 @@ export default function EmbedInstances() {
       // Fetch subaccount by embed token
       const { data: subData, error: subError } = await supabase
         .from("ghl_subaccounts")
-        .select("id, account_name, location_id, ghl_subaccount_token, user_id")
+        .select("id, account_name, location_id, ghl_access_token, user_id")
         .eq("embed_token", embedToken)
         .single();
 
@@ -151,7 +151,7 @@ export default function EmbedInstances() {
                 subaccountId={subaccount!.id}
                 embedToken={embedToken!}
                 locationId={subaccount!.location_id}
-                ghlSubaccountToken={subaccount!.ghl_subaccount_token}
+                ghlAccessToken={subaccount!.ghl_access_token}
                 uazapiBaseUrl={userSettings?.uazapi_base_url || "https://atllassa.uazapi.com"}
                 uazapiAdminToken={userSettings?.uazapi_admin_token || ""}
                 onStatusChange={handleRefresh}
