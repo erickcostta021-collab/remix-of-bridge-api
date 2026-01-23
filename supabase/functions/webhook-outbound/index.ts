@@ -24,10 +24,17 @@ serve(async (req) => {
     console.log("GHL Outbound payload:", JSON.stringify(body, null, 2));
 
     // GHL sends: { type, locationId, contactId, message, ... }
-    const { type, locationId, contactId, message, phone, conversationId } = body;
+    const locationId: string | undefined = body.locationId;
+    const contactId: string | undefined = body.contactId;
+
+    // Normalize message fields (GHL can send either `message` or `body`)
+    const messageText: string = String(body.message ?? body.body ?? "");
+
+    // Normalize phone fields (GHL can send either `phone` or `to`)
+    const phoneRaw: string = String(body.phone ?? body.to ?? "");
 
     // If this is just a validation ping (no message content), respond immediately
-    if (!message && !phone && !contactId) {
+    if (!messageText && !phoneRaw && !contactId) {
       console.log("Validation ping received, responding 200 OK");
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -39,43 +46,60 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    if (!locationId) {
+      console.error("Missing locationId in payload");
+      return new Response(
+        JSON.stringify({ success: true, ignored: true, reason: "missing locationId" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Find subaccount by locationId
     const { data: subaccount, error: subError } = await supabase
       .from("ghl_subaccounts")
-      .select("*, instances(*), user_settings:user_id(uazapi_base_url, uazapi_admin_token)")
+      .select("id, user_id, location_id, ghl_access_token")
       .eq("location_id", locationId)
       .single();
 
     if (subError || !subaccount) {
-      console.error("Subaccount not found for location:", locationId);
+      console.error("Subaccount lookup failed:", { locationId, subError });
       return new Response(
-        JSON.stringify({ success: false, error: "Subaccount not found" }),
+        JSON.stringify({ success: true, ignored: true, reason: "subaccount not found" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get instance for this subaccount
-    const instance = subaccount.instances?.[0];
-    if (!instance) {
+    const { data: instances, error: instErr } = await supabase
+      .from("instances")
+      .select("id, uazapi_instance_token")
+      .eq("subaccount_id", subaccount.id)
+      .order("created_at", { ascending: true });
+
+    const instance = instances?.[0];
+    if (instErr || !instance) {
       console.error("No instance found for subaccount");
       return new Response(
-        JSON.stringify({ success: false, error: "No instance configured" }),
+        JSON.stringify({ success: true, ignored: true, reason: "no instance configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get user settings
-    const userSettings = subaccount.user_settings;
-    if (!userSettings?.uazapi_base_url || !instance.uazapi_instance_token) {
-      console.error("UAZAPI not configured");
+    const { data: settings, error: settingsErr } = await supabase
+      .from("user_settings")
+      .select("uazapi_base_url, uazapi_admin_token")
+      .eq("user_id", subaccount.user_id)
+      .single();
+
+    if (settingsErr || !settings?.uazapi_base_url || !instance.uazapi_instance_token) {
+      console.error("UAZAPI not configured:", { settingsErr });
       return new Response(
-        JSON.stringify({ success: false, error: "UAZAPI not configured" }),
+        JSON.stringify({ success: true, ignored: true, reason: "uazapi not configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Extract phone number - clean it
-    let targetPhone = phone || "";
+    let targetPhone = phoneRaw || "";
     if (!targetPhone && contactId) {
       // Fetch contact from GHL to get phone
       const token = subaccount.ghl_access_token;
@@ -112,33 +136,65 @@ serve(async (req) => {
       );
     }
 
-    // Send message via UAZAPI
-    const uazapiUrl = `${userSettings.uazapi_base_url}/chat/send-text`;
-    
-    console.log("Sending to UAZAPI:", {
-      url: uazapiUrl,
+    if (!messageText) {
+      console.log("No message text provided; acknowledging");
+      return new Response(JSON.stringify({ success: true, ignored: true, reason: "missing message" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Send message via UAZAPI (try common endpoints + header styles)
+    const base = settings.uazapi_base_url.replace(/\/$/, "");
+    const candidatePaths = [
+      "/chat/send-text",
+      "/chat/sendText",
+      "/chat/send-message",
+      "/message/send-text",
+      "/message/sendText",
+      "/send-text",
+    ];
+
+    const instanceToken = instance.uazapi_instance_token;
+    const payload = {
       phone: targetPhone,
-      message: message?.substring(0, 50) + "...",
-    });
+      message: messageText,
+      text: messageText,
+      token: instanceToken,
+    };
 
-    const uazapiRes = await fetch(uazapiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${instance.uazapi_instance_token}`,
-      },
-      body: JSON.stringify({
-        phone: targetPhone,
-        message: message,
-      }),
-    });
+    let sent = false;
+    let lastStatus = 0;
+    let lastBody = "";
+    
+    for (const path of candidatePaths) {
+      const url = `${base}${path}`;
+      console.log("Trying UAZAPI send:", { url, phone: targetPhone });
 
-    const uazapiData = await uazapiRes.text();
-    console.log("UAZAPI response:", uazapiRes.status, uazapiData);
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // Some servers accept one of these header formats
+          "Authorization": `Bearer ${instanceToken}`,
+          "token": instanceToken,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!uazapiRes.ok) {
+      lastStatus = res.status;
+      lastBody = await res.text();
+      console.log("UAZAPI response:", { url, status: lastStatus, body: lastBody });
+
+      if (res.ok) {
+        sent = true;
+        break;
+      }
+    }
+
+    if (!sent) {
       return new Response(
-        JSON.stringify({ success: false, error: "UAZAPI send failed", details: uazapiData }),
+        JSON.stringify({ success: true, sent: false, error: "uazapi send failed", lastStatus, lastBody }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

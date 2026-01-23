@@ -101,6 +101,22 @@ async function findOrCreateContact(
   if (!createResponse.ok) {
     const errorText = await createResponse.text();
     console.error("Failed to create contact:", errorText);
+
+    // Some locations disallow duplicates and return an existing contactId in meta.
+    // Example: { statusCode: 400, message: "This location does not allow duplicated contacts.", meta: { contactId: "..." } }
+    try {
+      const parsed = JSON.parse(errorText);
+      const maybeExistingId = parsed?.meta?.contactId;
+      const msg = String(parsed?.message || "");
+
+      if (createResponse.status === 400 && maybeExistingId && msg.toLowerCase().includes("duplicated")) {
+        console.log("Duplicate contact detected, reusing existing contactId:", maybeExistingId);
+        return { id: maybeExistingId };
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+
     throw new Error("Failed to create contact in GHL");
   }
 
