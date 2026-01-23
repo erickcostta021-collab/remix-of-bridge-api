@@ -124,7 +124,7 @@ async function findOrCreateContact(
   return createData.contact;
 }
 
-// Helper to send message to GHL
+// Helper to send text message to GHL
 async function sendMessageToGHL(contactId: string, message: string, token: string): Promise<void> {
   const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
@@ -145,6 +145,31 @@ async function sendMessageToGHL(contactId: string, message: string, token: strin
     const errorText = await response.text();
     console.error("Failed to send message to GHL:", errorText);
     throw new Error("Failed to send message to GHL");
+  }
+}
+
+// Helper to send media message to GHL with attachments
+async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token: string, caption?: string): Promise<void> {
+  const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Version": "2021-04-15",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      type: "SMS",
+      contactId,
+      message: caption || "[Media]",
+      attachments: attachmentUrls,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Failed to send media to GHL:", errorText);
+    throw new Error("Failed to send media to GHL");
   }
 }
 
@@ -181,16 +206,40 @@ serve(async (req) => {
     // Get sender info - PRIORITY: chatid/wa_chatid contains the real phone number
     // The "sender" field often contains internal LID (linked ID) which is NOT a valid phone
     const from = chatData.wa_chatid || messageData.chatid || eventData.Chat || messageData.sender || "";
-    const message = messageData.text || messageData.content || messageData.conversation || "";
     const pushName = messageData.senderName || chatData.wa_name || chatData.name || "";
     const instanceToken = body.token || body.instanceToken || messageData.instanceToken || "";
+    
+    // Detect media vs text message
+    const contentRaw = messageData.content;
+    const isMediaMessage = contentRaw && typeof contentRaw === "object" && (contentRaw.URL || contentRaw.url);
+    const mediaUrl = isMediaMessage ? (contentRaw.URL || contentRaw.url) : null;
+    const mediaType = messageData.mediaType || messageData.messageType || "";
+    
+    // Extract text message - handle both string and object content
+    let textMessage = "";
+    if (typeof contentRaw === "string") {
+      textMessage = contentRaw;
+    } else if (messageData.text) {
+      textMessage = messageData.text;
+    } else if (messageData.conversation) {
+      textMessage = messageData.conversation;
+    }
 
-    console.log("Extracted data:", { from, message, pushName, instanceToken: instanceToken?.substring(0, 20) + "..." });
+    console.log("Extracted data:", { 
+      from, 
+      textMessage: textMessage?.substring(0, 50), 
+      isMediaMessage, 
+      mediaUrl: mediaUrl?.substring(0, 50),
+      mediaType,
+      pushName, 
+      instanceToken: instanceToken?.substring(0, 20) + "..." 
+    });
 
-    if (!from || !message) {
-      console.log("Missing from or message in payload");
+    // Need either text or media
+    if (!from || (!textMessage && !mediaUrl)) {
+      console.log("Missing from or content in payload");
       return new Response(
-        JSON.stringify({ received: true, ignored: true, reason: "missing data", from, message }),
+        JSON.stringify({ received: true, ignored: true, reason: "missing data", from, textMessage, mediaUrl }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -266,8 +315,14 @@ serve(async (req) => {
       token
     );
 
-    // Send message to GHL
-    await sendMessageToGHL(contact.id, message, token);
+    // Send message to GHL - handle media vs text
+    if (isMediaMessage && mediaUrl) {
+      console.log("Sending media to GHL:", { mediaUrl, textMessage });
+      await sendMediaToGHL(contact.id, [mediaUrl], token, textMessage || undefined);
+    } else {
+      console.log("Sending text to GHL:", { textMessage: textMessage?.substring(0, 50) });
+      await sendMessageToGHL(contact.id, textMessage, token);
+    }
 
     console.log(`✅ Message forwarded to GHL: ${phoneNumber} -> ${contact.id}`);
 
