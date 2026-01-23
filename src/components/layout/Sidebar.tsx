@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useSettings } from "@/hooks/useSettings";
 import {
   LayoutDashboard,
   Settings,
@@ -10,6 +11,7 @@ import {
   Menu,
   X,
   Zap,
+  ExternalLink,
 } from "lucide-react";
 
 const navItems = [
@@ -20,10 +22,25 @@ const navItems = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { signOut } = useAuth();
+  const { getOAuthUrl } = useSettings();
   const location = useLocation();
+
+  const oauthUrl = getOAuthUrl();
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleInstallApp = () => {
+    if (!oauthUrl) return;
+    try {
+      const url = new URL(oauthUrl);
+      const state = url.searchParams.get("state");
+      if (state) localStorage.setItem("ghl_oauth_state", state);
+    } catch {
+      // ignore
+    }
+    window.open(oauthUrl, "_blank");
   };
 
   return (
@@ -85,6 +102,19 @@ export function Sidebar() {
               </NavLink>
             );
           })}
+          {/* Install App Button */}
+          {oauthUrl && (
+            <button
+              onClick={handleInstallApp}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors w-full text-left",
+                "text-sidebar-foreground hover:bg-sidebar-accent"
+              )}
+            >
+              <ExternalLink className="h-5 w-5 flex-shrink-0" />
+              {!collapsed && <span>Instalar App</span>}
+            </button>
+          )}
         </nav>
 
         {/* Footer */}
