@@ -24,7 +24,7 @@ async function configureGlobalWebhook(
   baseUrl: string,
   adminToken: string,
   webhookUrl: string
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   try {
     const base = baseUrl.replace(/\/$/, "");
     const response = await fetch(`${base}/globalwebhook`, {
@@ -40,9 +40,16 @@ async function configureGlobalWebhook(
         excludeMessages: ["wasSentByApi"],
       }),
     });
-    return response.ok;
-  } catch {
-    return false;
+    
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const errorMsg = data.message || `HTTP ${response.status}`;
+      return { success: false, error: errorMsg };
+    }
+    
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Erro de conexão" };
   }
 }
 
@@ -96,14 +103,14 @@ export function useSettings() {
       if (!settings?.uazapi_base_url) throw new Error("URL base da UAZAPI não configurada");
       if (!settings?.uazapi_admin_token) throw new Error("Token Admin da UAZAPI não configurado");
 
-      const ok = await configureGlobalWebhook(
+      const result = await configureGlobalWebhook(
         settings.uazapi_base_url,
         settings.uazapi_admin_token,
         webhookUrl
       );
 
-      if (!ok) {
-        throw new Error("Falha ao configurar webhook global na UAZAPI");
+      if (!result.success) {
+        throw new Error(result.error || "Falha ao configurar webhook global na UAZAPI");
       }
 
       return { success: true };
