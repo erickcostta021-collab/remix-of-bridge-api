@@ -176,9 +176,11 @@ serve(async (req) => {
     // Extract message data from UAZAPI payload (new structure)
     const messageData = body.message || body.data || {};
     const chatData = body.chat || {};
+    const eventData = body.event || {};
     
-    // Get sender info - try multiple paths
-    const from = messageData.sender || messageData.chatid || chatData.wa_chatid || "";
+    // Get sender info - PRIORITY: chatid/wa_chatid contains the real phone number
+    // The "sender" field often contains internal LID (linked ID) which is NOT a valid phone
+    const from = chatData.wa_chatid || messageData.chatid || eventData.Chat || messageData.sender || "";
     const message = messageData.text || messageData.content || messageData.conversation || "";
     const pushName = messageData.senderName || chatData.wa_name || chatData.name || "";
     const instanceToken = body.token || body.instanceToken || messageData.instanceToken || "";
