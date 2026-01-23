@@ -10,9 +10,9 @@ import {
   LogOut,
   Menu,
   X,
-  Zap,
   ExternalLink,
 } from "lucide-react";
+import logo from "@/assets/logo.png";
 
 const ADMIN_EMAIL = "erickcostta021@gmail.com";
 
@@ -68,9 +68,7 @@ export function Sidebar() {
         <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-primary/10 rounded-lg">
-                <Zap className="h-5 w-5 text-primary" />
-              </div>
+              <img src={logo} alt="Bridge API" className="h-8 w-8 rounded-lg" />
               <span className="font-semibold text-sidebar-foreground">Bridge API</span>
             </div>
           )}
