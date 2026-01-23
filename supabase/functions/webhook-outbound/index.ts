@@ -6,6 +6,92 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper to get valid access token (refresh if needed)
+async function getValidToken(supabase: any, subaccount: any, settings: any): Promise<string> {
+  const accessToken: string | null = subaccount.ghl_access_token ?? null;
+  const refreshToken: string | null = subaccount.ghl_refresh_token ?? null;
+  const expiresAtIso: string | null = subaccount.ghl_token_expires_at ?? null;
+
+  if (!accessToken || !refreshToken || !expiresAtIso) return accessToken || "";
+
+  const now = new Date();
+  const expiresAt = new Date(expiresAtIso);
+  const expiresIn1Hour = expiresAt.getTime() - now.getTime() < 60 * 60 * 1000;
+
+  if (now >= expiresAt || expiresIn1Hour) {
+    const tokenParams = new URLSearchParams({
+      client_id: settings.ghl_client_id,
+      client_secret: settings.ghl_client_secret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      user_type: "Location",
+    });
+
+    const tokenResponse = await fetch("https://services.leadconnectorhq.com/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+      },
+      body: tokenParams.toString(),
+    });
+
+    if (!tokenResponse.ok) {
+      const err = await tokenResponse.text();
+      console.error("Failed to refresh GHL token:", err);
+      throw new Error("Failed to refresh GHL token");
+    }
+
+    const tokenData = await tokenResponse.json();
+    const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
+
+    await supabase
+      .from("ghl_subaccounts")
+      .update({
+        ghl_access_token: tokenData.access_token,
+        ghl_refresh_token: tokenData.refresh_token,
+        ghl_token_expires_at: newExpiresAt.toISOString(),
+        ghl_subaccount_token: tokenData.access_token,
+        oauth_last_refresh: new Date().toISOString(),
+      })
+      .eq("id", subaccount.id);
+
+    return tokenData.access_token;
+  }
+
+  return accessToken;
+}
+
+async function fetchGhlContactPhone(token: string, contactId: string): Promise<string> {
+  const contactRes = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`,
+    {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Version": "2021-07-28",
+        "Accept": "application/json",
+      },
+    }
+  );
+
+  const bodyText = await contactRes.text();
+  if (!contactRes.ok) {
+    console.error("GHL contact lookup failed:", { status: contactRes.status, body: bodyText.substring(0, 300) });
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(bodyText);
+    return String(
+      parsed?.contact?.phone ||
+        parsed?.contact?.phoneNumber ||
+        parsed?.contact?.primaryPhone ||
+        ""
+    );
+  } catch {
+    return "";
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -22,6 +108,18 @@ serve(async (req) => {
   try {
     const body = await req.json();
     console.log("GHL Outbound payload:", JSON.stringify(body, null, 2));
+
+    // Only handle outbound messages (avoid loops / noise)
+    // Example from your n8n: body.type === "OutboundMessage"
+    const eventType = String(body.type ?? "");
+    const direction = String(body.direction ?? "");
+    if (eventType !== "OutboundMessage" && direction !== "outbound") {
+      console.log("Ignoring non-outbound event:", { eventType, direction });
+      return new Response(JSON.stringify({ success: true, ignored: true, reason: "not outbound" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // GHL sends: { type, locationId, contactId, message, ... }
     const locationId: string | undefined = body.locationId;
@@ -57,7 +155,7 @@ serve(async (req) => {
     // Find subaccount by locationId
     const { data: subaccount, error: subError } = await supabase
       .from("ghl_subaccounts")
-      .select("id, user_id, location_id, ghl_access_token")
+      .select("id, user_id, location_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at")
       .eq("location_id", locationId)
       .single();
 
@@ -86,7 +184,7 @@ serve(async (req) => {
 
     const { data: settings, error: settingsErr } = await supabase
       .from("user_settings")
-      .select("uazapi_base_url, uazapi_admin_token")
+      .select("uazapi_base_url, uazapi_admin_token, ghl_client_id, ghl_client_secret")
       .eq("user_id", subaccount.user_id)
       .single();
 
@@ -98,30 +196,21 @@ serve(async (req) => {
       );
     }
 
-    // Extract phone number - clean it
+    // Extract phone number - don't trust `to` (GHL often sends agent name), fetch contact phone when possible
     let targetPhone = phoneRaw || "";
-    if (!targetPhone && contactId) {
-      // Fetch contact from GHL to get phone
-      const token = subaccount.ghl_access_token;
-      if (token) {
-        try {
-          const contactRes = await fetch(
-            `https://services.leadconnectorhq.com/contacts/${contactId}`,
-            {
-              headers: {
-                "Authorization": `Bearer ${token}`,
-                "Version": "2021-07-28",
-                "Accept": "application/json",
-              },
-            }
-          );
-          if (contactRes.ok) {
-            const contactData = await contactRes.json();
-            targetPhone = contactData.contact?.phone || "";
+    if (contactId) {
+      try {
+        if (!settings?.ghl_client_id || !settings?.ghl_client_secret) {
+          console.error("Missing OAuth client credentials in user_settings");
+        } else {
+          const token = await getValidToken(supabase, subaccount, settings);
+          if (token) {
+            const contactPhone = await fetchGhlContactPhone(token, contactId);
+            if (contactPhone) targetPhone = contactPhone;
           }
-        } catch (e) {
-          console.error("Failed to fetch contact:", e);
         }
+      } catch (e) {
+        console.error("Failed to resolve contact phone:", e);
       }
     }
 
@@ -145,41 +234,55 @@ serve(async (req) => {
     }
 
     // Send message via UAZAPI
-    // Based on wuzapi/UAZAPI docs, the endpoint is /chat/send/text with Token header
-    // Body format: { "Phone": "...", "Body": "..." }
+    // Match the working n8n flow:
+    // POST {base}/send/text
+    // header: token: <instanceToken>
+    // body: { number, text, readchat }
     const base = settings.uazapi_base_url.replace(/\/$/, "");
     const instanceToken = instance.uazapi_instance_token;
 
     // Try multiple endpoint/payload combinations based on different UAZAPI versions
     const attempts: Array<{ path: string; headers: Record<string, string>; body: Record<string, string> }> = [
+      // n8n style
+      {
+        path: "/send/text",
+        headers: { token: instanceToken },
+        body: { number: targetPhone, text: messageText, readchat: "true" },
+      },
+      // sometimes expects boolean
+      {
+        path: "/send/text",
+        headers: { token: instanceToken },
+        body: { number: targetPhone, text: messageText, readchat: "1" },
+      },
       // wuzapi style: /chat/send/text with Phone/Body
       {
         path: "/chat/send/text",
-        headers: { "Token": instanceToken },
+        headers: { Token: instanceToken },
         body: { Phone: targetPhone, Body: messageText },
       },
       // Alternative: with @s.whatsapp.net suffix
       {
         path: "/chat/send/text",
-        headers: { "Token": instanceToken },
+        headers: { Token: instanceToken },
         body: { Phone: `${targetPhone}@s.whatsapp.net`, Body: messageText },
       },
       // Alternative header style
       {
         path: "/chat/send/text",
-        headers: { "Authorization": `Bearer ${instanceToken}` },
+        headers: { Authorization: `Bearer ${instanceToken}` },
         body: { Phone: targetPhone, Body: messageText },
       },
       // message/text style
       {
         path: "/message/text",
-        headers: { "Token": instanceToken },
+        headers: { Token: instanceToken },
         body: { id: targetPhone, message: messageText },
       },
       // api/sendText style
       {
         path: "/api/sendText",
-        headers: { "Authorization": `Bearer ${instanceToken}` },
+        headers: { Authorization: `Bearer ${instanceToken}` },
         body: { chatId: `${targetPhone}@c.us`, text: messageText },
       },
     ];
