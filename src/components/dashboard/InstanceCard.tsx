@@ -159,8 +159,10 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const handleConnect = async () => {
     setLoadingQR(true);
     try {
-      // First check real status
+      // First check real status from UAZAPI
       const statusResult = await syncInstanceStatus.mutateAsync(instance);
+      
+      // If truly connected on UAZAPI, update local state and inform user
       if (statusResult?.status === "connected") {
         if (statusResult?.phone) {
           setConnectedPhone(statusResult.phone);
@@ -171,6 +173,12 @@ export function InstanceCard({ instance }: InstanceCardProps) {
         toast.success("Esta instância já está conectada!");
         setLoadingQR(false);
         return;
+      }
+      
+      // If status is disconnected, clear cached phone/pic locally
+      if (statusResult?.status === "disconnected") {
+        setConnectedPhone(null);
+        setProfilePicUrl(null);
       }
       
       // Connect and get QR code in one call
@@ -230,6 +238,15 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const handleDelete = () => {
     deleteInstance.mutate({ instance, deleteFromUazapi });
     setDeleteDialogOpen(false);
+  };
+
+  const handleDisconnect = () => {
+    disconnectInstance.mutate(instance, {
+      onSuccess: () => {
+        setConnectedPhone(null);
+        setProfilePicUrl(null);
+      }
+    });
   };
 
   const copyToken = () => {
@@ -414,7 +431,7 @@ export function InstanceCard({ instance }: InstanceCardProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => disconnectInstance.mutate(instance)}
+                onClick={handleDisconnect}
                 disabled={disconnectInstance.isPending}
                 className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-400 h-9"
               >
