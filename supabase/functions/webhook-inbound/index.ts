@@ -228,7 +228,7 @@ async function assignContactToUser(contactId: string, userId: string, token: str
   }
 }
 
-// Helper to send text message to GHL
+// Helper to send text message to GHL (inbound = from lead)
 async function sendMessageToGHL(contactId: string, message: string, token: string): Promise<void> {
   const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
@@ -252,7 +252,76 @@ async function sendMessageToGHL(contactId: string, message: string, token: strin
   }
 }
 
-// Helper to send media message to GHL with attachments
+// Helper to send outbound text message to GHL (from our instance - syncs what WE sent)
+async function sendOutboundMessageToGHL(conversationId: string, message: string, token: string): Promise<void> {
+  const response = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}/messages`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Version": "2021-04-15",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      type: "SMS",
+      message,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Failed to send outbound message to GHL:", errorText);
+    throw new Error("Failed to send outbound message to GHL");
+  }
+}
+
+// Helper to get or create conversation for a contact
+async function getOrCreateConversation(contactId: string, locationId: string, token: string): Promise<string> {
+  // First try to get existing conversation
+  const searchResponse = await fetch(
+    `https://services.leadconnectorhq.com/conversations/search?locationId=${locationId}&contactId=${contactId}`,
+    {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Version": "2021-04-15",
+        "Accept": "application/json",
+      },
+    }
+  );
+
+  if (searchResponse.ok) {
+    const searchData = await searchResponse.json();
+    if (searchData.conversations && searchData.conversations.length > 0) {
+      return searchData.conversations[0].id;
+    }
+  }
+
+  // Create new conversation if not found
+  const createResponse = await fetch("https://services.leadconnectorhq.com/conversations/", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Version": "2021-04-15",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      locationId,
+      contactId,
+    }),
+  });
+
+  if (!createResponse.ok) {
+    const errorText = await createResponse.text();
+    console.error("Failed to create conversation:", errorText);
+    throw new Error("Failed to create conversation in GHL");
+  }
+
+  const createData = await createResponse.json();
+  return createData.conversation?.id || createData.id;
+}
+
+// Helper to send media message to GHL with attachments (inbound = from lead)
 async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token: string, caption?: string): Promise<void> {
   const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
@@ -274,6 +343,30 @@ async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token
     const errorText = await response.text();
     console.error("Failed to send media to GHL:", errorText);
     throw new Error("Failed to send media to GHL");
+  }
+}
+
+// Helper to send outbound media message to GHL (from our instance)
+async function sendOutboundMediaToGHL(conversationId: string, attachmentUrls: string[], token: string, caption?: string): Promise<void> {
+  const response = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}/messages`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Version": "2021-04-15",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      type: "SMS",
+      message: caption || "",
+      attachments: attachmentUrls,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Failed to send outbound media to GHL:", errorText);
+    throw new Error("Failed to send outbound media to GHL");
   }
 }
 
@@ -307,16 +400,9 @@ serve(async (req) => {
     const chatData = body.chat || {};
     const eventData = body.event || {};
     
-    // CRITICAL: Check if message was sent by the connected WhatsApp instance (fromMe)
-    // If fromMe is true, this is a message WE sent, not the lead - ignore it
+    // Check if message was sent by the connected WhatsApp instance (fromMe)
+    // If fromMe is true, this is a message WE sent - we'll sync it as outbound message in GHL
     const isFromMe = messageData.fromMe === true;
-    if (isFromMe) {
-      console.log("Ignoring message sent by us (fromMe=true)");
-      return new Response(
-        JSON.stringify({ received: true, ignored: true, reason: "fromMe message" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
     
     // Get sender info - PRIORITY: chatid/wa_chatid contains the real phone number
     // The "sender" field often contains internal LID (linked ID) which is NOT a valid phone
@@ -330,10 +416,12 @@ serve(async (req) => {
     // Use group name for contact creation, but include sender name in the display
     const pushName = isGroupChat ? (groupName || senderName) : senderName;
     
-    // Detect media vs text message
+    // Detect media vs text message - including stickers
     const contentRaw = messageData.content;
-    const isMediaMessage = contentRaw && typeof contentRaw === "object" && (contentRaw.URL || contentRaw.url);
-    const mediaUrl = isMediaMessage ? (contentRaw.URL || contentRaw.url) : null;
+    const messageType = (messageData.messageType || messageData.mediaType || "").toLowerCase();
+    const isSticker = messageType === "stickermessage" || messageType === "sticker";
+    const isMediaMessage = (contentRaw && typeof contentRaw === "object" && (contentRaw.URL || contentRaw.url)) || isSticker;
+    const mediaUrl = isMediaMessage ? (contentRaw?.URL || contentRaw?.url || null) : null;
     const mediaType = messageData.mediaType || messageData.messageType || "";
     
     // Extract text message - handle both string and object content
@@ -352,7 +440,9 @@ serve(async (req) => {
       isMediaMessage, 
       mediaUrl: mediaUrl?.substring(0, 50),
       mediaType,
-      pushName, 
+      pushName,
+      isFromMe,
+      isSticker,
       instanceToken: instanceToken?.substring(0, 20) + "..." 
     });
 
@@ -447,13 +537,13 @@ serve(async (req) => {
       console.log("Auto-assigning contact to GHL user:", instance.ghl_user_id);
       await assignContactToUser(contact.id, instance.ghl_user_id, token);
     }
-    // Send message to GHL - handle media vs text
+    // Prepare media URL if needed
+    let publicMediaUrl = mediaUrl;
     if (isMediaMessage && mediaUrl) {
       const baseUrl = settings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
       const messageId = messageData.messageid || messageData.id || "";
       
       // Try to get public URL via UAZAPI download endpoint (POST /message/download)
-      let publicMediaUrl = mediaUrl;
       if (baseUrl && messageId) {
         console.log("Attempting to get public media URL via UAZAPI download:", { baseUrl, messageId });
         const downloadedUrl = await getPublicMediaUrl(baseUrl, instanceToken, messageId);
@@ -463,21 +553,48 @@ serve(async (req) => {
           console.log("Could not get public URL, using original encrypted URL");
         }
       }
-      
-      console.log("Sending media to GHL:", { publicMediaUrl, textMessage });
-      await sendMediaToGHL(contact.id, [publicMediaUrl], token, textMessage || undefined);
-    } else {
-      console.log("Sending text to GHL:", { textMessage: textMessage?.substring(0, 50) });
-      await sendMessageToGHL(contact.id, textMessage, token);
     }
 
-    console.log(`✅ Message forwarded to GHL: ${phoneNumber} -> ${contact.id}`);
+    // Send message to GHL - differentiate between inbound (from lead) and outbound (from us)
+    if (isFromMe) {
+      // This is a message WE sent via WhatsApp - sync as outbound in GHL
+      console.log("Syncing outbound message (fromMe=true):", { 
+        textMessage: textMessage?.substring(0, 50), 
+        isMedia: isMediaMessage 
+      });
+      
+      // Get or create conversation for this contact
+      const conversationId = await getOrCreateConversation(contact.id, subaccount.location_id, token);
+      console.log("Got conversation ID:", conversationId);
+      
+      if (isMediaMessage && publicMediaUrl) {
+        console.log("Sending outbound media to GHL:", { publicMediaUrl, textMessage });
+        await sendOutboundMediaToGHL(conversationId, [publicMediaUrl], token, textMessage || undefined);
+      } else if (textMessage) {
+        console.log("Sending outbound text to GHL:", { textMessage: textMessage?.substring(0, 50) });
+        await sendOutboundMessageToGHL(conversationId, textMessage, token);
+      }
+      
+      console.log(`✅ Outbound message synced to GHL: ${phoneNumber} -> ${contact.id}`);
+    } else {
+      // This is a message FROM the lead - send as inbound
+      if (isMediaMessage && publicMediaUrl) {
+        console.log("Sending inbound media to GHL:", { publicMediaUrl, textMessage });
+        await sendMediaToGHL(contact.id, [publicMediaUrl], token, textMessage || undefined);
+      } else {
+        console.log("Sending inbound text to GHL:", { textMessage: textMessage?.substring(0, 50) });
+        await sendMessageToGHL(contact.id, textMessage, token);
+      }
+      
+      console.log(`✅ Inbound message forwarded to GHL: ${phoneNumber} -> ${contact.id}`);
+    }
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         contactId: contact.id,
-        message: "Message forwarded to GHL" 
+        direction: isFromMe ? "outbound" : "inbound",
+        message: isFromMe ? "Outbound message synced to GHL" : "Inbound message forwarded to GHL"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
