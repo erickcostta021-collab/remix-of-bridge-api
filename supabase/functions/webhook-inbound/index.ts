@@ -321,8 +321,14 @@ serve(async (req) => {
     // Get sender info - PRIORITY: chatid/wa_chatid contains the real phone number
     // The "sender" field often contains internal LID (linked ID) which is NOT a valid phone
     const from = chatData.wa_chatid || messageData.chatid || eventData.Chat || messageData.sender || "";
-    const pushName = messageData.senderName || chatData.wa_name || chatData.name || "";
+    const senderName = messageData.senderName || chatData.wa_name || chatData.name || "";
+    const groupName = messageData.groupName !== "Unknown" ? messageData.groupName : (chatData.wa_name || chatData.name || "");
     const instanceToken = body.token || body.instanceToken || messageData.instanceToken || "";
+    
+    // For groups, check if it's a group chat and use group name
+    const isGroupChat = from.endsWith("@g.us") || messageData.isGroup === true || chatData.wa_isGroup === true;
+    // Use group name for contact creation, but include sender name in the display
+    const pushName = isGroupChat ? (groupName || senderName) : senderName;
     
     // Detect media vs text message
     const contentRaw = messageData.content;
