@@ -393,6 +393,23 @@ async function sendOutboundMediaToGHL(contactId: string, attachmentUrls: string[
   console.log("✅ Outbound media sent successfully to GHL:", responseText.substring(0, 300));
 }
 
+// Dedup helper using public.ghl_processed_messages (unique message_id)
+async function markIfNew(supabase: any, messageId: string): Promise<boolean> {
+  if (!messageId) return true;
+  try {
+    const { error } = await supabase.from("ghl_processed_messages").insert({ message_id: messageId });
+    if (error) {
+      if (error.code === "23505") return false; // duplicate
+      console.error("Dedup insert error (allowing processing):", error);
+      return true;
+    }
+    return true;
+  } catch (e) {
+    console.error("Dedup insert exception (allowing processing):", e);
+    return true;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -498,6 +515,20 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // UAZAPI may fire the same 'fromMe' message multiple times; dedupe by UAZAPI messageid.
+    // This prevents creating the same outbound message repeatedly in GHL (which then triggers outbound webhooks and loops).
+    const uazapiMessageId = String(messageData.messageid || messageData.id || "");
+    if (uazapiMessageId) {
+      const isNew = await markIfNew(supabase, `uazapi:${uazapiMessageId}`);
+      if (!isNew) {
+        console.log("Duplicate UAZAPI message ignored:", { uazapiMessageId });
+        return new Response(
+          JSON.stringify({ received: true, ignored: true, reason: "duplicate_uazapi_message", uazapiMessageId }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     // Find the instance by token
     const { data: instance, error: instanceError } = await supabase
@@ -609,10 +640,61 @@ serve(async (req) => {
 
       if (isMediaMessage && publicMediaUrl) {
         console.log("Sending outbound media to GHL:", { publicMediaUrl, textMessage });
-        await sendOutboundMediaToGHL(contact.id, [publicMediaUrl], token, textMessage || undefined);
+        const before = Date.now();
+        const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Version": "2021-04-15",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify({
+            type: "SMS",
+            contactId: contact.id,
+            message: textMessage || "",
+            attachments: [publicMediaUrl],
+            status: "delivered",
+          }),
+        });
+        const bodyText = await res.text();
+        console.log("GHL outbound-media response:", { status: res.status, ms: Date.now() - before, body: bodyText.substring(0, 500) });
+        if (!res.ok) throw new Error("Failed to send outbound media to GHL");
+        try {
+          const parsed = JSON.parse(bodyText);
+          const ghlMessageId = String(parsed?.messageId || "");
+          if (ghlMessageId) await markIfNew(supabase, `ghl:${ghlMessageId}`);
+        } catch {
+          // ignore
+        }
       } else if (textMessage) {
         console.log("Sending outbound text to GHL:", { textMessage: textMessage?.substring(0, 50) });
-        await sendOutboundMessageToGHL(contact.id, textMessage, token);
+        const before = Date.now();
+        const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Version": "2021-04-15",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify({
+            type: "SMS",
+            contactId: contact.id,
+            message: textMessage,
+            status: "delivered",
+          }),
+        });
+        const bodyText = await res.text();
+        console.log("GHL outbound-text response:", { status: res.status, ms: Date.now() - before, body: bodyText.substring(0, 500) });
+        if (!res.ok) throw new Error("Failed to send outbound message to GHL");
+        try {
+          const parsed = JSON.parse(bodyText);
+          const ghlMessageId = String(parsed?.messageId || "");
+          if (ghlMessageId) await markIfNew(supabase, `ghl:${ghlMessageId}`);
+        } catch {
+          // ignore
+        }
       }
 
       const source = isAgentIaMessage ? "agent_ia" : (wasSentByApi ? "api" : "manual");
