@@ -92,12 +92,152 @@ async function fetchGhlContactPhone(token: string, contactId: string): Promise<s
   }
 }
 
+// Helper to detect media type from URL
+function detectMediaType(url: string): string {
+  const lower = url.toLowerCase();
+  if (/\.(mp3|wav|ogg|m4a|aac)/.test(lower)) return "myaudio";
+  if (/\.(mp4|mov|avi|mkv|webm)/.test(lower)) return "video";
+  if (/\.(jpg|jpeg|png|gif|webp)/.test(lower)) return "image";
+  if (/\.(pdf|doc|docx|xls|xlsx|txt)/.test(lower)) return "document";
+  return "file";
+}
+
+// Send text message via UAZAPI
+async function sendTextMessage(base: string, instanceToken: string, phone: string, text: string): Promise<{ sent: boolean; status: number; body: string }> {
+  const attempts: Array<{ path: string; headers: Record<string, string>; body: Record<string, string> }> = [
+    // n8n style - primary
+    {
+      path: "/send/text",
+      headers: { token: instanceToken },
+      body: { number: phone, text, readchat: "true" },
+    },
+    {
+      path: "/send/text",
+      headers: { token: instanceToken },
+      body: { number: phone, text, readchat: "1" },
+    },
+    {
+      path: "/chat/send/text",
+      headers: { Token: instanceToken },
+      body: { Phone: phone, Body: text },
+    },
+    {
+      path: "/chat/send/text",
+      headers: { Token: instanceToken },
+      body: { Phone: `${phone}@s.whatsapp.net`, Body: text },
+    },
+    {
+      path: "/chat/send/text",
+      headers: { Authorization: `Bearer ${instanceToken}` },
+      body: { Phone: phone, Body: text },
+    },
+    {
+      path: "/message/text",
+      headers: { Token: instanceToken },
+      body: { id: phone, message: text },
+    },
+    {
+      path: "/api/sendText",
+      headers: { Authorization: `Bearer ${instanceToken}` },
+      body: { chatId: `${phone}@c.us`, text },
+    },
+  ];
+
+  let lastStatus = 0;
+  let lastBody = "";
+  
+  for (const attempt of attempts) {
+    const url = `${base}${attempt.path}`;
+    console.log("Trying UAZAPI text send:", { url, phone, headers: Object.keys(attempt.headers) });
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...attempt.headers },
+      body: JSON.stringify(attempt.body),
+    });
+
+    lastStatus = res.status;
+    lastBody = await res.text();
+    console.log("UAZAPI text response:", { url, status: lastStatus, body: lastBody.substring(0, 200) });
+
+    if (res.ok) {
+      return { sent: true, status: lastStatus, body: lastBody };
+    }
+  }
+
+  return { sent: false, status: lastStatus, body: lastBody };
+}
+
+// Send media message via UAZAPI (based on n8n flow)
+async function sendMediaMessage(base: string, instanceToken: string, phone: string, fileUrl: string, mediaType: string, caption?: string): Promise<{ sent: boolean; status: number; body: string }> {
+  // Based on n8n: POST {base}/send/media with header token and body { number, type, file, readchat, text (optional caption) }
+  const attempts: Array<{ path: string; headers: Record<string, string>; body: Record<string, any> }> = [
+    // n8n style - primary
+    {
+      path: "/send/media",
+      headers: { token: instanceToken },
+      body: { number: phone, type: mediaType, file: fileUrl, readchat: "true", ...(caption ? { text: caption } : {}) },
+    },
+    {
+      path: "/send/media",
+      headers: { token: instanceToken },
+      body: { number: phone, type: mediaType, file: fileUrl, readchat: "1", ...(caption ? { text: caption } : {}) },
+    },
+    // Alternative without type
+    {
+      path: "/send/media",
+      headers: { token: instanceToken },
+      body: { number: phone, file: fileUrl, readchat: "true", ...(caption ? { text: caption } : {}) },
+    },
+    // Wuzapi style
+    {
+      path: "/chat/send/media",
+      headers: { Token: instanceToken },
+      body: { Phone: phone, Url: fileUrl, Caption: caption || "" },
+    },
+    {
+      path: "/chat/send/document",
+      headers: { Token: instanceToken },
+      body: { Phone: phone, Url: fileUrl },
+    },
+    // For audio specifically
+    {
+      path: "/send/audio",
+      headers: { token: instanceToken },
+      body: { number: phone, file: fileUrl, readchat: "true" },
+    },
+  ];
+
+  let lastStatus = 0;
+  let lastBody = "";
+  
+  for (const attempt of attempts) {
+    const url = `${base}${attempt.path}`;
+    console.log("Trying UAZAPI media send:", { url, phone, mediaType, headers: Object.keys(attempt.headers) });
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...attempt.headers },
+      body: JSON.stringify(attempt.body),
+    });
+
+    lastStatus = res.status;
+    lastBody = await res.text();
+    console.log("UAZAPI media response:", { url, status: lastStatus, body: lastBody.substring(0, 200) });
+
+    if (res.ok) {
+      return { sent: true, status: lastStatus, body: lastBody };
+    }
+  }
+
+  return { sent: false, status: lastStatus, body: lastBody };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Log immediately for validation tracking
   console.log("✅ webhook-outbound HIT", {
     method: req.method,
     url: req.url,
@@ -109,8 +249,7 @@ serve(async (req) => {
     const body = await req.json();
     console.log("GHL Outbound payload:", JSON.stringify(body, null, 2));
 
-    // Only handle outbound messages (avoid loops / noise)
-    // Example from your n8n: body.type === "OutboundMessage"
+    // Only handle outbound messages
     const eventType = String(body.type ?? "");
     const direction = String(body.direction ?? "");
     if (eventType !== "OutboundMessage" && direction !== "outbound") {
@@ -121,18 +260,14 @@ serve(async (req) => {
       });
     }
 
-    // GHL sends: { type, locationId, contactId, message, ... }
     const locationId: string | undefined = body.locationId;
     const contactId: string | undefined = body.contactId;
-
-    // Normalize message fields (GHL can send either `message` or `body`)
     const messageText: string = String(body.message ?? body.body ?? "");
-
-    // Normalize phone fields (GHL can send either `phone` or `to`)
     const phoneRaw: string = String(body.phone ?? body.to ?? "");
+    const attachments: string[] = Array.isArray(body.attachments) ? body.attachments : [];
 
-    // If this is just a validation ping (no message content), respond immediately
-    if (!messageText && !phoneRaw && !contactId) {
+    // Validation ping check
+    if (!messageText && !phoneRaw && !contactId && attachments.length === 0) {
       console.log("Validation ping received, responding 200 OK");
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
@@ -152,7 +287,7 @@ serve(async (req) => {
       );
     }
 
-    // Find subaccount by locationId
+    // Find subaccount
     const { data: subaccount, error: subError } = await supabase
       .from("ghl_subaccounts")
       .select("id, user_id, location_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at")
@@ -196,13 +331,11 @@ serve(async (req) => {
       );
     }
 
-    // Extract phone number - don't trust `to` (GHL often sends agent name), fetch contact phone when possible
+    // Get phone from contact
     let targetPhone = phoneRaw || "";
     if (contactId) {
       try {
-        if (!settings?.ghl_client_id || !settings?.ghl_client_secret) {
-          console.error("Missing OAuth client credentials in user_settings");
-        } else {
+        if (settings?.ghl_client_id && settings?.ghl_client_secret) {
           const token = await getValidToken(supabase, subaccount, settings);
           if (token) {
             const contactPhone = await fetchGhlContactPhone(token, contactId);
@@ -214,7 +347,6 @@ serve(async (req) => {
       }
     }
 
-    // Clean phone number (remove +, spaces, etc)
     targetPhone = targetPhone.replace(/\D/g, "");
 
     if (!targetPhone) {
@@ -225,117 +357,56 @@ serve(async (req) => {
       );
     }
 
-    if (!messageText) {
-      console.log("No message text provided; acknowledging");
-      return new Response(JSON.stringify({ success: true, ignored: true, reason: "missing message" }), {
+    // Check if we have content to send
+    if (!messageText && attachments.length === 0) {
+      console.log("No message text or attachments provided; acknowledging");
+      return new Response(JSON.stringify({ success: true, ignored: true, reason: "missing content" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Send message via UAZAPI
-    // Match the working n8n flow:
-    // POST {base}/send/text
-    // header: token: <instanceToken>
-    // body: { number, text, readchat }
     const base = settings.uazapi_base_url.replace(/\/$/, "");
     const instanceToken = instance.uazapi_instance_token;
+    const results: Array<{ type: string; sent: boolean; status: number }> = [];
 
-    // Try multiple endpoint/payload combinations based on different UAZAPI versions
-    const attempts: Array<{ path: string; headers: Record<string, string>; body: Record<string, string> }> = [
-      // n8n style
-      {
-        path: "/send/text",
-        headers: { token: instanceToken },
-        body: { number: targetPhone, text: messageText, readchat: "true" },
-      },
-      // sometimes expects boolean
-      {
-        path: "/send/text",
-        headers: { token: instanceToken },
-        body: { number: targetPhone, text: messageText, readchat: "1" },
-      },
-      // wuzapi style: /chat/send/text with Phone/Body
-      {
-        path: "/chat/send/text",
-        headers: { Token: instanceToken },
-        body: { Phone: targetPhone, Body: messageText },
-      },
-      // Alternative: with @s.whatsapp.net suffix
-      {
-        path: "/chat/send/text",
-        headers: { Token: instanceToken },
-        body: { Phone: `${targetPhone}@s.whatsapp.net`, Body: messageText },
-      },
-      // Alternative header style
-      {
-        path: "/chat/send/text",
-        headers: { Authorization: `Bearer ${instanceToken}` },
-        body: { Phone: targetPhone, Body: messageText },
-      },
-      // message/text style
-      {
-        path: "/message/text",
-        headers: { Token: instanceToken },
-        body: { id: targetPhone, message: messageText },
-      },
-      // api/sendText style
-      {
-        path: "/api/sendText",
-        headers: { Authorization: `Bearer ${instanceToken}` },
-        body: { chatId: `${targetPhone}@c.us`, text: messageText },
-      },
-    ];
-
-    let sent = false;
-    let lastStatus = 0;
-    let lastBody = "";
-    
-    for (const attempt of attempts) {
-      const url = `${base}${attempt.path}`;
-      console.log("Trying UAZAPI send:", { url, phone: targetPhone, headers: Object.keys(attempt.headers) });
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...attempt.headers,
-        },
-        body: JSON.stringify(attempt.body),
-      });
-
-      lastStatus = res.status;
-      lastBody = await res.text();
-      console.log("UAZAPI response:", { url, status: lastStatus, body: lastBody.substring(0, 200) });
-
-      if (res.ok) {
-        sent = true;
-        break;
-      }
+    // Send attachments first (media)
+    for (const attachment of attachments) {
+      const mediaType = detectMediaType(attachment);
+      console.log("Sending media:", { attachment, mediaType, phone: targetPhone });
       
-      // If we get 404, try next. If we get 401/403, might be auth issue
-      if (lastStatus === 401 || lastStatus === 403) {
-        console.log("Auth issue, trying next method...");
+      const result = await sendMediaMessage(base, instanceToken, targetPhone, attachment, mediaType, messageText || undefined);
+      results.push({ type: `media:${mediaType}`, sent: result.sent, status: result.status });
+      
+      if (!result.sent) {
+        console.error("Failed to send media:", { attachment, status: result.status, body: result.body });
       }
     }
 
-    if (!sent) {
-      return new Response(
-        JSON.stringify({ success: true, sent: false, error: "uazapi send failed", lastStatus, lastBody }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Send text message if there's text AND no attachments (to avoid duplicate text)
+    // If there were attachments, text was already sent as caption
+    if (messageText && attachments.length === 0) {
+      console.log("Sending text:", { text: messageText.substring(0, 50), phone: targetPhone });
+      const result = await sendTextMessage(base, instanceToken, targetPhone, messageText);
+      results.push({ type: "text", sent: result.sent, status: result.status });
+      
+      if (!result.sent) {
+        console.error("Failed to send text:", { status: result.status, body: result.body });
+      }
     }
 
-    console.log(`✅ Message sent to WhatsApp: ${targetPhone}`);
+    const allSent = results.every(r => r.sent);
+    const anySent = results.some(r => r.sent);
+
+    console.log(`${anySent ? "✅" : "❌"} Message processing complete:`, { phone: targetPhone, results });
 
     return new Response(
-      JSON.stringify({ success: true, sent: true, phone: targetPhone }),
+      JSON.stringify({ success: true, sent: anySent, allSent, phone: targetPhone, results }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
     console.error("Webhook outbound error:", error);
-    // Always return 200 to avoid GHL retries
     return new Response(
       JSON.stringify({ success: true, error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
