@@ -253,9 +253,11 @@ async function sendMessageToGHL(contactId: string, message: string, token: strin
 }
 
 // Helper to send outbound text message to GHL (from our instance - syncs what WE sent)
+// Uses POST /conversations/messages with conversationId in body (not URL path)
 async function sendOutboundMessageToGHL(conversationId: string, message: string, token: string, userId?: string): Promise<void> {
   const payload: Record<string, unknown> = {
     type: "SMS",
+    conversationId,
     message,
   };
   
@@ -265,11 +267,13 @@ async function sendOutboundMessageToGHL(conversationId: string, message: string,
     console.log("Attributing outbound message to user:", userId);
   }
   
-  const response = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}/messages`, {
+  console.log("Sending outbound message to GHL API:", { conversationId, messagePreview: message?.substring(0, 30), userId });
+  
+  const response = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
-      "Version": "2021-04-15",
+      "Version": "2021-07-28",
       "Content-Type": "application/json",
       "Accept": "application/json",
     },
@@ -281,6 +285,8 @@ async function sendOutboundMessageToGHL(conversationId: string, message: string,
     console.error("Failed to send outbound message to GHL:", errorText);
     throw new Error("Failed to send outbound message to GHL");
   }
+  
+  console.log("✅ Outbound message sent successfully to GHL");
 }
 
 // Helper to get or create conversation for a contact
@@ -355,9 +361,11 @@ async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token
 }
 
 // Helper to send outbound media message to GHL (from our instance)
+// Uses POST /conversations/messages with conversationId in body (not URL path)
 async function sendOutboundMediaToGHL(conversationId: string, attachmentUrls: string[], token: string, caption?: string, userId?: string): Promise<void> {
   const payload: Record<string, unknown> = {
     type: "SMS",
+    conversationId,
     message: caption || "",
     attachments: attachmentUrls,
   };
@@ -368,11 +376,13 @@ async function sendOutboundMediaToGHL(conversationId: string, attachmentUrls: st
     console.log("Attributing outbound media to user:", userId);
   }
   
-  const response = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}/messages`, {
+  console.log("Sending outbound media to GHL API:", { conversationId, attachments: attachmentUrls.length, userId });
+  
+  const response = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
-      "Version": "2021-04-15",
+      "Version": "2021-07-28",
       "Content-Type": "application/json",
       "Accept": "application/json",
     },
@@ -384,6 +394,8 @@ async function sendOutboundMediaToGHL(conversationId: string, attachmentUrls: st
     console.error("Failed to send outbound media to GHL:", errorText);
     throw new Error("Failed to send outbound media to GHL");
   }
+  
+  console.log("✅ Outbound media sent successfully to GHL");
 }
 
 serve(async (req) => {
