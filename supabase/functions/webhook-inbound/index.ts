@@ -307,6 +307,17 @@ serve(async (req) => {
     const chatData = body.chat || {};
     const eventData = body.event || {};
     
+    // CRITICAL: Check if message was sent by the connected WhatsApp instance (fromMe)
+    // If fromMe is true, this is a message WE sent, not the lead - ignore it
+    const isFromMe = messageData.fromMe === true;
+    if (isFromMe) {
+      console.log("Ignoring message sent by us (fromMe=true)");
+      return new Response(
+        JSON.stringify({ received: true, ignored: true, reason: "fromMe message" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     // Get sender info - PRIORITY: chatid/wa_chatid contains the real phone number
     // The "sender" field often contains internal LID (linked ID) which is NOT a valid phone
     const from = chatData.wa_chatid || messageData.chatid || eventData.Chat || messageData.sender || "";
