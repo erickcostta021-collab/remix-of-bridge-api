@@ -22,7 +22,7 @@ import { toast } from "sonner";
 interface Subaccount {
   id: string;
   location_id: string;
-  ghl_subaccount_token: string | null;
+  ghl_access_token: string | null;
 }
 
 interface AssignGHLUserDialogProps {
@@ -50,7 +50,7 @@ export function AssignGHLUserDialog({
   const { fetchLocationUsers, loading: fetchingUsers } = useGHLUsers();
 
   useEffect(() => {
-    if (open && subaccount?.ghl_subaccount_token) {
+    if (open && subaccount?.ghl_access_token) {
       loadUsers();
     }
     if (open) {
@@ -59,8 +59,8 @@ export function AssignGHLUserDialog({
   }, [open, subaccount, currentUserId]);
 
   const loadUsers = async () => {
-    if (!subaccount?.ghl_subaccount_token) {
-      toast.error("Token da subconta não configurado");
+    if (!subaccount?.ghl_access_token) {
+      toast.error("App não instalado - instale o app na subconta primeiro");
       return;
     }
 
@@ -68,7 +68,7 @@ export function AssignGHLUserDialog({
     try {
       const users = await fetchLocationUsers(
         subaccount.location_id,
-        subaccount.ghl_subaccount_token
+        subaccount.ghl_access_token
       );
       setGhlUsers(users);
     } catch (error: any) {
@@ -99,9 +99,9 @@ export function AssignGHLUserDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {!subaccount?.ghl_subaccount_token ? (
+          {!subaccount?.ghl_access_token ? (
             <div className="text-center py-4 text-amber-400">
-              Configure o Token da Subconta primeiro para carregar os usuários
+              Instale o app na subconta primeiro (via OAuth) para carregar os usuários
             </div>
           ) : (
             <>
@@ -165,7 +165,7 @@ export function AssignGHLUserDialog({
           </Button>
           <Button 
             onClick={handleAssign} 
-            disabled={isAssigning || !subaccount?.ghl_subaccount_token}
+            disabled={isAssigning || !subaccount?.ghl_access_token}
           >
             {isAssigning && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Salvar

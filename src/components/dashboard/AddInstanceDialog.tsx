@@ -65,13 +65,13 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
   }, [open, subaccount.location_id]);
 
   const loadGHLUsers = async () => {
-    if (!subaccount.ghl_subaccount_token) {
-      console.warn("Subconta sem token configurado");
+    if (!subaccount.ghl_access_token) {
+      console.warn("App não instalado na subconta via OAuth");
       return;
     }
     setLoadingUsers(true);
     try {
-      const users = await fetchLocationUsers(subaccount.location_id, subaccount.ghl_subaccount_token);
+      const users = await fetchLocationUsers(subaccount.location_id, subaccount.ghl_access_token);
       setGhlUsers(users);
     } catch (error: any) {
       console.error("Error loading GHL users:", error);
@@ -271,9 +271,9 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
                 </SelectTrigger>
                 <SelectContent className="bg-popover border-border">
                   <SelectItem value="none">Nenhum usuário</SelectItem>
-                  {!subaccount.ghl_subaccount_token ? (
+                  {!subaccount.ghl_access_token ? (
                     <div className="px-2 py-2 text-xs text-muted-foreground">
-                      Token da subconta não configurado
+                      App não instalado na subconta
                     </div>
                   ) : loadingUsers ? (
                     <div className="flex items-center justify-center py-2">

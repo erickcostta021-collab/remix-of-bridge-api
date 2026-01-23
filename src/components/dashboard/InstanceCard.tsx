@@ -85,7 +85,7 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const [subaccount, setSubaccount] = useState<{
     id: string;
     location_id: string;
-    ghl_subaccount_token: string | null;
+    ghl_access_token: string | null;
   } | null>(null);
 
   // Fetch subaccount data for GHL user assignment
@@ -93,17 +93,17 @@ export function InstanceCard({ instance }: InstanceCardProps) {
     const fetchSubaccount = async () => {
       const { data } = await supabase
         .from("ghl_subaccounts")
-        .select("id, location_id, ghl_subaccount_token")
+        .select("id, location_id, ghl_access_token")
         .eq("id", instance.subaccount_id)
         .single();
       
       if (data) {
         setSubaccount(data);
         
-        // Fetch GHL user name if assigned
-        if (instance.ghl_user_id && data.ghl_subaccount_token) {
+        // Fetch GHL user name if assigned (using OAuth token)
+        if (instance.ghl_user_id && data.ghl_access_token) {
           try {
-            const users = await fetchLocationUsers(data.location_id, data.ghl_subaccount_token);
+            const users = await fetchLocationUsers(data.location_id, data.ghl_access_token);
             const user = users.find(u => u.id === instance.ghl_user_id);
             if (user) {
               setGhlUserName(user.name);

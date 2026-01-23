@@ -40,7 +40,7 @@ interface EmbedInstanceCardProps {
   subaccountId: string;
   embedToken: string;
   locationId: string;
-  ghlSubaccountToken: string | null;
+  ghlAccessToken: string | null;
   uazapiBaseUrl: string;
   uazapiAdminToken: string;
   onStatusChange?: () => void;
@@ -51,7 +51,7 @@ export function EmbedInstanceCard({
   subaccountId,
   embedToken,
   locationId,
-  ghlSubaccountToken,
+  ghlAccessToken,
   uazapiBaseUrl,
   uazapiAdminToken,
   onStatusChange 
@@ -166,17 +166,17 @@ export function EmbedInstanceCard({
     return statusMap[uazapiStatus] || "disconnected";
   };
 
-  // Fetch GHL user name on mount
+  // Fetch GHL user name on mount (using OAuth token)
   useEffect(() => {
     const fetchGhlUserName = async () => {
-      if (currentGhlUserId && ghlSubaccountToken && locationId) {
+      if (currentGhlUserId && ghlAccessToken && locationId) {
         try {
           const response = await fetch(
             `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
             {
               method: "GET",
               headers: {
-                "Authorization": `Bearer ${ghlSubaccountToken}`,
+                "Authorization": `Bearer ${ghlAccessToken}`,
                 "Version": "2021-07-28",
                 "Content-Type": "application/json",
               },
@@ -197,7 +197,7 @@ export function EmbedInstanceCard({
     };
 
     fetchGhlUserName();
-  }, [currentGhlUserId, ghlSubaccountToken, locationId]);
+  }, [currentGhlUserId, ghlAccessToken, locationId]);
 
   useEffect(() => {
     // Only fetch from UAZAPI if we don't have cached data
@@ -527,7 +527,7 @@ export function EmbedInstanceCard({
         currentUserId={currentGhlUserId || null}
         embedToken={embedToken}
         locationId={locationId}
-        ghlSubaccountToken={ghlSubaccountToken}
+        ghlAccessToken={ghlAccessToken}
         onAssigned={handleUserAssigned}
       />
     </>
