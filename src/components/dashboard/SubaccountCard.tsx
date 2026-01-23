@@ -73,7 +73,7 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
     }
   };
 
-  const hasToken = !!subaccount.ghl_subaccount_token;
+  const isAppInstalled = !!subaccount.ghl_access_token;
 
   return (
     <Card
@@ -126,9 +126,9 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-2">
-          {!hasToken && (
+          {!isAppInstalled && (
             <Badge variant="outline" className="border-warning text-warning">
-              Token não configurado
+              App não instalado
             </Badge>
           )}
           {totalCount > 0 ? (
@@ -145,7 +145,7 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
                 </Badge>
               )}
             </>
-          ) : hasToken ? (
+          ) : isAppInstalled ? (
             <Badge variant="outline" className="border-border text-muted-foreground">
               Sem instâncias
             </Badge>
