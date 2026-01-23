@@ -8,13 +8,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSettings } from "@/hooks/useSettings";
 import { useExternalSupabase } from "@/hooks/useExternalSupabase";
+import { useAuth } from "@/hooks/useAuth";
 import { CANONICAL_APP_ORIGIN, getOAuthRedirectUri } from "@/lib/canonicalOrigin";
-import { Save, Loader2, Eye, EyeOff, Database, RefreshCw, ExternalLink, Info, CheckCircle2 } from "lucide-react";
+import { Save, Loader2, Eye, EyeOff, Database, RefreshCw, Info, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+
+const ADMIN_EMAIL = "erickcostta021@gmail.com";
 
 export default function Settings() {
   const { settings, isLoading, updateSettings, applyGlobalWebhook, getOAuthUrl } = useSettings();
   const { syncToExternal } = useExternalSupabase();
+  const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
   const [showTokens, setShowTokens] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -86,6 +91,13 @@ export default function Settings() {
   const outboundWebhookUrl = `${supabaseUrl}/functions/v1/webhook-outbound`;
   const isPreviewDomain = window.location.origin !== CANONICAL_APP_ORIGIN;
 
+  // Set default webhook URL if not set
+  useEffect(() => {
+    if (settings && !formData.global_webhook_url && inboundWebhookUrl) {
+      setFormData(prev => ({ ...prev, global_webhook_url: inboundWebhookUrl }));
+    }
+  }, [settings, inboundWebhookUrl]);
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -106,9 +118,9 @@ export default function Settings() {
           </p>
         </div>
 
-        <Tabs defaultValue="oauth" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="oauth">OAuth GHL</TabsTrigger>
+        <Tabs defaultValue={isAdmin ? "oauth" : "integrations"} className="w-full">
+          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-3" : "grid-cols-2"}`}>
+            {isAdmin && <TabsTrigger value="oauth">OAuth GHL</TabsTrigger>}
             <TabsTrigger value="integrations">Integrações</TabsTrigger>
             <TabsTrigger value="external-supabase">
               <Database className="h-4 w-4 mr-2" />
@@ -116,6 +128,7 @@ export default function Settings() {
             </TabsTrigger>
           </TabsList>
 
+          {isAdmin && (
           <TabsContent value="oauth" className="space-y-6 mt-6">
             {/* OAuth Configuration */}
             <Card className="bg-card border-border">
@@ -218,6 +231,7 @@ export default function Settings() {
               </CardContent>
             </Card>
           </TabsContent>
+          )}
 
           <TabsContent value="integrations" className="space-y-6 mt-6">
             {/* GHL Settings */}
