@@ -6,6 +6,55 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper to download media from UAZAPI and get public URL
+async function getPublicMediaUrl(
+  baseUrl: string, 
+  instanceToken: string, 
+  messageId: string
+): Promise<string | null> {
+  // Try UAZAPI endpoint to download media
+  const endpoints = [
+    { path: "/chat/downloadMediaMessage", headerKey: "Token", bodyKey: "MessageID" },
+    { path: "/message/download", headerKey: "token", bodyKey: "messageId" },
+  ];
+
+  for (const endpoint of endpoints) {
+    const url = `${baseUrl}${endpoint.path}`;
+    console.log("Trying UAZAPI media download:", { url, messageId });
+
+    try {
+      const headers: Record<string, string> = { 
+        "Content-Type": "application/json",
+        [endpoint.headerKey]: instanceToken,
+      };
+      
+      const body: Record<string, string> = {
+        [endpoint.bodyKey]: messageId,
+      };
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // UAZAPI returns the file URL in different fields
+        const fileUrl = data.url || data.URL || data.fileUrl || data.FileUrl || data.file || null;
+        if (fileUrl) {
+          console.log("Got public media URL:", fileUrl);
+          return fileUrl;
+        }
+      }
+    } catch (e) {
+      console.error("Media download attempt failed:", e);
+    }
+  }
+
+  return null;
+}
+
 // Helper to get valid access token (refresh if needed)
 async function getValidToken(supabase: any, integration: any, settings: any): Promise<string> {
   const now = new Date();
@@ -289,10 +338,10 @@ serve(async (req) => {
       );
     }
 
-    // Get user settings for OAuth credentials
+    // Get user settings for OAuth credentials AND uazapi_base_url
     const { data: settings } = await supabase
       .from("user_settings")
-      .select("ghl_client_id, ghl_client_secret")
+      .select("ghl_client_id, ghl_client_secret, uazapi_base_url")
       .eq("user_id", subaccount.user_id)
       .single();
 
@@ -317,8 +366,24 @@ serve(async (req) => {
 
     // Send message to GHL - handle media vs text
     if (isMediaMessage && mediaUrl) {
-      console.log("Sending media to GHL:", { mediaUrl, textMessage });
-      await sendMediaToGHL(contact.id, [mediaUrl], token, textMessage || undefined);
+      // Get message ID for download
+      const messageId = messageData.messageid || messageData.id || "";
+      const baseUrl = settings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
+      
+      // Try to get public URL via UAZAPI download endpoint
+      let publicMediaUrl = mediaUrl;
+      if (baseUrl && messageId) {
+        console.log("Attempting to get public media URL via UAZAPI download:", { baseUrl, messageId });
+        const downloadedUrl = await getPublicMediaUrl(baseUrl, instanceToken, messageId);
+        if (downloadedUrl) {
+          publicMediaUrl = downloadedUrl;
+        } else {
+          console.log("Could not get public URL, using original encrypted URL");
+        }
+      }
+      
+      console.log("Sending media to GHL:", { publicMediaUrl, textMessage });
+      await sendMediaToGHL(contact.id, [publicMediaUrl], token, textMessage || undefined);
     } else {
       console.log("Sending text to GHL:", { textMessage: textMessage?.substring(0, 50) });
       await sendMessageToGHL(contact.id, textMessage, token);
