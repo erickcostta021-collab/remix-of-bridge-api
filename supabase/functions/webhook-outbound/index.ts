@@ -292,10 +292,20 @@ serve(async (req) => {
     
     console.log("GHL Outbound payload:", JSON.stringify(body, null, 2));
 
-    // Only handle outbound messages
+    // Extract message data first to check if it's a valid outbound message
     const eventType = String(body.type ?? "");
     const direction = String(body.direction ?? "");
-    if (eventType !== "OutboundMessage" && direction !== "outbound") {
+    const messageText: string = String(body.message ?? body.body ?? "");
+    const phoneRaw: string = String(body.phone ?? body.to ?? "");
+    const attachments: string[] = Array.isArray(body.attachments) ? body.attachments : [];
+    
+    // Accept messages if:
+    // 1. type is OutboundMessage OR direction is outbound
+    // 2. OR type is SMS with phone and content (GHL sends SMS type for user-sent messages)
+    const isOutbound = eventType === "OutboundMessage" || direction === "outbound";
+    const isSmsWithContent = eventType === "SMS" && phoneRaw && (messageText || attachments.length > 0);
+    
+    if (!isOutbound && !isSmsWithContent) {
       console.log("Ignoring non-outbound event:", { eventType, direction });
       return new Response(JSON.stringify({ success: true, ignored: true, reason: "not outbound" }), {
         status: 200,
@@ -305,9 +315,6 @@ serve(async (req) => {
 
     const locationId: string | undefined = body.locationId;
     const contactId: string | undefined = body.contactId;
-    const messageText: string = String(body.message ?? body.body ?? "");
-    const phoneRaw: string = String(body.phone ?? body.to ?? "");
-    const attachments: string[] = Array.isArray(body.attachments) ? body.attachments : [];
 
     // Validation ping check
     if (!messageText && !phoneRaw && !contactId && attachments.length === 0) {
