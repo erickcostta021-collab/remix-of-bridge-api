@@ -208,6 +208,30 @@ export function InstanceCard({ instance }: InstanceCardProps) {
     }
   };
 
+  // Force regenerate QR Code without checking status - used by "Gerar Novo QR Code" button
+  const handleRegenerateQR = async () => {
+    setLoadingQR(true);
+    setQrCode(null); // Clear current QR to show loading
+    try {
+      const qr = await connectInstance(instance);
+      if (qr) {
+        setQrCode(qr);
+      } else {
+        // Fallback: try getQRCode if connect didn't return QR
+        const qrFallback = await getQRCode(instance);
+        if (qrFallback) {
+          setQrCode(qrFallback);
+        } else {
+          toast.error("QR Code não disponível");
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao gerar novo QR Code");
+    } finally {
+      setLoadingQR(false);
+    }
+  };
+
   const handleSyncStatus = async () => {
     setSyncing(true);
     try {
@@ -474,8 +498,12 @@ export function InstanceCard({ instance }: InstanceCardProps) {
               <p className="text-sm text-muted-foreground text-center">
                 Abra o WhatsApp → Menu → Dispositivos conectados → Conectar dispositivo
               </p>
-              <Button onClick={handleConnect} variant="outline" className="border-border">
-                <RefreshCw className="h-4 w-4 mr-2" />
+              <Button onClick={handleRegenerateQR} variant="outline" className="border-border" disabled={loadingQR}>
+                {loadingQR ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
                 Gerar Novo QR Code
               </Button>
             </div>
