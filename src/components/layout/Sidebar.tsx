@@ -23,11 +23,10 @@ const navItems = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const { signOut, user } = useAuth();
+  const { signOut } = useAuth();
   const { getOAuthUrl } = useSettings();
   const location = useLocation();
 
-  const isAdmin = user?.email === ADMIN_EMAIL;
   const oauthUrl = getOAuthUrl();
 
   const handleSignOut = async () => {
@@ -105,8 +104,8 @@ export function Sidebar() {
               </NavLink>
             );
           })}
-          {/* Install App Button - Admin only */}
-          {isAdmin && oauthUrl && (
+          {/* Install App Button */}
+          {oauthUrl && (
             <button
               onClick={handleInstallApp}
               className={cn(
