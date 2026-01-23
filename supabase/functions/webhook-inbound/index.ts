@@ -6,50 +6,99 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Media content structure from UAZAPI
+interface MediaContent {
+  URL?: string;
+  url?: string;
+  mimetype?: string;
+  Mimetype?: string;
+  fileSHA256?: string;
+  FileSHA256?: string;
+  fileLength?: number;
+  FileLength?: number;
+  mediaKey?: string;
+  MediaKey?: string;
+  fileEncSHA256?: string;
+  FileEncSHA256?: string;
+  directPath?: string;
+  DirectPath?: string;
+}
+
 // Helper to download media from UAZAPI and get public URL
 async function getPublicMediaUrl(
   baseUrl: string, 
   instanceToken: string, 
-  messageId: string
+  mediaContent: MediaContent
 ): Promise<string | null> {
-  // Try UAZAPI endpoint to download media
-  const endpoints = [
-    { path: "/chat/downloadMediaMessage", headerKey: "Token", bodyKey: "MessageID" },
-    { path: "/message/download", headerKey: "token", bodyKey: "messageId" },
-  ];
+  // Extract media info - normalize field names (UAZAPI uses mixed case)
+  const url = mediaContent.URL || mediaContent.url || "";
+  const mimetype = mediaContent.mimetype || mediaContent.Mimetype || "";
+  const fileSHA256 = mediaContent.fileSHA256 || mediaContent.FileSHA256 || "";
+  const fileLength = mediaContent.fileLength || mediaContent.FileLength || 0;
+  const mediaKey = mediaContent.mediaKey || mediaContent.MediaKey || "";
+  const fileEncSHA256 = mediaContent.fileEncSHA256 || mediaContent.FileEncSHA256 || "";
+  const directPath = mediaContent.directPath || mediaContent.DirectPath || "";
 
-  for (const endpoint of endpoints) {
-    const url = `${baseUrl}${endpoint.path}`;
-    console.log("Trying UAZAPI media download:", { url, messageId });
+  if (!url || !mediaKey) {
+    console.log("Missing required media fields for download");
+    return null;
+  }
 
-    try {
-      const headers: Record<string, string> = { 
+  // Determine endpoint based on mimetype
+  let endpoint = "/chat/downloadmedia";
+  if (mimetype.startsWith("image/")) {
+    endpoint = "/chat/downloadimage";
+  } else if (mimetype.startsWith("video/")) {
+    endpoint = "/chat/downloadvideo";
+  } else if (mimetype.startsWith("audio/")) {
+    endpoint = "/chat/downloadaudio";
+  }
+
+  const downloadUrl = `${baseUrl}${endpoint}`;
+  console.log("Trying UAZAPI media download:", { downloadUrl, mimetype });
+
+  try {
+    const res = await fetch(downloadUrl, {
+      method: "POST",
+      headers: { 
         "Content-Type": "application/json",
-        [endpoint.headerKey]: instanceToken,
-      };
-      
-      const body: Record<string, string> = {
-        [endpoint.bodyKey]: messageId,
-      };
+        "Token": instanceToken,
+      },
+      body: JSON.stringify({
+        Url: url,
+        DirectPath: directPath,
+        Mimetype: mimetype,
+        FileSHA256: fileSHA256,
+        FileLength: fileLength,
+        MediaKey: mediaKey,
+        FileEncSHA256: fileEncSHA256,
+      }),
+    });
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      });
+    const responseText = await res.text();
+    console.log("UAZAPI download response:", { status: res.status, body: responseText.substring(0, 300) });
 
-      if (res.ok) {
-        const data = await res.json();
-        // UAZAPI returns the file URL in different fields
-        const fileUrl = data.url || data.URL || data.fileUrl || data.FileUrl || data.file || null;
+    if (res.ok) {
+      try {
+        const data = JSON.parse(responseText);
+        // UAZAPI returns various field names for the file URL
+        const fileUrl = data.url || data.URL || data.Url || 
+                       data.fileUrl || data.FileUrl || data.fileURL ||
+                       data.file || data.File || data.Data || null;
         if (fileUrl) {
           console.log("Got public media URL:", fileUrl);
           return fileUrl;
         }
+      } catch {
+        // Response might be the URL directly
+        if (responseText.startsWith("http")) {
+          console.log("Got public media URL (direct):", responseText.substring(0, 100));
+          return responseText.trim();
+        }
       }
-    } catch (e) {
-      console.error("Media download attempt failed:", e);
     }
+  } catch (e) {
+    console.error("Media download attempt failed:", e);
   }
 
   return null;
@@ -366,15 +415,13 @@ serve(async (req) => {
 
     // Send message to GHL - handle media vs text
     if (isMediaMessage && mediaUrl) {
-      // Get message ID for download
-      const messageId = messageData.messageid || messageData.id || "";
       const baseUrl = settings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
       
       // Try to get public URL via UAZAPI download endpoint
       let publicMediaUrl = mediaUrl;
-      if (baseUrl && messageId) {
-        console.log("Attempting to get public media URL via UAZAPI download:", { baseUrl, messageId });
-        const downloadedUrl = await getPublicMediaUrl(baseUrl, instanceToken, messageId);
+      if (baseUrl && contentRaw && typeof contentRaw === "object") {
+        console.log("Attempting to get public media URL via UAZAPI download:", { baseUrl, mimetype: contentRaw.mimetype });
+        const downloadedUrl = await getPublicMediaUrl(baseUrl, instanceToken, contentRaw as MediaContent);
         if (downloadedUrl) {
           publicMediaUrl = downloadedUrl;
         } else {
