@@ -641,9 +641,14 @@ export function useInstances(subaccountId?: string) {
         },
       });
 
+      // Clear status, phone and profile pic when disconnecting
       const { error } = await supabase
         .from("instances")
-        .update({ instance_status: "disconnected" })
+        .update({ 
+          instance_status: "disconnected",
+          phone: null,
+          profile_pic_url: null
+        })
         .eq("id", instance.id);
 
       if (error) throw error;
