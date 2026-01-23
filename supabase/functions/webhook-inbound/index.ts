@@ -142,12 +142,17 @@ serve(async (req) => {
     console.log("UAZAPI Webhook received:", JSON.stringify(body, null, 2));
 
     // Handle different event types from UAZAPI
-    const event = body.event || body.type;
+    // EventType is a string, but event can be an object
+    const eventType = body.EventType || body.type || "";
     
-    if (!event || !event.includes("message")) {
+    // Check if it's a message event (string check)
+    const isMessageEvent = typeof eventType === "string" && eventType.toLowerCase().includes("message");
+    
+    if (!isMessageEvent) {
       // Not a message event, acknowledge
+      console.log("Not a message event, ignoring:", eventType);
       return new Response(
-        JSON.stringify({ received: true, ignored: true }),
+        JSON.stringify({ received: true, ignored: true, eventType }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
