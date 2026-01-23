@@ -252,41 +252,39 @@ async function sendMessageToGHL(contactId: string, message: string, token: strin
   }
 }
 
-// Helper to send outbound text message to GHL (from our instance - syncs what WE sent)
-// Uses POST /conversations/messages with conversationId in body (not URL path)
-async function sendOutboundMessageToGHL(conversationId: string, message: string, token: string, userId?: string): Promise<void> {
+// Helper to send outbound text message to GHL (render what WE sent)
+// Docs: POST /conversations/messages requires contactId (and returns conversationId)
+async function sendOutboundMessageToGHL(contactId: string, message: string, token: string): Promise<void> {
   const payload: Record<string, unknown> = {
     type: "SMS",
-    conversationId,
+    contactId,
     message,
+    status: "delivered",
   };
-  
-  // If userId is provided, attribute the message to the attendant
-  if (userId) {
-    payload.userId = userId;
-    console.log("Attributing outbound message to user:", userId);
-  }
-  
-  console.log("Sending outbound message to GHL API:", { conversationId, messagePreview: message?.substring(0, 30), userId });
-  
+
+  console.log("Sending outbound message to GHL API:", {
+    contactId,
+    messagePreview: message?.substring(0, 30),
+  });
+
   const response = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
-      "Version": "2021-07-28",
+      "Version": "2021-04-15",
       "Content-Type": "application/json",
       "Accept": "application/json",
     },
     body: JSON.stringify(payload),
   });
 
+  const responseText = await response.text();
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Failed to send outbound message to GHL:", errorText);
+    console.error("Failed to send outbound message to GHL:", responseText);
     throw new Error("Failed to send outbound message to GHL");
   }
-  
-  console.log("✅ Outbound message sent successfully to GHL");
+
+  console.log("✅ Outbound message sent successfully to GHL:", responseText.substring(0, 300));
 }
 
 // Helper to get or create conversation for a contact
@@ -360,42 +358,39 @@ async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token
   }
 }
 
-// Helper to send outbound media message to GHL (from our instance)
-// Uses POST /conversations/messages with conversationId in body (not URL path)
-async function sendOutboundMediaToGHL(conversationId: string, attachmentUrls: string[], token: string, caption?: string, userId?: string): Promise<void> {
+// Helper to send outbound media message to GHL (render what WE sent)
+async function sendOutboundMediaToGHL(contactId: string, attachmentUrls: string[], token: string, caption?: string): Promise<void> {
   const payload: Record<string, unknown> = {
     type: "SMS",
-    conversationId,
+    contactId,
     message: caption || "",
     attachments: attachmentUrls,
+    status: "delivered",
   };
-  
-  // If userId is provided, attribute the message to the attendant
-  if (userId) {
-    payload.userId = userId;
-    console.log("Attributing outbound media to user:", userId);
-  }
-  
-  console.log("Sending outbound media to GHL API:", { conversationId, attachments: attachmentUrls.length, userId });
-  
+
+  console.log("Sending outbound media to GHL API:", {
+    contactId,
+    attachments: attachmentUrls.length,
+  });
+
   const response = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
-      "Version": "2021-07-28",
+      "Version": "2021-04-15",
       "Content-Type": "application/json",
       "Accept": "application/json",
     },
     body: JSON.stringify(payload),
   });
 
+  const responseText = await response.text();
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Failed to send outbound media to GHL:", errorText);
+    console.error("Failed to send outbound media to GHL:", responseText);
     throw new Error("Failed to send outbound media to GHL");
   }
-  
-  console.log("✅ Outbound media sent successfully to GHL");
+
+  console.log("✅ Outbound media sent successfully to GHL:", responseText.substring(0, 300));
 }
 
 serve(async (req) => {
@@ -599,33 +594,29 @@ serve(async (req) => {
     const shouldSyncAsOutbound = isFromMe || isAgentIaMessage;
     
     if (shouldSyncAsOutbound) {
-      // This is a message WE sent via WhatsApp OR from AI agent - sync as outbound in GHL
-      // Get the ghl_user_id from the instance to attribute the message to the attendant (if assigned)
-      const assignedUserId = instance.ghl_user_id || undefined;
-      
-      console.log("Syncing outbound message:", { 
+      // This is a message WE sent via WhatsApp OR from AI agent - render as outbound in GHL
+      // NOTE: GHL's /conversations/messages supports userId only for InternalComment.
+      // For SMS, attribution should be handled by contact assignment (already done above).
+
+      console.log("Syncing outbound message:", {
         isFromMe,
         isAgentIaMessage,
         wasSentByApi,
-        assignedUserId,
-        textMessage: textMessage?.substring(0, 50), 
-        isMedia: isMediaMessage 
+        instanceAssignedUserId: instance.ghl_user_id || null,
+        textMessage: textMessage?.substring(0, 50),
+        isMedia: isMediaMessage,
       });
-      
-      // Get or create conversation for this contact
-      const conversationId = await getOrCreateConversation(contact.id, subaccount.location_id, token);
-      console.log("Got conversation ID:", conversationId);
-      
+
       if (isMediaMessage && publicMediaUrl) {
-        console.log("Sending outbound media to GHL:", { publicMediaUrl, textMessage, assignedUserId });
-        await sendOutboundMediaToGHL(conversationId, [publicMediaUrl], token, textMessage || undefined, assignedUserId);
+        console.log("Sending outbound media to GHL:", { publicMediaUrl, textMessage });
+        await sendOutboundMediaToGHL(contact.id, [publicMediaUrl], token, textMessage || undefined);
       } else if (textMessage) {
-        console.log("Sending outbound text to GHL:", { textMessage: textMessage?.substring(0, 50), assignedUserId });
-        await sendOutboundMessageToGHL(conversationId, textMessage, token, assignedUserId);
+        console.log("Sending outbound text to GHL:", { textMessage: textMessage?.substring(0, 50) });
+        await sendOutboundMessageToGHL(contact.id, textMessage, token);
       }
-      
+
       const source = isAgentIaMessage ? "agent_ia" : (wasSentByApi ? "api" : "manual");
-      console.log(`✅ Outbound message synced to GHL (${source}): ${phoneNumber} -> ${contact.id}${assignedUserId ? ` [user: ${assignedUserId}]` : ""}`);
+      console.log(`✅ Outbound message synced to GHL (${source}): ${phoneNumber} -> ${contact.id}`);
     } else {
       // This is a message FROM the lead - send as inbound
       if (isMediaMessage && publicMediaUrl) {
