@@ -10,7 +10,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useExternalSupabase } from "@/hooks/useExternalSupabase";
 import { useAuth } from "@/hooks/useAuth";
 import { CANONICAL_APP_ORIGIN, getOAuthRedirectUri } from "@/lib/canonicalOrigin";
-import { Save, Loader2, Eye, EyeOff, Info, CheckCircle2, Wand2 } from "lucide-react";
+import { Save, Loader2, Eye, EyeOff, Info, CheckCircle2, Wand2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
 const ADMIN_EMAIL = "erickcostta021@gmail.com";
@@ -21,6 +21,7 @@ export default function Settings() {
   const { user } = useAuth();
   const isAdmin = user?.email === ADMIN_EMAIL;
   const [showTokens, setShowTokens] = useState(false);
+  const [copiedTrackId, setCopiedTrackId] = useState(false);
   
   const [formData, setFormData] = useState({
     ghl_agency_token: "",
@@ -234,6 +235,50 @@ export default function Settings() {
           )}
 
           <TabsContent value="integrations" className="space-y-6 mt-6">
+            {/* Track ID - Installation Identifier */}
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-card-foreground">Identificador da Instalação</CardTitle>
+                <CardDescription>
+                  Código único da sua conta para identificar mensagens de agentes de IA
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Label>Track ID</Label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 p-3 bg-secondary rounded text-sm font-mono break-all select-all">
+                      {settings?.track_id || "Gerando..."}
+                    </code>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="border-border shrink-0"
+                      onClick={() => {
+                        if (settings?.track_id) {
+                          navigator.clipboard.writeText(settings.track_id);
+                          setCopiedTrackId(true);
+                          toast.success("Track ID copiado!");
+                          setTimeout(() => setCopiedTrackId(false), 2000);
+                        }
+                      }}
+                      disabled={!settings?.track_id}
+                    >
+                      {copiedTrackId ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use este código no campo <code className="bg-secondary px-1 rounded">track_id</code> ao enviar mensagens via API para sincronizar com o GHL.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* GHL Settings */}
             <Card className="bg-card border-border">
               <CardHeader>

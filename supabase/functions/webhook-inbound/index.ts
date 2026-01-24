@@ -448,17 +448,15 @@ serve(async (req) => {
     // Note: wasSentByApi may come at root level or inside message object
     const wasSentByApi = body.wasSentByApi === true || messageData.wasSentByApi === true;
     const trackId = String(body.track_id || messageData.track_id || "").trim();
-    // Messages with track_id === "agente_ia" are from our AI agent and should be synced as outbound.
-    // We do NOT require isFromMe here because the API might not set it consistently.
-    const isAgentIaMessage = trackId === "agente_ia";
     
-    console.log("API Agent check:", { wasSentByApi, trackId, isFromMe, isAgentIaMessage });
+    console.log("API Agent check:", { wasSentByApi, trackId, isFromMe });
 
     // IMPORTANT:
-    // If UAZAPI marks the message as API-sent but it is NOT our AI agent marker,
+    // If UAZAPI marks the message as API-sent but there's no track_id,
     // we must discard it to avoid infinite loops (e.g., messages mirrored from GHL -> UAZAPI).
-    if (wasSentByApi && trackId !== "agente_ia") {
-      console.log("Discarding API-sent message without agente_ia track_id:", {
+    // The track_id validation against user's configured track_id happens later after we fetch the instance.
+    if (wasSentByApi && !trackId) {
+      console.log("Discarding API-sent message without track_id:", {
         wasSentByApi,
         trackId,
         isFromMe,
@@ -469,7 +467,7 @@ serve(async (req) => {
         JSON.stringify({
           received: true,
           ignored: true,
-          reason: "discard_non_agent_api_message",
+          reason: "discard_api_message_no_track_id",
           wasSentByApi,
           trackId,
         }),
@@ -518,7 +516,7 @@ serve(async (req) => {
       mediaType,
       pushName,
       isFromMe,
-      isAgentIaMessage,
+      trackId,
       isSticker,
       instanceToken: instanceToken?.substring(0, 20) + "..." 
     });
@@ -591,10 +589,10 @@ serve(async (req) => {
       );
     }
 
-    // Get user settings for OAuth credentials AND uazapi_base_url
+    // Get user settings for OAuth credentials AND uazapi_base_url AND track_id
     const { data: settings } = await supabase
       .from("user_settings")
-      .select("ghl_client_id, ghl_client_secret, uazapi_base_url")
+      .select("ghl_client_id, ghl_client_secret, uazapi_base_url, track_id")
       .eq("user_id", subaccount.user_id)
       .single();
 
@@ -605,6 +603,32 @@ serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Validate track_id: if message was sent by API but doesn't match user's configured track_id, discard it
+    // This prevents loops from other systems while allowing authorized AI agent messages through
+    const userTrackId = settings.track_id || "";
+    const isAgentIaMessage = wasSentByApi && trackId && trackId === userTrackId;
+    
+    if (wasSentByApi && trackId && trackId !== userTrackId) {
+      console.log("Discarding API-sent message with mismatched track_id:", {
+        wasSentByApi,
+        incomingTrackId: trackId,
+        expectedTrackId: userTrackId,
+        messageid: messageData.messageid || messageData.id,
+      });
+
+      return new Response(
+        JSON.stringify({
+          received: true,
+          ignored: true,
+          reason: "discard_mismatched_track_id",
+          incomingTrackId: trackId,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Track ID validation:", { incomingTrackId: trackId, userTrackId, isAgentIaMessage });
 
     // Get valid token
     const token = await getValidToken(supabase, subaccount, settings);
