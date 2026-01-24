@@ -138,7 +138,7 @@ export function AuthForm() {
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
           </div>
           <CardTitle className="text-2xl font-bold text-foreground">
-            Instance Manager Hub
+            Instance Manager
           </CardTitle>
           <CardDescription className="text-muted-foreground">
             {step === "login" && "Entre para gerenciar suas instâncias"}
