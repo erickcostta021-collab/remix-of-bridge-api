@@ -69,6 +69,18 @@ export function EmbedInstanceCard({
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
 
+  const normalizeQr = (raw: unknown): string | null => {
+    if (!raw) return null;
+    const s = String(raw);
+    if (!s) return null;
+    if (s.startsWith("data:image")) return s;
+    // base64 PNG without prefix
+    if (/^[A-Za-z0-9+/=]+$/.test(s) && s.length > 200) {
+      return `data:image/png;base64,${s}`;
+    }
+    return s;
+  };
+
   const callUazapiProxy = async (action: "status" | "connect" | "qrcode") => {
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/uazapi-proxy-embed`;
     const res = await fetch(url, {
@@ -141,15 +153,17 @@ export function EmbedInstanceCard({
         || "";
       
        // Extract QR Code when available (some servers return it from /instance/status)
-       const qrcode =
-         data.instance?.qrcode ||
-         data.qrcode ||
-         data.qr ||
-         data.base64 ||
-         data.qr_code ||
-         data.data?.qrcode ||
-         data.data?.qr ||
-         null;
+       const qrcodeRaw =
+          data.instance?.qrcode ||
+          data.qrcode ||
+          data.qr ||
+          data.base64 ||
+          data.qr_code ||
+          data.data?.qrcode ||
+          data.data?.qr ||
+          null;
+
+       const qrcode = normalizeQr(qrcodeRaw);
 
        // Determine status reliably: require loggedIn/jid or connected-like instance.status,
        // and require phone/jid/owner to consider it truly connected.
@@ -234,25 +248,47 @@ export function EmbedInstanceCard({
     if (!instance.phone || !instance.profile_pic_url) {
       fetchInstanceStatus().then((result) => {
         if (result) {
-          if (result.phone) setConnectedPhone(result.phone);
-          if (result.profilePicUrl) setProfilePicUrl(result.profilePicUrl);
           setCurrentStatus(result.status);
-          // Save to DB cache via update
-          updateInstanceCache(result.phone, result.profilePicUrl);
+
+          if (result.status === "connected") {
+            if (result.phone) setConnectedPhone(result.phone);
+            if (result.profilePicUrl) setProfilePicUrl(result.profilePicUrl);
+          } else {
+            setConnectedPhone(null);
+            setProfilePicUrl(null);
+          }
+
+          // Persist status and prevent stale cache when disconnected
+          persistStatusToDb({
+            status: result.status,
+            phone: result.phone,
+            profilePicUrl: result.profilePicUrl,
+          });
         }
       });
     }
   }, [instance.uazapi_instance_token]);
 
-  // Helper to save phone/pic to DB cache
-  const updateInstanceCache = async (phone?: string, picUrl?: string) => {
-    if (!phone && !picUrl) return;
+  const persistStatusToDb = async (payload: {
+    status: "connected" | "connecting" | "disconnected";
+    phone?: string;
+    profilePicUrl?: string;
+  }) => {
     try {
       const { createEmbedSupabaseClient } = await import("@/hooks/useEmbedSupabase");
       const supabase = createEmbedSupabaseClient();
-      const updateData: Record<string, string> = {};
-      if (phone) updateData.phone = phone;
-      if (picUrl) updateData.profile_pic_url = picUrl;
+
+      const updateData: Record<string, unknown> = {
+        instance_status: payload.status,
+      };
+
+      if (payload.status === "connected") {
+        if (payload.phone) updateData.phone = payload.phone;
+        if (payload.profilePicUrl) updateData.profile_pic_url = payload.profilePicUrl;
+      } else {
+        updateData.phone = null;
+        updateData.profile_pic_url = null;
+      }
       
       await supabase
         .from("instances")
@@ -268,11 +304,21 @@ export function EmbedInstanceCard({
     try {
       const result = await fetchInstanceStatus();
       if (result) {
-        if (result.phone) setConnectedPhone(result.phone);
-        if (result.profilePicUrl) setProfilePicUrl(result.profilePicUrl);
         setCurrentStatus(result.status);
-        // Update cache in DB
-        await updateInstanceCache(result.phone, result.profilePicUrl);
+
+        if (result.status === "connected") {
+          if (result.phone) setConnectedPhone(result.phone);
+          if (result.profilePicUrl) setProfilePicUrl(result.profilePicUrl);
+        } else {
+          setConnectedPhone(null);
+          setProfilePicUrl(null);
+        }
+
+        await persistStatusToDb({
+          status: result.status,
+          phone: result.phone,
+          profilePicUrl: result.profilePicUrl,
+        });
         toast.success("Status atualizado!");
         onStatusChange?.();
       }
@@ -372,6 +418,10 @@ export function EmbedInstanceCard({
       const connectRes = await callUazapiProxy("connect");
       const connectData = connectRes?.data || {};
       const immediateQr =
+        connectData.instance?.qrcode ||
+        connectData.instance?.qr ||
+        connectData.instance?.base64 ||
+        connectData.instance?.qr_code ||
         connectData.qrcode ||
         connectData.qr ||
         connectData.base64 ||
@@ -379,8 +429,10 @@ export function EmbedInstanceCard({
         connectData.data?.qrcode ||
         connectData.data?.qr ||
         null;
-      if (immediateQr) {
-        setQrCode(immediateQr);
+
+      const normalizedImmediateQr = normalizeQr(immediateQr);
+      if (normalizedImmediateQr) {
+        setQrCode(normalizedImmediateQr);
         setQrDialogOpen(true);
         return;
       }
@@ -397,6 +449,10 @@ export function EmbedInstanceCard({
       const qrRes = await callUazapiProxy("qrcode");
       const qrData = qrRes?.data || {};
       const qr =
+        qrData.instance?.qrcode ||
+        qrData.instance?.qr ||
+        qrData.instance?.base64 ||
+        qrData.instance?.qr_code ||
         qrData.qrcode ||
         qrData.qr ||
         qrData.base64 ||
@@ -405,8 +461,10 @@ export function EmbedInstanceCard({
         qrData.data?.qr ||
         null;
 
-      if (qr) {
-        setQrCode(qr);
+
+      const normalizedQr = normalizeQr(qr);
+      if (normalizedQr) {
+        setQrCode(normalizedQr);
         setQrDialogOpen(true);
         return;
       }
