@@ -36,8 +36,8 @@ async function configureGlobalWebhook(
       url: webhookUrl,
       enabled: true,
       events: ["messages", "messages_update"],
-      // Attempt to reduce loop risk on servers that support it.
-      excludeMessages: ["wasSentByApi"],
+      // Do NOT exclude wasSentByApi - we need these messages to sync AI agent responses (track_id=agente_ia)
+      // Loop prevention is handled in webhook-inbound by checking track_id
     };
 
     let response: Response | null = null;
