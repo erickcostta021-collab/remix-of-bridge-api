@@ -8,6 +8,7 @@ import { useInstances } from "@/hooks/useInstances";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { CANONICAL_APP_ORIGIN } from "@/lib/canonicalOrigin";
 
 interface SubaccountCardProps {
   subaccount: Subaccount;
@@ -59,7 +60,9 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
       }
 
       // Build the embed URL
-      const baseUrl = window.location.origin;
+      // IMPORTANT: use the published/canonical domain. The in-editor preview domain
+      // requires Lovable login, which breaks public embeds inside GHL.
+      const baseUrl = CANONICAL_APP_ORIGIN;
       const embedUrl = `${baseUrl}/embed/${embedToken}?iframe=true`;
 
       // Copy to clipboard
