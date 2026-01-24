@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, RefreshCw, User, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { createEmbedSupabaseClient } from "@/hooks/useEmbedSupabase";
 
 interface GHLUser {
   id: string;
@@ -92,6 +92,7 @@ export function EmbedAssignUserDialog({
     setSaving(true);
     try {
       const userId = selectedUserId === "none" ? null : selectedUserId;
+      const supabase = createEmbedSupabaseClient();
       
       const { error } = await supabase
         .from("instances")
