@@ -218,7 +218,8 @@ export function EmbedInstanceCard({
   const updateInstanceCache = async (phone?: string, picUrl?: string) => {
     if (!phone && !picUrl) return;
     try {
-      const { supabase } = await import("@/integrations/supabase/client");
+      const { createEmbedSupabaseClient } = await import("@/hooks/useEmbedSupabase");
+      const supabase = createEmbedSupabaseClient();
       const updateData: Record<string, string> = {};
       if (phone) updateData.phone = phone;
       if (picUrl) updateData.profile_pic_url = picUrl;
@@ -303,7 +304,8 @@ export function EmbedInstanceCard({
       }
 
       // Update database to reflect disconnection
-      const { supabase } = await import("@/integrations/supabase/client");
+      const { createEmbedSupabaseClient } = await import("@/hooks/useEmbedSupabase");
+      const supabase = createEmbedSupabaseClient();
       await supabase
         .from("instances")
         .update({ 

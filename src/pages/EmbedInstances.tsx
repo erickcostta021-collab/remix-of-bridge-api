@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useEmbedSupabase } from "@/hooks/useEmbedSupabase";
 import { Smartphone, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmbedInstanceCard, EmbedInstance } from "@/components/embed/EmbedInstanceCard";
@@ -22,6 +22,7 @@ export default function EmbedInstances() {
   const { embedToken } = useParams();
   const [searchParams] = useSearchParams();
   const isIframe = searchParams.get("iframe") === "true";
+  const supabase = useEmbedSupabase();
   
   const [loading, setLoading] = useState(true);
   const [subaccount, setSubaccount] = useState<SubaccountData | null>(null);
@@ -38,6 +39,8 @@ export default function EmbedInstances() {
     }
 
     try {
+      console.log("[EmbedInstances] Fetching subaccount for token:", embedToken);
+      
       // Fetch subaccount by embed token
       const { data: subData, error: subError } = await supabase
         .from("ghl_subaccounts")
@@ -45,7 +48,16 @@ export default function EmbedInstances() {
         .eq("embed_token", embedToken)
         .single();
 
-      if (subError || !subData) {
+      console.log("[EmbedInstances] Subaccount query result:", { subData, subError });
+
+      if (subError) {
+        console.error("[EmbedInstances] Subaccount error:", subError);
+        setError(`Erro ao buscar subconta: ${subError.message}`);
+        setLoading(false);
+        return;
+      }
+      
+      if (!subData) {
         setError("Subconta não encontrada");
         setLoading(false);
         return;
