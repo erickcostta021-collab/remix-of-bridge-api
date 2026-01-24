@@ -13,6 +13,7 @@ import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone, L
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { CANONICAL_APP_ORIGIN } from "@/lib/canonicalOrigin";
 
 export default function Dashboard() {
   const [selectedSubaccount, setSelectedSubaccount] = useState<Subaccount | null>(null);
@@ -93,7 +94,7 @@ export default function Dashboard() {
                           .eq("id", selectedSubaccount.id);
                       }
                       
-                      const embedUrl = `${window.location.origin}/embed/${token}?iframe=true`;
+                      const embedUrl = `${CANONICAL_APP_ORIGIN}/embed/${token}?iframe=true`;
                       await navigator.clipboard.writeText(embedUrl);
                       toast.success("Link copiado para a área de transferência!");
                     } catch (error) {
