@@ -445,9 +445,12 @@ serve(async (req) => {
     const isFromMe = messageData.fromMe === true;
     
     // Check if message was sent by API (agente_ia) - should be rendered as outbound in GHL
+    // Note: wasSentByApi may come at root level or inside message object
     const wasSentByApi = body.wasSentByApi === true || messageData.wasSentByApi === true;
-    const trackId = body.track_id || messageData.track_id || "";
-    const isAgentIaMessage = wasSentByApi && trackId === "agente_ia" && isFromMe;
+    const trackId = String(body.track_id || messageData.track_id || "").trim();
+    // Messages with track_id === "agente_ia" are from our AI agent and should be synced as outbound.
+    // We do NOT require isFromMe here because the API might not set it consistently.
+    const isAgentIaMessage = trackId === "agente_ia";
     
     console.log("API Agent check:", { wasSentByApi, trackId, isFromMe, isAgentIaMessage });
 
