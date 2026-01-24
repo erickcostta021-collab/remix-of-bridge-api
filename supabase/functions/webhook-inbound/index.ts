@@ -478,16 +478,32 @@ serve(async (req) => {
     // Get sender info - PRIORITY: chatid/wa_chatid contains the real phone number
     // The "sender" field often contains internal LID (linked ID) which is NOT a valid phone
     const from = chatData.wa_chatid || messageData.chatid || eventData.Chat || messageData.sender || "";
-    const senderName = messageData.senderName || chatData.wa_name || chatData.name || "";
-    const groupName = messageData.groupName !== "Unknown" ? messageData.groupName : (chatData.wa_name || chatData.name || "");
     const instanceToken = body.token || body.instanceToken || messageData.instanceToken || "";
     
     // For groups, check if it's a group chat and use group name
     const isGroupChat = from.endsWith("@g.us") || messageData.isGroup === true || chatData.wa_isGroup === true;
+    
+    // Extract names correctly:
+    // - senderName: the person who sent the message (member in a group)
+    // - groupName: the name of the group (from messageData.groupName or chatData.wa_name/name)
+    const senderName = messageData.senderName || "";
+    
+    // For group name, prioritize messageData.groupName, then fallback to chat data
+    // Only use chat.wa_name/name for groups - these contain the group name, not sender name
+    let groupName = "";
+    if (isGroupChat) {
+      groupName = (messageData.groupName && messageData.groupName !== "Unknown") 
+        ? messageData.groupName 
+        : (chatData.wa_name || chatData.name || "");
+    }
+    
+    // For individual chats, use sender name from chat data as fallback
+    const individualName = senderName || chatData.wa_name || chatData.name || "";
+    
     // Use group name for contact creation with 👥 emoji prefix for groups
-    const pushName = isGroupChat ? `👥 ${groupName || senderName}` : senderName;
+    const pushName = isGroupChat ? `👥 ${groupName || "Grupo"}` : individualName;
     // Store member name for group message formatting
-    const memberName = isGroupChat ? senderName : "";
+    const memberName = isGroupChat ? (senderName || individualName) : "";
     
     // Detect media vs text message - including stickers
     const contentRaw = messageData.content;
