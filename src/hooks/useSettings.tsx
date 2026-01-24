@@ -7,6 +7,7 @@ import { getOAuthRedirectUri } from "@/lib/canonicalOrigin";
 export interface UserSettings {
   id: string;
   user_id: string;
+  track_id: string | null;
   ghl_agency_token: string | null;
   ghl_client_id: string | null;
   ghl_client_secret: string | null;

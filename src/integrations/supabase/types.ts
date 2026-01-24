@@ -246,6 +246,7 @@ export type Database = {
           ghl_conversation_provider_id: string | null
           global_webhook_url: string | null
           id: string
+          track_id: string | null
           uazapi_admin_token: string | null
           uazapi_base_url: string | null
           updated_at: string
@@ -262,6 +263,7 @@ export type Database = {
           ghl_conversation_provider_id?: string | null
           global_webhook_url?: string | null
           id?: string
+          track_id?: string | null
           uazapi_admin_token?: string | null
           uazapi_base_url?: string | null
           updated_at?: string
@@ -278,6 +280,7 @@ export type Database = {
           ghl_conversation_provider_id?: string | null
           global_webhook_url?: string | null
           id?: string
+          track_id?: string | null
           uazapi_admin_token?: string | null
           uazapi_base_url?: string | null
           updated_at?: string
