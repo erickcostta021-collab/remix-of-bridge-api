@@ -484,8 +484,10 @@ serve(async (req) => {
     
     // For groups, check if it's a group chat and use group name
     const isGroupChat = from.endsWith("@g.us") || messageData.isGroup === true || chatData.wa_isGroup === true;
-    // Use group name for contact creation, but include sender name in the display
-    const pushName = isGroupChat ? (groupName || senderName) : senderName;
+    // Use group name for contact creation with 👥 emoji prefix for groups
+    const pushName = isGroupChat ? `👥 ${groupName || senderName}` : senderName;
+    // Store member name for group message formatting
+    const memberName = isGroupChat ? senderName : "";
     
     // Detect media vs text message - including stickers
     const contentRaw = messageData.content;
@@ -751,12 +753,22 @@ serve(async (req) => {
       console.log(`✅ Outbound message synced to GHL (${source}): ${phoneNumber} -> ${contact.id}`);
     } else {
       // This is a message FROM the lead - send as inbound
+      // For group messages, format with member identification prefix with line break for clear reading
+      let formattedMessage = textMessage;
+      let formattedCaption = textMessage || undefined;
+      if (isGroupChat && memberName && textMessage) {
+        formattedMessage = `👤[ ${memberName} ]:\n${textMessage}`;
+      }
+      if (isGroupChat && memberName && formattedCaption) {
+        formattedCaption = `👤[ ${memberName} ]:\n${formattedCaption}`;
+      }
+      
       if (isMediaMessage && publicMediaUrl) {
-        console.log("Sending inbound media to GHL:", { publicMediaUrl, textMessage });
-        await sendMediaToGHL(contact.id, [publicMediaUrl], token, textMessage || undefined);
+        console.log("Sending inbound media to GHL:", { publicMediaUrl, formattedCaption });
+        await sendMediaToGHL(contact.id, [publicMediaUrl], token, formattedCaption);
       } else {
-        console.log("Sending inbound text to GHL:", { textMessage: textMessage?.substring(0, 50) });
-        await sendMessageToGHL(contact.id, textMessage, token);
+        console.log("Sending inbound text to GHL:", { formattedMessage: formattedMessage?.substring(0, 50) });
+        await sendMessageToGHL(contact.id, formattedMessage, token);
       }
       
       console.log(`✅ Inbound message forwarded to GHL: ${phoneNumber} -> ${contact.id}`);
