@@ -276,14 +276,18 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const messageId: string = String(body.messageId ?? "");
+    // IMPORTANT: Keep dedupe key format consistent across inbound/outbound.
+    // webhook-inbound stores returned GHL message IDs as `ghl:<messageId>`.
+    // If we dedupe using the raw ID here, we won't match and the loop continues.
+    const dedupeKey = messageId ? `ghl:${messageId}` : "";
     
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Check for duplicate webhook calls (GHL sometimes sends same message twice)
-    if (await isDuplicate(supabase, messageId)) {
-      console.log("Duplicate webhook ignored:", { messageId });
+    if (dedupeKey && await isDuplicate(supabase, dedupeKey)) {
+      console.log("Duplicate webhook ignored:", { messageId, dedupeKey });
       return new Response(JSON.stringify({ success: true, ignored: true, reason: "duplicate" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
