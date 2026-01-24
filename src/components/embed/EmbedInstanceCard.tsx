@@ -255,25 +255,71 @@ export function EmbedInstanceCard({
   const handleDisconnect = async () => {
     setDisconnecting(true);
     try {
-      const response = await fetch(`${uazapiBaseUrl.replace(/\/$/, "")}/instance/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          token: instance.uazapi_instance_token,
-        },
-      });
+      const base = uazapiBaseUrl.replace(/\/$/, "");
+      
+      // Try multiple endpoints and methods as different UAZAPI versions use different endpoints
+      const endpoints = [
+        { path: "/instance/disconnect", method: "POST" },
+        { path: "/instance/disconnect", method: "DELETE" },
+        { path: "/instance/disconnect", method: "GET" },
+        { path: "/instance/logout", method: "POST" },
+        { path: "/instance/logout", method: "DELETE" },
+        { path: "/instance/logout", method: "GET" },
+      ];
 
-      if (response.ok) {
-        setCurrentStatus("disconnected");
-        setConnectedPhone(null);
-        setProfilePicUrl(null);
-        toast.success("Desconectado com sucesso!");
-        onStatusChange?.();
-      } else {
-        throw new Error("Falha ao desconectar");
+      let success = false;
+      let lastError = "";
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${base}${endpoint.path}`, {
+            method: endpoint.method,
+            headers: {
+              "Content-Type": "application/json",
+              token: instance.uazapi_instance_token,
+            },
+          });
+
+          if (response.ok || response.status === 200) {
+            success = true;
+            break;
+          }
+
+          // If we get 404/405, try next endpoint
+          if (response.status === 404 || response.status === 405) {
+            continue;
+          }
+
+          const errorData = await response.json().catch(() => ({}));
+          lastError = errorData.message || `Erro ${response.status}`;
+        } catch {
+          // Network error, try next
+          continue;
+        }
       }
-    } catch {
-      toast.error("Erro ao desconectar");
+
+      if (!success) {
+        throw new Error(lastError || "Nenhum endpoint de desconexão funcionou");
+      }
+
+      // Update database to reflect disconnection
+      const { supabase } = await import("@/integrations/supabase/client");
+      await supabase
+        .from("instances")
+        .update({ 
+          instance_status: "disconnected",
+          phone: null,
+          profile_pic_url: null
+        })
+        .eq("id", instance.id);
+
+      setCurrentStatus("disconnected");
+      setConnectedPhone(null);
+      setProfilePicUrl(null);
+      toast.success("Desconectado com sucesso!");
+      onStatusChange?.();
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao desconectar");
     } finally {
       setDisconnecting(false);
     }
