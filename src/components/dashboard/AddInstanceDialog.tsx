@@ -229,7 +229,7 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
                 id="instance-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: [CJ][01]"
+                placeholder="Ex: [Cliente][01]"
                 className="bg-secondary border-border"
               />
             </div>
