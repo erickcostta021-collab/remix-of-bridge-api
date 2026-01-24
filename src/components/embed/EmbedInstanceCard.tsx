@@ -331,38 +331,86 @@ export function EmbedInstanceCard({
     setConnecting(true);
     try {
       const base = uazapiBaseUrl.replace(/\/$/, "");
-      // Primeira tentativa: connect (padrão mais comum)
-      await fetch(`${base}/instance/connect`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          token: instance.uazapi_instance_token,
-        },
-      });
-
-      // Then get QR code
-      const response = await fetch(`${base}/instance/qrcode`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          token: instance.uazapi_instance_token,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const qr = data.qrcode || data.qr || data.base64;
-        if (qr) {
-          setQrCode(qr);
-          setQrDialogOpen(true);
-        } else {
-          throw new Error("QR Code não disponível");
+      
+      // Auto-discovery: try multiple connect endpoints
+      const connectPaths = [
+        "/instance/connect",
+        "/api/instance/connect",
+        "/v2/instance/connect",
+        "/api/v2/instance/connect",
+      ];
+      
+      let qrFromConnect: string | null = null;
+      
+      for (const path of connectPaths) {
+        try {
+          const resp = await fetch(`${base}${path}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              token: instance.uazapi_instance_token,
+            },
+          });
+          
+          if (resp.ok || resp.status === 200 || resp.status === 201) {
+            // Some UAZAPI versions return QR code directly from connect
+            const data = await resp.json().catch(() => ({}));
+            const immediateQr = data.qrcode || data.qr || data.base64 || data.qr_code || data.data?.qrcode || data.data?.qr;
+            if (immediateQr) {
+              qrFromConnect = immediateQr;
+            }
+            break;
+          }
+        } catch {
+          continue;
         }
-      } else {
-        throw new Error("Erro ao obter QR Code");
       }
+      
+      // If we got QR from connect response, use it
+      if (qrFromConnect) {
+        setQrCode(qrFromConnect);
+        setQrDialogOpen(true);
+        return;
+      }
+
+      // Fallback: try multiple QR code endpoints
+      const qrPaths = [
+        "/instance/qrcode",
+        "/instance/qr",
+        "/qrcode",
+        "/api/instance/qrcode",
+        "/api/instance/qr",
+        "/v2/instance/qrcode",
+      ];
+      
+      for (const path of qrPaths) {
+        try {
+          const response = await fetch(`${base}${path}`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              token: instance.uazapi_instance_token,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const qr = data.qrcode || data.qr || data.base64 || data.qr_code || data.data?.qrcode || data.data?.qr;
+            if (qr) {
+              setQrCode(qr);
+              setQrDialogOpen(true);
+              return;
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+      
+      throw new Error("Nenhum endpoint de QR Code disponível");
     } catch (error: any) {
-      toast.error(error.message || "Erro ao conectar");
+      console.error("[EmbedInstanceCard] Connect error:", error);
+      toast.error(error.message || "Erro ao obter QR Code");
     } finally {
       setConnecting(false);
     }
