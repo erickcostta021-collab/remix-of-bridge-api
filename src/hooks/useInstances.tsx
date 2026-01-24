@@ -195,22 +195,28 @@ export function useInstances(subaccountId?: string) {
         || data.imgUrl
         || "";
       
-      // Determine status - be STRICT: only consider connected if UAZAPI says connected AND phone exists
+      // Determine status (more reliable):
+      // Some servers incorrectly set `status.connected=true` while the session is not logged in.
+      // Prefer explicit session indicators like `loggedIn`/`jid`, then fallback to instance.status.
       let status = "disconnected";
-      const uazapiConnected = data.status?.connected === true || data.status?.loggedIn === true;
-      
-      if (uazapiConnected) {
-        // Only truly connected if we have a valid phone number
+
+      const loggedIn = data.status?.loggedIn === true || data.instance?.loggedIn === true;
+      const jid = data.status?.jid || data.instance?.jid || data.jid;
+      const instanceStatusRaw = data.instance?.status || data.status || data.state || "disconnected";
+
+      const isSessionConnected = loggedIn || !!jid;
+      const isInstanceStatusConnected =
+        typeof instanceStatusRaw === "string" &&
+        ["connected", "open", "authenticated"].includes(instanceStatusRaw.toLowerCase());
+
+      if (isSessionConnected || isInstanceStatusConnected) {
+        // Only consider truly connected if we have a valid phone/owner/jid.
         status = phone ? "connected" : "connecting";
-      } else if (data.instance?.status) {
-        status = data.instance.status;
-      } else if (data.status && typeof data.status === 'string') {
-        status = data.status;
-      } else if (data.state) {
-        status = data.state;
+      } else if (typeof instanceStatusRaw === "string") {
+        status = instanceStatusRaw;
       }
       
-      console.log("[UAZAPI] Parsed status:", status, "phone:", phone, "uazapiConnected:", uazapiConnected);
+      console.log("[UAZAPI] Parsed status:", status, "phone:", phone, "loggedIn:", loggedIn, "jid:", jid);
       
       return { status, phone, profilePicUrl };
     } catch {

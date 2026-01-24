@@ -69,7 +69,14 @@ export function EmbedInstanceCard({
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
 
-  const fetchInstanceStatus = async () => {
+  const fetchInstanceStatus = async (): Promise<{
+    status: "connected" | "connecting" | "disconnected";
+    phone?: string;
+    profilePicUrl?: string;
+    qrcode?: string;
+    loggedIn?: boolean;
+    jid?: string | null;
+  } | null> => {
     try {
       const base = uazapiBaseUrl.replace(/\/$/, "");
       const candidatePaths = [
@@ -98,19 +105,23 @@ export function EmbedInstanceCard({
 
       if (!response || !response.ok) return null;
 
-      const data = await response.json();
+       const data = await response.json();
       
-      // Extract status with multiple fallbacks - check nested structures
-      // UAZAPI returns: instance.status or status.connected
-      const rawStatus = data.instance?.status 
-        || data.instance?.connectionState 
-        || data.instance?.state
-        || (data.status?.connected ? "connected" : null)
-        || data.status 
-        || data.state 
-        || data.connection 
-        || data.connectionState
-        || "disconnected";
+       // Extract connection indicators (some servers set status.connected=true incorrectly)
+       const loggedIn = data.status?.loggedIn === true || data.instance?.loggedIn === true;
+       const jid: string | null =
+         data.status?.jid || data.instance?.jid || data.jid || null;
+
+       // Extract status with multiple fallbacks
+       const rawStatus =
+         data.instance?.status ||
+         data.instance?.connectionState ||
+         data.instance?.state ||
+         data.status ||
+         data.state ||
+         data.connection ||
+         data.connectionState ||
+         "disconnected";
       
       // Extract phone number with multiple fallbacks - check nested structures
       // UAZAPI returns: instance.owner or status.jid
@@ -128,7 +139,7 @@ export function EmbedInstanceCard({
         || data.instance?.jid?.split("@")?.[0]
         || "";
       
-      // Extract profile picture with multiple fallbacks - check nested structures
+       // Extract profile picture with multiple fallbacks - check nested structures
       // UAZAPI returns: instance.profilePicUrl
       const pic = data.instance?.profilePicUrl
         || data.instance?.profilePic
@@ -140,11 +151,41 @@ export function EmbedInstanceCard({
         || data.imgUrl
         || "";
       
-      return {
-        status: mapUazapiStatus(rawStatus),
-        phone,
-        profilePicUrl: pic,
-      };
+       // Extract QR Code when available (some servers return it from /instance/status)
+       const qrcode =
+         data.instance?.qrcode ||
+         data.qrcode ||
+         data.qr ||
+         data.base64 ||
+         data.qr_code ||
+         data.data?.qrcode ||
+         data.data?.qr ||
+         null;
+
+       // Determine status reliably: require loggedIn/jid or connected-like instance.status,
+       // and require phone/jid/owner to consider it truly connected.
+       const statusLower = String(rawStatus).toLowerCase();
+       const instanceStatusConnected = ["connected", "open", "authenticated"].includes(statusLower);
+       const sessionConnected = loggedIn || !!jid;
+       const connectedSignals = sessionConnected || instanceStatusConnected;
+
+       let mapped: "connected" | "connecting" | "disconnected" = "disconnected";
+       if (connectedSignals) {
+         mapped = phone ? "connected" : "connecting";
+       } else if (["connecting", "qr", "waiting", "pairing"].includes(statusLower)) {
+         mapped = "connecting";
+       } else {
+         mapped = "disconnected";
+       }
+
+       return {
+         status: mapped,
+         phone,
+         profilePicUrl: pic,
+         qrcode: qrcode || undefined,
+         loggedIn,
+         jid,
+       };
     } catch (error) {
       console.error("[EmbedInstanceCard] Error fetching status:", error);
       return null;
@@ -369,6 +410,14 @@ export function EmbedInstanceCard({
       // If we got QR from connect response, use it
       if (qrFromConnect) {
         setQrCode(qrFromConnect);
+        setQrDialogOpen(true);
+        return;
+      }
+
+      // Fallback 0: many servers provide the QR inside /instance/status response
+      const statusWithQr = await fetchInstanceStatus();
+      if (statusWithQr?.qrcode) {
+        setQrCode(statusWithQr.qrcode);
         setQrDialogOpen(true);
         return;
       }
