@@ -447,11 +447,11 @@ serve(async (req) => {
       }
     }
 
-    // Check if this is a group message
-    const isGroup = isGroupId(targetPhone);
-    
-    // Format phone appropriately (keep raw for now, format in send functions)
+    // Clean phone first (remove non-digits)
     targetPhone = targetPhone.replace(/\D/g, "");
+    
+    // Check if this is a group message (after cleaning)
+    const isGroup = isGroupId(targetPhone);
 
     if (!targetPhone) {
       console.error("No phone number available");
