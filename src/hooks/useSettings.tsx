@@ -146,9 +146,10 @@ export function useSettings() {
     },
   });
 
-  // Generate OAuth URL
+  // Generate OAuth URL - uses settings client_id or fallback to marketplace app
   const getOAuthUrl = () => {
-    if (!settings?.ghl_client_id) return null;
+    // Use configured client_id or fallback to the marketplace app's public client_id
+    const clientId = settings?.ghl_client_id || "69714e4c3c479f8c8e5e8e2d-mkpu6ehw";
 
     // IMPORTANT: Use the canonical (published) origin for redirect_uri.
     // The Preview domain is temporary and will cause "Missing user context in state"
@@ -196,7 +197,7 @@ export function useSettings() {
     ].join(" ");
     
     const params = new URLSearchParams({
-      client_id: settings.ghl_client_id,
+      client_id: clientId,
       redirect_uri: redirectUri,
       response_type: "code",
       scope: scopes,
