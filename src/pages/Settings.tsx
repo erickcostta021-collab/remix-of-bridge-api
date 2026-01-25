@@ -10,8 +10,9 @@ import { useSettings } from "@/hooks/useSettings";
 import { useExternalSupabase } from "@/hooks/useExternalSupabase";
 import { useAuth } from "@/hooks/useAuth";
 import { CANONICAL_APP_ORIGIN, getOAuthRedirectUri } from "@/lib/canonicalOrigin";
-import { Save, Loader2, Eye, EyeOff, Info, CheckCircle2, Wand2, Copy, Check } from "lucide-react";
+import { Save, Loader2, Eye, EyeOff, Info, CheckCircle2, Wand2, Copy, Check, Lock } from "lucide-react";
 import { toast } from "sonner";
+import { RegisteredUsersPanel } from "@/components/settings/RegisteredUsersPanel";
 
 const ADMIN_EMAIL = "erickcostta021@gmail.com";
 
@@ -42,7 +43,7 @@ export default function Settings() {
         ghl_client_secret: settings.ghl_client_secret || "",
         ghl_conversation_provider_id: settings.ghl_conversation_provider_id || "",
         uazapi_admin_token: settings.uazapi_admin_token || "",
-        uazapi_base_url: settings.uazapi_base_url || "https://atllassa.uazapi.com",
+        uazapi_base_url: settings.uazapi_base_url || "",
         global_webhook_url: settings.global_webhook_url || "",
         external_supabase_pat: settings.external_supabase_pat || "",
       });
@@ -124,9 +125,10 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue={isAdmin ? "oauth" : "integrations"} className="w-full">
-          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-2" : "grid-cols-1"}`}>
+          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-3" : "grid-cols-1"}`}>
             {isAdmin && <TabsTrigger value="oauth">OAuth GHL</TabsTrigger>}
             <TabsTrigger value="integrations">Integrações</TabsTrigger>
+            {isAdmin && <TabsTrigger value="users">Usuários</TabsTrigger>}
           </TabsList>
 
           {isAdmin && (
@@ -366,23 +368,43 @@ export default function Settings() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="webhook-url">Webhook URL Global (UAZAPI)</Label>
+                  <Label htmlFor="webhook-url" className="flex items-center gap-2">
+                    Webhook URL Global (UAZAPI)
+                    {!isAdmin && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </Label>
                   <Input
                     id="webhook-url"
                     type="text"
                     value={formData.global_webhook_url}
-                    onChange={(e) => setFormData({ ...formData, global_webhook_url: e.target.value })}
+                    onChange={(e) => isAdmin && setFormData({ ...formData, global_webhook_url: e.target.value })}
                     placeholder="https://seu-webhook.com/endpoint"
-                    className="bg-secondary border-border"
+                    className={`bg-secondary border-border ${!isAdmin ? "opacity-60 cursor-not-allowed" : ""}`}
+                    readOnly={!isAdmin}
+                    disabled={!isAdmin}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Webhook global (nível admin) que recebe eventos de todas as instâncias. 
-                    Use o URL do webhook inbound acima para integração automática com GHL.
+                    {isAdmin ? (
+                      <>
+                        Webhook global (nível admin) que recebe eventos de todas as instâncias. 
+                        Use o URL do webhook inbound acima para integração automática com GHL.
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="h-3 w-3 inline mr-1" />
+                        Campo gerenciado pelo administrador. Entre em contato se precisar alterar.
+                      </>
+                    )}
                   </p>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="users" className="space-y-6 mt-6">
+              <RegisteredUsersPanel />
+            </TabsContent>
+          )}
         </Tabs>
 
         {/* Actions */}
