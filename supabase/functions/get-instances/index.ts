@@ -28,12 +28,14 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Buscar a subconta pelo location_id
-    const { data: subaccount, error: subError } = await supabase
+    // Buscar a subconta pelo location_id (usando limit(1) para evitar erro com duplicatas)
+    const { data: subaccounts, error: subError } = await supabase
       .from("ghl_subaccounts")
       .select("id")
       .eq("location_id", locationId)
-      .maybeSingle();
+      .limit(1);
+    
+    const subaccount = subaccounts?.[0] || null;
 
     if (subError) {
       console.error("Error fetching subaccount:", subError);
