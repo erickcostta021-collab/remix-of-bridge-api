@@ -77,26 +77,19 @@ export function useSubaccounts() {
         throw new Error("Nenhuma subconta encontrada. Verifique se o token tem permissão de agência.");
       }
 
-      // Upsert locations to database (usando location_id como chave única)
-      // Primeiro deleta registros existentes com esses location_ids (de qualquer usuário)
-      // e depois insere novos com o user_id atual
-      const locationIds = locations.map((l: any) => l.id);
-      
-      // Deletar registros existentes para esses location_ids
-      await supabase
-        .from("ghl_subaccounts")
-        .delete()
-        .in("location_id", locationIds);
-      
-      // Inserir novos registros
-      for (const location of locations) {
-        await supabase
-          .from("ghl_subaccounts")
-          .insert({
-            user_id: user.id,
-            location_id: location.id,
-            account_name: location.name,
-          });
+      // Usar função RPC para upsert que ignora RLS
+      const locationsJson = locations.map((l: any) => ({
+        id: l.id,
+        name: l.name,
+      }));
+
+      const { error: upsertError } = await supabase.rpc("upsert_subaccounts", {
+        p_user_id: user.id,
+        p_locations: locationsJson,
+      });
+
+      if (upsertError) {
+        throw new Error("Erro ao salvar subcontas: " + upsertError.message);
       }
 
       return locations.length;
