@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
-const ADMIN_EMAIL = "erickcostta021@gmail.com";
+// Admin emails are now handled in Settings.tsx
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },

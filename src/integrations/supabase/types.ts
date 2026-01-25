@@ -295,6 +295,7 @@ export type Database = {
     Functions: {
       cleanup_old_processed_messages: { Args: never; Returns: undefined }
       generate_embed_token: { Args: never; Returns: string }
+      is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       instance_status: "connected" | "connecting" | "disconnected"
