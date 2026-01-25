@@ -77,7 +77,7 @@ export function useSubaccounts() {
         throw new Error("Nenhuma subconta encontrada. Verifique se o token tem permissão de agência.");
       }
 
-      // Upsert locations to database
+      // Upsert locations to database (usando location_id como chave única)
       for (const location of locations) {
         await supabase
           .from("ghl_subaccounts")
@@ -86,7 +86,8 @@ export function useSubaccounts() {
             location_id: location.id,
             account_name: location.name,
           }, {
-            onConflict: "user_id,location_id",
+            onConflict: "location_id",
+            ignoreDuplicates: false, // Atualiza se já existir
           });
       }
 
