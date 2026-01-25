@@ -296,6 +296,10 @@ export type Database = {
       cleanup_old_processed_messages: { Args: never; Returns: undefined }
       generate_embed_token: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
+      upsert_subaccounts: {
+        Args: { p_locations: Json; p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       instance_status: "connected" | "connecting" | "disconnected"
