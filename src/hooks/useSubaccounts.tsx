@@ -78,16 +78,24 @@ export function useSubaccounts() {
       }
 
       // Upsert locations to database (usando location_id como chave única)
+      // Primeiro deleta registros existentes com esses location_ids (de qualquer usuário)
+      // e depois insere novos com o user_id atual
+      const locationIds = locations.map((l: any) => l.id);
+      
+      // Deletar registros existentes para esses location_ids
+      await supabase
+        .from("ghl_subaccounts")
+        .delete()
+        .in("location_id", locationIds);
+      
+      // Inserir novos registros
       for (const location of locations) {
         await supabase
           .from("ghl_subaccounts")
-          .upsert({
+          .insert({
             user_id: user.id,
             location_id: location.id,
             account_name: location.name,
-          }, {
-            onConflict: "location_id",
-            ignoreDuplicates: false, // Atualiza se já existir
           });
       }
 
