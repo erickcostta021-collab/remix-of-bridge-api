@@ -92,6 +92,25 @@ async function fetchGhlContactPhone(token: string, contactId: string): Promise<s
   }
 }
 
+// Helper to detect if phone is a group ID
+function isGroupId(phone: string): boolean {
+  // Group IDs from GHL come as long numbers (typically 18+ digits starting with 120363...)
+  // or already have @g.us suffix
+  if (phone.includes("@g.us")) return true;
+  // GHL stores group IDs as the numeric part - typically 18+ digits
+  if (phone.length >= 18 && phone.startsWith("120363")) return true;
+  return false;
+}
+
+// Format phone for UAZAPI (add @g.us for groups, @s.whatsapp.net for individuals)
+function formatPhoneForUazapi(phone: string, forGroup: boolean = false): string {
+  const cleaned = phone.replace(/\D/g, "");
+  if (forGroup || isGroupId(cleaned)) {
+    return `${cleaned}@g.us`;
+  }
+  return cleaned;
+}
+
 // Helper to detect media type from URL
 function detectMediaType(url: string): string {
   const lower = url.toLowerCase();
@@ -428,6 +447,10 @@ serve(async (req) => {
       }
     }
 
+    // Check if this is a group message
+    const isGroup = isGroupId(targetPhone);
+    
+    // Format phone appropriately (keep raw for now, format in send functions)
     targetPhone = targetPhone.replace(/\D/g, "");
 
     if (!targetPhone) {
@@ -437,6 +460,10 @@ serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Format for UAZAPI (add @g.us for groups)
+    const formattedPhone = formatPhoneForUazapi(targetPhone, isGroup);
+    console.log("Phone formatting:", { original: phoneRaw, cleaned: targetPhone, formatted: formattedPhone, isGroup });
 
     // Check if we have content to send
     if (!messageText && attachments.length === 0) {
@@ -454,9 +481,9 @@ serve(async (req) => {
     // Send attachments first (media)
     for (const attachment of attachments) {
       const mediaType = detectMediaType(attachment);
-      console.log("Sending media:", { attachment, mediaType, phone: targetPhone });
+      console.log("Sending media:", { attachment, mediaType, phone: formattedPhone, isGroup });
       
-      const result = await sendMediaMessage(base, instanceToken, targetPhone, attachment, mediaType, messageText || undefined);
+      const result = await sendMediaMessage(base, instanceToken, formattedPhone, attachment, mediaType, messageText || undefined);
       results.push({ type: `media:${mediaType}`, sent: result.sent, status: result.status });
       
       if (!result.sent) {
@@ -467,8 +494,8 @@ serve(async (req) => {
     // Send text message if there's text AND no attachments (to avoid duplicate text)
     // If there were attachments, text was already sent as caption
     if (messageText && attachments.length === 0) {
-      console.log("Sending text:", { text: messageText.substring(0, 50), phone: targetPhone });
-      const result = await sendTextMessage(base, instanceToken, targetPhone, messageText);
+      console.log("Sending text:", { text: messageText.substring(0, 50), phone: formattedPhone, isGroup });
+      const result = await sendTextMessage(base, instanceToken, formattedPhone, messageText);
       results.push({ type: "text", sent: result.sent, status: result.status });
       
       if (!result.sent) {
@@ -479,10 +506,10 @@ serve(async (req) => {
     const allSent = results.every(r => r.sent);
     const anySent = results.some(r => r.sent);
 
-    console.log(`${anySent ? "✅" : "❌"} Message processing complete:`, { phone: targetPhone, results });
+    console.log(`${anySent ? "✅" : "❌"} Message processing complete:`, { phone: formattedPhone, isGroup, results });
 
     return new Response(
-      JSON.stringify({ success: true, sent: anySent, allSent, phone: targetPhone, results }),
+      JSON.stringify({ success: true, sent: anySent, allSent, phone: formattedPhone, isGroup, results }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
