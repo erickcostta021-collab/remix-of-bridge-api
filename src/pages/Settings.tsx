@@ -14,13 +14,13 @@ import { Save, Loader2, Eye, EyeOff, Info, CheckCircle2, Wand2, Copy, Check, Loc
 import { toast } from "sonner";
 import { RegisteredUsersPanel } from "@/components/settings/RegisteredUsersPanel";
 
-const ADMIN_EMAIL = "erickcostta021@gmail.com";
+const ADMIN_EMAILS = ["erickcostta021@gmail.com", "erickcostta.br@gmail.com"];
 
 export default function Settings() {
   const { settings, isLoading, updateSettings, applyGlobalWebhook, getOAuthUrl } = useSettings();
   const { syncToExternal } = useExternalSupabase();
   const { user } = useAuth();
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const isAdmin = ADMIN_EMAILS.includes(user?.email || "");
   const [showTokens, setShowTokens] = useState(false);
   const [copiedTrackId, setCopiedTrackId] = useState(false);
   
