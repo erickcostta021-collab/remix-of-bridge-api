@@ -94,11 +94,14 @@ async function fetchGhlContactPhone(token: string, contactId: string): Promise<s
 
 // Helper to detect if phone is a group ID
 function isGroupId(phone: string): boolean {
+  // Clean the phone first to avoid issues with + prefix
+  const cleaned = phone.replace(/\D/g, "");
+  
   // Group IDs from GHL come as long numbers (typically 18+ digits starting with 120363...)
   // or already have @g.us suffix
   if (phone.includes("@g.us")) return true;
-  // GHL stores group IDs as the numeric part - typically 18+ digits
-  if (phone.length >= 18 && phone.startsWith("120363")) return true;
+  // GHL stores group IDs as the numeric part - typically 18+ digits starting with 120363
+  if (cleaned.length >= 18 && cleaned.startsWith("120363")) return true;
   return false;
 }
 
@@ -446,11 +449,18 @@ serve(async (req: Request) => {
       }
     }
 
-    // Check if this is a group message BEFORE cleaning
-    const isGroup = targetPhone.includes("@g.us") || targetPhone.includes("-") || isGroupId(targetPhone);
+    // Check if this is a group message using the helper
+    const isGroup = isGroupId(targetPhone);
     
-    // Format phone (preserves group IDs with special chars)
+    // Format phone for UAZAPI
+    // For groups: add @g.us suffix if not present
+    // For regular numbers: clean to digits only
     targetPhone = formatPhoneForUazapi(targetPhone);
+    
+    // If it's a group and doesn't have @g.us, add it
+    if (isGroup && !targetPhone.includes("@g.us")) {
+      targetPhone = `${targetPhone}@g.us`;
+    }
 
     if (!targetPhone) {
       console.error("No phone number available");
