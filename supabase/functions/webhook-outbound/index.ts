@@ -102,13 +102,10 @@ function isGroupId(phone: string): boolean {
   return false;
 }
 
-// Format phone for UAZAPI (add @g.us for groups, @s.whatsapp.net for individuals)
+// Format phone for UAZAPI
+// Note: For groups, we send the raw number - UAZAPI handles the @g.us suffix internally
 function formatPhoneForUazapi(phone: string, forGroup: boolean = false): string {
-  const cleaned = phone.replace(/\D/g, "");
-  if (forGroup || isGroupId(cleaned)) {
-    return `${cleaned}@g.us`;
-  }
-  return cleaned;
+  return phone.replace(/\D/g, "");
 }
 
 // Helper to detect media type from URL
@@ -461,8 +458,8 @@ serve(async (req) => {
       );
     }
 
-    // Format for UAZAPI (add @g.us for groups)
-    const formattedPhone = formatPhoneForUazapi(targetPhone, isGroup);
+    // For UAZAPI, send raw number (API handles group suffix internally)
+    const formattedPhone = targetPhone;
     console.log("Phone formatting:", { original: phoneRaw, cleaned: targetPhone, formatted: formattedPhone, isGroup });
 
     // Check if we have content to send
