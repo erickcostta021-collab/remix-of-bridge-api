@@ -102,9 +102,13 @@ function isGroupId(phone: string): boolean {
   return false;
 }
 
-// Format phone for UAZAPI
-// Note: For groups, we send the raw number - UAZAPI handles the @g.us suffix internally
-function formatPhoneForUazapi(phone: string, forGroup: boolean = false): string {
+// Format phone for UAZAPI - preserve group IDs with special chars
+function formatPhoneForUazapi(phone: string): string {
+  // If it's a group ID (has @g.us or hyphens), preserve it as-is
+  if (phone.includes("@g.us") || phone.includes("-")) {
+    return phone;
+  }
+  // For regular phone numbers, clean to digits only
   return phone.replace(/\D/g, "");
 }
 
@@ -277,7 +281,7 @@ async function isDuplicate(supabase: any, messageId: string): Promise<boolean> {
   }
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -289,8 +293,27 @@ serve(async (req) => {
     userAgent: req.headers.get("user-agent"),
   });
 
+  // Parse body once
+  let body: any;
   try {
-    const body = await req.json();
+    body = await req.json();
+  } catch (error) {
+    console.error("Failed to parse body:", error);
+    return new Response(JSON.stringify({ success: false, error: "Invalid JSON" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // RESPOND IMMEDIATELY to avoid GHL timeout (15s limit)
+  const response = new Response(JSON.stringify({ success: true, processing: true }), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+  // Process the message in background
+  (async () => {
+    try {
     const messageId: string = String(body.messageId ?? "");
     // IMPORTANT: Keep dedupe key format consistent across inbound/outbound.
     // webhook-inbound stores returned GHL message IDs as `ghl:<messageId>`.
@@ -304,10 +327,7 @@ serve(async (req) => {
     // Check for duplicate webhook calls (GHL sometimes sends same message twice)
     if (dedupeKey && await isDuplicate(supabase, dedupeKey)) {
       console.log("Duplicate webhook ignored:", { messageId, dedupeKey });
-      return new Response(JSON.stringify({ success: true, ignored: true, reason: "duplicate" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return; // Already responded
     }
     
     console.log("GHL Outbound payload:", JSON.stringify(body, null, 2));
@@ -327,10 +347,7 @@ serve(async (req) => {
     
     if (!isOutbound && !isSmsWithContent) {
       console.log("Ignoring non-outbound event:", { eventType, direction });
-      return new Response(JSON.stringify({ success: true, ignored: true, reason: "not outbound" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return; // Already responded
     }
 
     const locationId: string | undefined = body.locationId;
@@ -340,18 +357,12 @@ serve(async (req) => {
     // Validation ping check
     if (!messageText && !phoneRaw && !contactId && attachments.length === 0) {
       console.log("Validation ping received, responding 200 OK");
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return; // Already responded
     }
 
     if (!locationId) {
       console.error("Missing locationId in payload");
-      return new Response(
-        JSON.stringify({ success: true, ignored: true, reason: "missing locationId" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return; // Already responded
     }
 
     // Find subaccount (usando limit(1) para evitar erro com duplicatas)
@@ -365,10 +376,7 @@ serve(async (req) => {
 
     if (subError || !subaccount) {
       console.error("Subaccount lookup failed:", { locationId, subError });
-      return new Response(
-        JSON.stringify({ success: true, ignored: true, reason: "subaccount not found" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return; // Already responded
     }
 
     // Buscar todas as instâncias da subconta
@@ -380,10 +388,7 @@ serve(async (req) => {
 
     if (instErr || !instances || instances.length === 0) {
       console.error("No instance found for subaccount");
-      return new Response(
-        JSON.stringify({ success: true, ignored: true, reason: "no instance configured" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return; // Already responded
     }
 
     // Verificar se há preferência de instância para este contato (Bridge Switcher)
@@ -422,10 +427,7 @@ serve(async (req) => {
 
     if (settingsErr || !settings?.uazapi_base_url || !instance.uazapi_instance_token) {
       console.error("UAZAPI not configured:", { settingsErr });
-      return new Response(
-        JSON.stringify({ success: true, ignored: true, reason: "uazapi not configured" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return; // Already responded
     }
 
     // Get phone from contact
@@ -444,31 +446,23 @@ serve(async (req) => {
       }
     }
 
-    // Clean phone first (remove non-digits)
-    targetPhone = targetPhone.replace(/\D/g, "");
+    // Check if this is a group message BEFORE cleaning
+    const isGroup = targetPhone.includes("@g.us") || targetPhone.includes("-") || isGroupId(targetPhone);
     
-    // Check if this is a group message (after cleaning)
-    const isGroup = isGroupId(targetPhone);
+    // Format phone (preserves group IDs with special chars)
+    targetPhone = formatPhoneForUazapi(targetPhone);
 
     if (!targetPhone) {
       console.error("No phone number available");
-      return new Response(
-        JSON.stringify({ success: false, error: "No phone number" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return; // Already responded
     }
 
-    // For UAZAPI, send raw number (API handles group suffix internally)
-    const formattedPhone = targetPhone;
-    console.log("Phone formatting:", { original: phoneRaw, cleaned: targetPhone, formatted: formattedPhone, isGroup });
+    console.log("Phone formatting:", { original: phoneRaw, formatted: targetPhone, isGroup });
 
     // Check if we have content to send
     if (!messageText && attachments.length === 0) {
       console.log("No message text or attachments provided; acknowledging");
-      return new Response(JSON.stringify({ success: true, ignored: true, reason: "missing content" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return; // Already responded
     }
 
     const base = settings.uazapi_base_url.replace(/\/$/, "");
@@ -478,9 +472,9 @@ serve(async (req) => {
     // Send attachments first (media)
     for (const attachment of attachments) {
       const mediaType = detectMediaType(attachment);
-      console.log("Sending media:", { attachment, mediaType, phone: formattedPhone, isGroup });
+      console.log("Sending media:", { attachment, mediaType, phone: targetPhone, isGroup });
       
-      const result = await sendMediaMessage(base, instanceToken, formattedPhone, attachment, mediaType, messageText || undefined);
+      const result = await sendMediaMessage(base, instanceToken, targetPhone, attachment, mediaType, messageText || undefined);
       results.push({ type: `media:${mediaType}`, sent: result.sent, status: result.status });
       
       if (!result.sent) {
@@ -491,8 +485,8 @@ serve(async (req) => {
     // Send text message if there's text AND no attachments (to avoid duplicate text)
     // If there were attachments, text was already sent as caption
     if (messageText && attachments.length === 0) {
-      console.log("Sending text:", { text: messageText.substring(0, 50), phone: formattedPhone, isGroup });
-      const result = await sendTextMessage(base, instanceToken, formattedPhone, messageText);
+      console.log("Sending text:", { text: messageText.substring(0, 50), phone: targetPhone, isGroup });
+      const result = await sendTextMessage(base, instanceToken, targetPhone, messageText);
       results.push({ type: "text", sent: result.sent, status: result.status });
       
       if (!result.sent) {
@@ -503,18 +497,12 @@ serve(async (req) => {
     const allSent = results.every(r => r.sent);
     const anySent = results.some(r => r.sent);
 
-    console.log(`${anySent ? "✅" : "❌"} Message processing complete:`, { phone: formattedPhone, isGroup, results });
-
-    return new Response(
-      JSON.stringify({ success: true, sent: anySent, allSent, phone: formattedPhone, isGroup, results }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.log(`${anySent ? "✅" : "❌"} Message processing complete:`, { phone: targetPhone, isGroup, results });
 
   } catch (error) {
-    console.error("Webhook outbound error:", error);
-    return new Response(
-      JSON.stringify({ success: true, error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("Webhook outbound background processing error:", error);
   }
+  })();
+
+  return response;
 });
