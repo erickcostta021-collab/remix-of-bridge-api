@@ -28,40 +28,6 @@ export interface UazapiInstance {
   phone?: string;
   webhook_url?: string;
 }
-
-// Helper function to sync with external Supabase
-const syncToExternalSupabase = async () => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    // Check if external Supabase PAT is configured
-    const { data: settings } = await supabase
-      .from("user_settings")
-      .select("external_supabase_pat")
-      .eq("user_id", session.user.id)
-      .single();
-
-    if (!settings?.external_supabase_pat) {
-      return; // External Supabase PAT not configured, skip sync
-    }
-
-    // Call sync function
-    await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-external-supabase`,
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-  } catch (error) {
-    console.error("Auto-sync to external Supabase failed:", error);
-  }
-};
-
 export function useInstances(subaccountId?: string) {
   const { user } = useAuth();
   const { settings } = useSettings();
@@ -251,8 +217,6 @@ export function useInstances(subaccountId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
-      // Auto-sync to external Supabase
-      syncToExternalSupabase();
     },
   });
 
@@ -306,7 +270,6 @@ export function useInstances(subaccountId?: string) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
-      syncToExternalSupabase();
       
       if (data.notFound.length > 0) {
         toast.warning(`${data.notFound.length} instância(s) não encontrada(s) no servidor UAZAPI`, {
@@ -419,8 +382,6 @@ export function useInstances(subaccountId?: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success("Instância importada com sucesso!");
-      // Auto-sync to external Supabase
-      syncToExternalSupabase();
     },
     onError: (error) => {
       toast.error("Erro ao importar: " + error.message);
@@ -481,8 +442,6 @@ export function useInstances(subaccountId?: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success("Instância criada com sucesso!");
-      // Auto-sync to external Supabase
-      syncToExternalSupabase();
     },
     onError: (error) => {
       toast.error("Erro ao criar instância: " + error.message);
@@ -532,8 +491,6 @@ export function useInstances(subaccountId?: string) {
       toast.success(variables.deleteFromUazapi 
         ? "Instância excluída do sistema e da UAZAPI!" 
         : "Instância removida do sistema!");
-      // Auto-sync to external Supabase
-      syncToExternalSupabase();
     },
     onError: (error) => {
       toast.error("Erro ao excluir: " + error.message);
@@ -703,8 +660,6 @@ export function useInstances(subaccountId?: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success("Instância desconectada!");
-      // Auto-sync to external Supabase
-      syncToExternalSupabase();
     },
     onError: (error) => {
       toast.error("Erro ao desconectar: " + error.message);
@@ -745,8 +700,6 @@ export function useInstances(subaccountId?: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success("Webhook atualizado!");
-      // Auto-sync to external Supabase
-      syncToExternalSupabase();
     },
     onError: (error) => {
       toast.error("Erro ao atualizar webhook: " + error.message);
@@ -823,7 +776,6 @@ export function useInstances(subaccountId?: string) {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success(`Webhook reconfigurado! URL: ${data.webhookUrl.substring(0, 50)}...`);
-      syncToExternalSupabase();
     },
     onError: (error) => {
       toast.error("Erro ao reconfigurar webhook: " + error.message);
@@ -845,8 +797,6 @@ export function useInstances(subaccountId?: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success("Usuário GHL atribuído com sucesso!");
-      // Auto-sync to external Supabase
-      syncToExternalSupabase();
     },
     onError: (error) => {
       toast.error("Erro ao atribuir usuário: " + error.message);
