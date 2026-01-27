@@ -1,14 +1,10 @@
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, ChevronRight, Settings, Zap, Loader2 } from "lucide-react";
+import { Building2, ChevronRight, Settings } from "lucide-react";
 import { Subaccount } from "@/hooks/useSubaccounts";
 import { useInstances } from "@/hooks/useInstances";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import { CANONICAL_APP_ORIGIN } from "@/lib/canonicalOrigin";
 
 interface SubaccountCardProps {
   subaccount: Subaccount;
@@ -18,7 +14,6 @@ interface SubaccountCardProps {
 export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
   const { instances } = useInstances(subaccount.id);
   const navigate = useNavigate();
-  const [generatingLink, setGeneratingLink] = useState(false);
 
   const connectedCount = instances.filter(i => i.instance_status === "connected").length;
   const totalCount = instances.length;
@@ -26,54 +21,6 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
   const handleSettingsClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigate(`/subaccount/${subaccount.id}/settings`);
-  };
-
-  const handleCopyGHLLink = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setGeneratingLink(true);
-
-    try {
-      let embedToken = subaccount.embed_token;
-
-      // Generate token if not exists
-      if (!embedToken) {
-        const { data, error } = await supabase.rpc("generate_embed_token");
-        
-        if (error) {
-          // Fallback: generate client-side
-          embedToken = btoa(crypto.randomUUID().replace(/-/g, "")).slice(0, 20);
-        } else {
-          embedToken = data;
-        }
-
-        // Save the token
-        const { error: updateError } = await supabase
-          .from("ghl_subaccounts")
-          .update({ embed_token: embedToken })
-          .eq("id", subaccount.id);
-
-        if (updateError) {
-          console.error("Error saving embed token:", updateError);
-          toast.error("Erro ao gerar link");
-          return;
-        }
-      }
-
-      // Build the embed URL
-      // IMPORTANT: use the published/canonical domain. The in-editor preview domain
-      // requires Lovable login, which breaks public embeds inside GHL.
-      const baseUrl = CANONICAL_APP_ORIGIN;
-      const embedUrl = `${baseUrl}/embed/${embedToken}?iframe=true`;
-
-      // Copy to clipboard
-      await navigator.clipboard.writeText(embedUrl);
-      toast.success("Link copiado! Cole no GHL para exibir as instâncias.");
-    } catch (error) {
-      console.error("Error generating GHL link:", error);
-      toast.error("Erro ao copiar link");
-    } finally {
-      setGeneratingLink(false);
-    }
   };
 
   const isAppInstalled = !!subaccount.ghl_access_token;
@@ -98,23 +45,7 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopyGHLLink}
-              disabled={generatingLink}
-              className="h-8 px-3 text-xs border-border/50 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              {generatingLink ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <>
-                  <Zap className="h-3.5 w-3.5 mr-1.5" />
-                  Copiar Link p/ GHL
-                </>
-              )}
-            </Button>
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               variant="ghost"
               size="icon"
