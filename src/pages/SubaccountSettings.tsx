@@ -8,11 +8,23 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Save, Loader2, CheckCircle2, Info } from "lucide-react";
+import { ArrowLeft, Save, Loader2, CheckCircle2, Info, Unlink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettings } from "@/hooks/useSettings";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface SubaccountData {
   id: string;
@@ -31,6 +43,8 @@ export default function SubaccountSettings() {
   const [subaccount, setSubaccount] = useState<SubaccountData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (id && user) {
@@ -61,6 +75,44 @@ export default function SubaccountSettings() {
   const handleSave = async () => {
     if (!subaccount) return;
     toast.success("Configurações salvas!");
+  };
+
+  const handleDisconnect = async () => {
+    if (!subaccount) return;
+    
+    try {
+      setDisconnecting(true);
+      
+      const { error } = await supabase
+        .from("ghl_subaccounts")
+        .update({
+          ghl_access_token: null,
+          ghl_refresh_token: null,
+          ghl_token_expires_at: null,
+          ghl_token_scopes: null,
+          oauth_installed_at: null,
+          oauth_last_refresh: null,
+        })
+        .eq("id", subaccount.id);
+      
+      if (error) throw error;
+      
+      // Atualizar estado local
+      setSubaccount({
+        ...subaccount,
+        ghl_access_token: null,
+      });
+      
+      // Invalidar cache
+      queryClient.invalidateQueries({ queryKey: ["subaccounts"] });
+      
+      toast.success("Subconta desconectada com sucesso!");
+    } catch (error: any) {
+      console.error("Error disconnecting subaccount:", error);
+      toast.error("Erro ao desconectar: " + error.message);
+    } finally {
+      setDisconnecting(false);
+    }
   };
 
   if (loading) {
@@ -174,6 +226,45 @@ export default function SubaccountSettings() {
                         </p>
                       )}
                     </div>
+                    
+                    {isAppInstalled && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-3 w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            disabled={disconnecting}
+                          >
+                            {disconnecting ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Unlink className="h-4 w-4 mr-2" />
+                            )}
+                            Desconectar Subconta
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Desconectar Subconta?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Isso irá remover a conexão OAuth com o GoHighLevel. 
+                              Para reconectar, será necessário reinstalar o app via Marketplace.
+                              As instâncias e configurações serão mantidas.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleDisconnect}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Desconectar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
                   </div>
                 </CardContent>
               </Card>
