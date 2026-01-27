@@ -139,9 +139,8 @@ export default function SubaccountSettings() {
 
         {/* Tabs */}
         <Tabs defaultValue="credentials" className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-3 bg-secondary">
+          <TabsList className="grid w-full max-w-md grid-cols-2 bg-secondary">
             <TabsTrigger value="credentials">Credenciais</TabsTrigger>
-            <TabsTrigger value="webhook">Webhook Global</TabsTrigger>
             <TabsTrigger value="privacy">Privacidade</TabsTrigger>
           </TabsList>
 
@@ -222,30 +221,6 @@ export default function SubaccountSettings() {
             </div>
           </TabsContent>
 
-          <TabsContent value="webhook" className="mt-6">
-            <Card className="bg-card border-border max-w-xl">
-              <CardHeader>
-                <CardTitle className="text-lg">Webhook Global</CardTitle>
-                <CardDescription>
-                  URL de callback para eventos desta subconta
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>URL do Webhook</Label>
-                  <Input
-                    value={settings?.global_webhook_url || ""}
-                    readOnly
-                    placeholder="Usando webhook global da agência"
-                    className="bg-muted border-border"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Configure nas Configurações Globais para alterar o webhook padrão.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           <TabsContent value="privacy" className="mt-6">
             <Card className="bg-card border-border max-w-xl">
