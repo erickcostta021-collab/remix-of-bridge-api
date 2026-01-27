@@ -269,11 +269,39 @@ serve(async (req) => {
     console.log("Step 3: Location name fetched - OK");
     console.log("Account Name:", accountName);
 
-    // Upsert integration record - use location_id as conflict target since it has unique constraint
-    const { error: upsertError } = await supabase
+    // Update existing record or insert new one
+    // First check if location already exists
+    const { data: existingSubaccount } = await supabase
       .from("ghl_subaccounts")
-      .upsert(
-        {
+      .select("id")
+      .eq("location_id", finalLocationId)
+      .maybeSingle();
+
+    let upsertError;
+    
+    if (existingSubaccount) {
+      // Update existing record
+      const { error } = await supabase
+        .from("ghl_subaccounts")
+        .update({
+          user_id: userId,
+          company_id: companyId || null,
+          account_name: accountName,
+          ghl_access_token: access_token,
+          ghl_refresh_token: refresh_token,
+          ghl_token_expires_at: expiresAt.toISOString(),
+          ghl_token_scopes: scope,
+          ghl_subaccount_token: access_token,
+          oauth_installed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingSubaccount.id);
+      upsertError = error;
+    } else {
+      // Insert new record
+      const { error } = await supabase
+        .from("ghl_subaccounts")
+        .insert({
           user_id: userId,
           location_id: finalLocationId,
           company_id: companyId || null,
@@ -282,14 +310,12 @@ serve(async (req) => {
           ghl_refresh_token: refresh_token,
           ghl_token_expires_at: expiresAt.toISOString(),
           ghl_token_scopes: scope,
-          ghl_subaccount_token: access_token, // Also set as subaccount token for existing functionality
+          ghl_subaccount_token: access_token,
           oauth_installed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "location_id",
-        }
-      );
+        });
+      upsertError = error;
+    }
 
     if (upsertError) {
       console.error("Failed to save integration:", upsertError);
