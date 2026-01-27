@@ -8,7 +8,7 @@
  */
 export const CANONICAL_APP_ORIGIN = (
   import.meta.env.VITE_PUBLIC_APP_URL as string | undefined
-)?.replace(/\/$/, "") || "https://bridge-api.lovable.app";
+)?.replace(/\/$/, "") || "https://bridgeapi.chat";
 
 export function getOAuthRedirectUri() {
   return `${CANONICAL_APP_ORIGIN}/oauth/callback`;
