@@ -28,3 +28,9 @@ verify_jwt = false
 
 [functions.bridge-switcher]
 verify_jwt = false
+
+[functions.ghost-recorder]
+verify_jwt = false
+
+[functions.bridge-switcher-cdn]
+verify_jwt = false
