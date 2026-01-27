@@ -5,28 +5,32 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Loader2, Trash2, Users, RefreshCw } from "lucide-react";
+import { Loader2, Trash2, Users, RefreshCw, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Badge } from "@/components/ui/badge";
 
 interface RegisteredUser {
   id: string;
   email: string;
   created_at: string;
   user_id: string;
+  is_paused: boolean;
+  paused_at: string | null;
 }
 
 export function RegisteredUsersPanel() {
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const { data: users, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["registered-users"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, email, created_at, user_id")
+        .select("id, email, created_at, user_id, is_paused, paused_at")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -36,9 +40,6 @@ export function RegisteredUsersPanel() {
 
   const deleteUser = useMutation({
     mutationFn: async (userId: string) => {
-      // Delete from profiles (will cascade due to FK setup or we delete manually)
-      // Note: We can't delete from auth.users directly, but we can delete the profile
-      // and related data. For full user deletion, admin would need to use Supabase dashboard
       const { error: settingsError } = await supabase
         .from("user_settings")
         .delete()
@@ -48,7 +49,6 @@ export function RegisteredUsersPanel() {
         console.error("Error deleting user settings:", settingsError);
       }
 
-      // Delete instances
       const { error: instancesError } = await supabase
         .from("instances")
         .delete()
@@ -58,7 +58,6 @@ export function RegisteredUsersPanel() {
         console.error("Error deleting instances:", instancesError);
       }
 
-      // Delete subaccounts
       const { error: subaccountsError } = await supabase
         .from("ghl_subaccounts")
         .delete()
@@ -68,7 +67,6 @@ export function RegisteredUsersPanel() {
         console.error("Error deleting subaccounts:", subaccountsError);
       }
 
-      // Finally delete profile
       const { error: profileError } = await supabase
         .from("profiles")
         .delete()
@@ -89,9 +87,38 @@ export function RegisteredUsersPanel() {
     },
   });
 
+  const togglePause = useMutation({
+    mutationFn: async ({ userId, isPaused }: { userId: string; isPaused: boolean }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          is_paused: !isPaused,
+          paused_at: !isPaused ? new Date().toISOString() : null,
+        })
+        .eq("user_id", userId);
+
+      if (error) throw error;
+      return { userId, newState: !isPaused };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["registered-users"] });
+      toast.success(data.newState ? "Usuário pausado com sucesso!" : "Usuário reativado com sucesso!");
+      setTogglingId(null);
+    },
+    onError: (error) => {
+      toast.error("Erro ao alterar status: " + error.message);
+      setTogglingId(null);
+    },
+  });
+
   const handleDelete = (userId: string) => {
     setDeletingId(userId);
     deleteUser.mutate(userId);
+  };
+
+  const handleTogglePause = (userId: string, isPaused: boolean) => {
+    setTogglingId(userId);
+    togglePause.mutate({ userId, isPaused });
   };
 
   return (
@@ -128,8 +155,9 @@ export function RegisteredUsersPanel() {
               <TableHeader>
                 <TableRow className="border-border">
                   <TableHead className="text-muted-foreground">Email</TableHead>
+                  <TableHead className="text-muted-foreground">Status</TableHead>
                   <TableHead className="text-muted-foreground">Cadastrado em</TableHead>
-                  <TableHead className="text-muted-foreground w-[100px]">Ações</TableHead>
+                  <TableHead className="text-muted-foreground w-[140px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -138,47 +166,81 @@ export function RegisteredUsersPanel() {
                     <TableCell className="font-medium text-foreground">
                       {user.email || "Email não definido"}
                     </TableCell>
+                    <TableCell>
+                      {user.is_paused ? (
+                        <Badge variant="destructive" className="gap-1">
+                          <Pause className="h-3 w-3" />
+                          Pausado
+                        </Badge>
+                      ) : (
+                        <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700">
+                          <Play className="h-3 w-3" />
+                          Ativo
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {format(new Date(user.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                     </TableCell>
                     <TableCell>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            disabled={deletingId === user.user_id}
-                          >
-                            {deletingId === user.user_id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="bg-card border-border">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="text-foreground">
-                              Excluir usuário?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Esta ação irá excluir o perfil do usuário <strong>{user.email}</strong> e todos os dados associados (instâncias, subcontas, configurações).
-                              <br /><br />
-                              <span className="text-destructive font-medium">Esta ação não pode ser desfeita.</span>
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="border-border">Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(user.user_id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      <div className="flex items-center gap-1">
+                        {/* Toggle Pause Button */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-8 w-8 ${user.is_paused ? "text-green-600 hover:text-green-700 hover:bg-green-100" : "text-amber-600 hover:text-amber-700 hover:bg-amber-100"}`}
+                          disabled={togglingId === user.user_id}
+                          onClick={() => handleTogglePause(user.user_id, user.is_paused)}
+                          title={user.is_paused ? "Reativar usuário" : "Pausar usuário"}
+                        >
+                          {togglingId === user.user_id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : user.is_paused ? (
+                            <Play className="h-4 w-4" />
+                          ) : (
+                            <Pause className="h-4 w-4" />
+                          )}
+                        </Button>
+
+                        {/* Delete Button */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={deletingId === user.user_id}
                             >
-                              Excluir
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                              {deletingId === user.user_id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="bg-card border-border">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="text-foreground">
+                                Excluir usuário?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Esta ação irá excluir o perfil do usuário <strong>{user.email}</strong> e todos os dados associados (instâncias, subcontas, configurações).
+                                <br /><br />
+                                <span className="text-destructive font-medium">Esta ação não pode ser desfeita.</span>
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="border-border">Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDelete(user.user_id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Excluir
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
