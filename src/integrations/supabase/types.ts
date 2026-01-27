@@ -326,6 +326,13 @@ export type Database = {
       cleanup_old_phone_mappings: { Args: never; Returns: undefined }
       cleanup_old_processed_messages: { Args: never; Returns: undefined }
       generate_embed_token: { Args: never; Returns: string }
+      get_admin_oauth_credentials: {
+        Args: never
+        Returns: {
+          ghl_client_id: string
+          ghl_client_secret: string
+        }[]
+      }
       get_effective_user_id: { Args: { p_user_id: string }; Returns: string }
       get_token_owner: { Args: { p_agency_token: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }

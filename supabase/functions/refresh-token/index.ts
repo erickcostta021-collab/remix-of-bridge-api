@@ -25,37 +25,47 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get integration and settings
-    const [integrationResult, settingsResult] = await Promise.all([
-      supabase
-        .from("ghl_subaccounts")
-        .select("*")
-        .eq("location_id", locationId)
-        .eq("user_id", userId)
-        .single(),
-      supabase
-        .from("user_settings")
-        .select("ghl_client_id, ghl_client_secret")
-        .eq("user_id", userId)
-        .single(),
-    ]);
+    // Get integration
+    const { data: integration, error: integrationError } = await supabase
+      .from("ghl_subaccounts")
+      .select("*")
+      .eq("location_id", locationId)
+      .eq("user_id", userId)
+      .single();
 
-    if (integrationResult.error || !integrationResult.data) {
+    if (integrationError || !integration) {
       return new Response(
         JSON.stringify({ error: "Integration not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (settingsResult.error || !settingsResult.data?.ghl_client_id) {
-      return new Response(
-        JSON.stringify({ error: "OAuth credentials not configured" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Get admin OAuth credentials (shared across all users)
+    const { data: adminCredentials, error: adminCredentialsError } = await supabase
+      .rpc("get_admin_oauth_credentials");
+
+    if (adminCredentialsError || !adminCredentials?.[0]?.ghl_client_id) {
+      // Fallback to user's own settings if admin credentials not available
+      const { data: userSettings } = await supabase
+        .from("user_settings")
+        .select("ghl_client_id, ghl_client_secret")
+        .eq("user_id", userId)
+        .single();
+
+      if (!userSettings?.ghl_client_id) {
+        return new Response(
+          JSON.stringify({ error: "OAuth credentials not configured" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
-    const integration = integrationResult.data;
-    const settings = settingsResult.data;
+    // Use admin credentials or fallback to user settings
+    const settings = adminCredentials?.[0] || (await supabase
+      .from("user_settings")
+      .select("ghl_client_id, ghl_client_secret")
+      .eq("user_id", userId)
+      .single()).data;
 
     if (!integration.ghl_refresh_token) {
       return new Response(

@@ -185,10 +185,23 @@ export function useSettings() {
     },
   });
 
-  // Generate OAuth URL - uses settings client_id or fallback to marketplace app
+  // Fetch admin OAuth credentials
+  const { data: adminCredentials } = useQuery({
+    queryKey: ["admin-oauth-credentials"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_admin_oauth_credentials");
+      if (error) {
+        console.error("Error fetching admin credentials:", error);
+        return null;
+      }
+      return data?.[0] || null;
+    },
+  });
+
+  // Generate OAuth URL - uses admin credentials or fallback to marketplace app
   const getOAuthUrl = () => {
-    // Use configured client_id or fallback to the marketplace app's public client_id
-    const clientId = settings?.ghl_client_id || "69714e4c3c479f8c8e5e8e2d-mkpu6ehw";
+    // Priority: admin credentials > own settings > marketplace fallback
+    const clientId = adminCredentials?.ghl_client_id || settings?.ghl_client_id || "69714e4c3c479f8c8e5e8e2d-mkpu6ehw";
 
     // IMPORTANT: Use the canonical (published) origin for redirect_uri.
     // The Preview domain is temporary and will cause "Missing user context in state"
