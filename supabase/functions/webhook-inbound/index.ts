@@ -418,6 +418,44 @@ async function markIfNew(supabase: any, messageId: string): Promise<boolean> {
   }
 }
 
+// Opportunistic cleanup: 1% chance to run cleanup on each request
+async function maybeCleanupOldMappings(supabase: any): Promise<void> {
+  // 1% chance to run cleanup
+  if (Math.random() > 0.01) return;
+  
+  try {
+    console.log("Running opportunistic cleanup of old phone mappings...");
+    
+    // Delete phone mappings older than 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { error: mappingError } = await supabase
+      .from("ghl_contact_phone_mapping")
+      .delete()
+      .lt("updated_at", thirtyDaysAgo);
+    
+    if (mappingError) {
+      console.error("Failed to cleanup old phone mappings:", mappingError);
+    } else {
+      console.log("✅ Old phone mappings cleanup completed");
+    }
+    
+    // Also cleanup old processed messages (older than 1 hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { error: msgError } = await supabase
+      .from("ghl_processed_messages")
+      .delete()
+      .lt("created_at", oneHourAgo);
+    
+    if (msgError) {
+      console.error("Failed to cleanup old processed messages:", msgError);
+    } else {
+      console.log("✅ Old processed messages cleanup completed");
+    }
+  } catch (e) {
+    console.error("Cleanup error (non-critical):", e);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -565,6 +603,9 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Opportunistic cleanup (1% chance) - runs in background without blocking
+    maybeCleanupOldMappings(supabase);
 
     // UAZAPI may fire the same 'fromMe' message multiple times; dedupe by UAZAPI messageid.
     // This prevents creating the same outbound message repeatedly in GHL (which then triggers outbound webhooks and loops).
