@@ -343,35 +343,25 @@ export default function Settings() {
                     className="bg-secondary border-border"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="webhook-url" className="flex items-center gap-2">
-                    Webhook URL Global (UAZAPI)
-                    {!isAdmin && <Lock className="h-3 w-3 text-muted-foreground" />}
-                  </Label>
-                  <Input
-                    id="webhook-url"
-                    type="text"
-                    value={formData.global_webhook_url}
-                    onChange={(e) => isAdmin && setFormData({ ...formData, global_webhook_url: e.target.value })}
-                    placeholder="https://seu-webhook.com/endpoint"
-                    className={`bg-secondary border-border ${!isAdmin ? "opacity-60 cursor-not-allowed" : ""}`}
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {isAdmin ? (
-                      <>
-                        Webhook global (nível admin) que recebe eventos de todas as instâncias. 
-                        Use o URL do webhook inbound acima para integração automática com GHL.
-                      </>
-                    ) : (
-                      <>
-                        <Lock className="h-3 w-3 inline mr-1" />
-                        Campo gerenciado pelo administrador. Entre em contato se precisar alterar.
-                      </>
-                    )}
-                  </p>
-                </div>
+                {isAdmin && (
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-url">
+                      Webhook URL Global (UAZAPI)
+                    </Label>
+                    <Input
+                      id="webhook-url"
+                      type="text"
+                      value={formData.global_webhook_url}
+                      onChange={(e) => setFormData({ ...formData, global_webhook_url: e.target.value })}
+                      placeholder="https://seu-webhook.com/endpoint"
+                      className="bg-secondary border-border"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Webhook global (nível admin) que recebe eventos de todas as instâncias. 
+                      Use o URL do webhook inbound acima para integração automática com GHL.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
