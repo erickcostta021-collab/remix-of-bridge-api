@@ -269,7 +269,7 @@ serve(async (req) => {
     console.log("Step 3: Location name fetched - OK");
     console.log("Account Name:", accountName);
 
-    // Upsert integration record
+    // Upsert integration record - use location_id as conflict target since it has unique constraint
     const { error: upsertError } = await supabase
       .from("ghl_subaccounts")
       .upsert(
@@ -287,7 +287,7 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         },
         {
-          onConflict: "user_id,location_id",
+          onConflict: "location_id",
         }
       );
 
