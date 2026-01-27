@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { usePausedCheck } from "@/hooks/usePausedCheck";
 import { Loader2 } from "lucide-react";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
@@ -18,8 +19,9 @@ const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const { isPaused, checking } = usePausedCheck();
 
-  if (loading) {
+  if (loading || checking) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -27,7 +29,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
+  if (!user || isPaused) {
     return <Navigate to="/" replace />;
   }
 
