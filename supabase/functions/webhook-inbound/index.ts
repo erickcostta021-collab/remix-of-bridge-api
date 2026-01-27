@@ -685,6 +685,29 @@ serve(async (req) => {
       }
     }
 
+    // Upsert contact_instance_preferences to track the last instance used by this contact
+    // This allows the Bridge Switcher to auto-select the correct instance in the GHL dropdown
+    if (contact.id && instance.id) {
+      try {
+        await supabase
+          .from("contact_instance_preferences")
+          .upsert({
+            contact_id: contact.id,
+            location_id: subaccount.location_id,
+            instance_id: instance.id,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "contact_id,location_id" });
+        console.log("Updated contact instance preference:", { 
+          contactId: contact.id, 
+          instanceId: instance.id,
+          locationId: subaccount.location_id 
+        });
+      } catch (e) {
+        console.error("Failed to update contact instance preference:", e);
+        // Don't fail the message processing
+      }
+    }
+
     // Update contact photo from WhatsApp profile
     const profilePhoto = chatData.imagePreview || chatData.image || "";
     if (profilePhoto && contact.id) {
