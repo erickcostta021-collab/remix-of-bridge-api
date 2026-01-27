@@ -68,7 +68,7 @@ export function Sidebar() {
         <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <img src={logo} alt="Bridge API" className="h-10 w-10 rounded-full" />
+              <img src={logo} alt="Bridge API" className="h-12 w-12 rounded-full" />
               <span className="font-semibold text-sidebar-foreground">Bridge API</span>
             </div>
           )}
