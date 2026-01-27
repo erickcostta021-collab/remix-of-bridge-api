@@ -27,8 +27,25 @@ export function AuthForm() {
     setLoading(true);
 
     try {
-      const { error } = await signIn(email, password);
+      const { error, data } = await signIn(email, password);
       if (error) throw error;
+      
+      // Check if user is paused
+      if (data?.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("is_paused")
+          .eq("user_id", data.user.id)
+          .maybeSingle();
+        
+        if (profile?.is_paused) {
+          await supabase.auth.signOut();
+          toast.error("Sua conta está pausada. Entre em contato com o administrador.");
+          setLoading(false);
+          return;
+        }
+      }
+      
       toast.success("Login realizado com sucesso!");
     } catch (error: any) {
       toast.error(error.message || "Erro ao fazer login");
