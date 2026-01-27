@@ -98,7 +98,7 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <Button
               variant="outline"
               size="sm"
@@ -119,11 +119,11 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
               variant="ghost"
               size="icon"
               onClick={handleSettingsClick}
-              className="h-8 w-8 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <Settings className="h-4 w-4" />
             </Button>
-            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
         </div>
       </CardHeader>
