@@ -23,19 +23,27 @@ export function useSubaccounts() {
   // Check if this account is sharing from another user
   const isSharedAccount = !!settings?.shared_from_user_id;
 
+  const hasAgencyToken = !!settings?.ghl_agency_token;
+
   const { data: subaccounts, isLoading } = useQuery({
-    queryKey: ["subaccounts", user?.id, settings?.shared_from_user_id],
+    queryKey: ["subaccounts", user?.id, settings?.shared_from_user_id, hasAgencyToken],
     queryFn: async () => {
       if (!user) return [];
       
       // Get effective user ID (original owner if shared)
       const effectiveUserId = await getEffectiveUserId(user.id);
       
-      const { data, error } = await supabase
+      let query = supabase
         .from("ghl_subaccounts")
         .select("*")
-        .eq("user_id", effectiveUserId)
-        .order("account_name");
+        .eq("user_id", effectiveUserId);
+      
+      // If no agency token, only show subaccounts with the app installed (via OAuth)
+      if (!hasAgencyToken) {
+        query = query.not("ghl_access_token", "is", null);
+      }
+      
+      const { data, error } = await query.order("account_name");
 
       if (error) throw error;
       return data as Subaccount[];
