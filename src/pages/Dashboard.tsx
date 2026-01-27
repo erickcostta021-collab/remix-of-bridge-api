@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useSubaccounts, Subaccount } from "@/hooks/useSubaccounts";
 import { useInstances } from "@/hooks/useInstances";
 import { useSettings } from "@/hooks/useSettings";
-import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone, Link2 } from "lucide-react";
+import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone, Link2, Eye } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ import { CANONICAL_APP_ORIGIN } from "@/lib/canonicalOrigin";
 export default function Dashboard() {
   const [selectedSubaccount, setSelectedSubaccount] = useState<Subaccount | null>(null);
   const [search, setSearch] = useState("");
-  const { subaccounts, isLoading, syncSubaccounts } = useSubaccounts();
+  const { subaccounts, isLoading, syncSubaccounts, isSharedAccount } = useSubaccounts();
   const { instances, syncAllInstancesStatus } = useInstances(selectedSubaccount?.id);
   const { settings } = useSettings();
 
@@ -106,15 +106,25 @@ export default function Dashboard() {
                   <Link2 className="h-4 w-4 mr-2" />
                   Copiar Link GHL
                 </Button>
-                {hasUAZAPIConfig && (
+                {hasUAZAPIConfig && !isSharedAccount && (
                   <AddInstanceDialog subaccount={selectedSubaccount} />
                 )}
               </div>
             </div>
           </div>
 
+          {/* Shared Account Alert */}
+          {isSharedAccount && (
+            <Alert className="border-blue-500 bg-blue-500/10">
+              <Eye className="h-4 w-4 text-blue-500" />
+              <AlertDescription className="text-blue-500">
+                Você está visualizando o dashboard de outra conta (modo espelho). Apenas visualização disponível.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Alert if UAZAPI not configured */}
-          {!hasUAZAPIConfig && (
+          {!hasUAZAPIConfig && !isSharedAccount && (
             <Alert className="border-warning bg-warning/10">
               <AlertCircle className="h-4 w-4 text-warning" />
               <AlertDescription className="text-warning">
@@ -158,12 +168,19 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Dashboard Gestor</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              Dashboard Gestor
+              {isSharedAccount && (
+                <span className="ml-2 text-sm font-normal text-blue-500">(Modo Espelho)</span>
+              )}
+            </h1>
             <p className="text-muted-foreground">
-              Gerencie suas subcontas e instâncias
+              {isSharedAccount 
+                ? "Visualizando dashboard compartilhado - somente leitura" 
+                : "Gerencie suas subcontas e instâncias"}
             </p>
           </div>
-          {hasGHLToken && (
+          {hasGHLToken && !isSharedAccount && (
             <Button
               onClick={() => syncSubaccounts.mutate()}
               disabled={syncSubaccounts.isPending}
@@ -179,8 +196,20 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Shared Account Alert */}
+        {isSharedAccount && (
+          <Alert className="border-blue-500 bg-blue-500/10">
+            <Eye className="h-4 w-4 text-blue-500" />
+            <AlertDescription className="text-blue-500">
+              Você está visualizando o dashboard de outra conta que usa o mesmo token de agência. 
+              Apenas visualização disponível - você não pode modificar dados.
+            </AlertDescription>
+          </Alert>
+        )}
+
+
         {/* Alert if GHL not configured */}
-        {!hasGHLToken && (
+        {!hasGHLToken && !isSharedAccount && (
           <Alert className="border-warning bg-warning/10">
             <AlertCircle className="h-4 w-4 text-warning" />
             <AlertDescription className="text-warning">

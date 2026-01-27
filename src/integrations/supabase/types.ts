@@ -273,6 +273,7 @@ export type Database = {
           ghl_conversation_provider_id: string | null
           global_webhook_url: string | null
           id: string
+          shared_from_user_id: string | null
           track_id: string | null
           uazapi_admin_token: string | null
           uazapi_base_url: string | null
@@ -290,6 +291,7 @@ export type Database = {
           ghl_conversation_provider_id?: string | null
           global_webhook_url?: string | null
           id?: string
+          shared_from_user_id?: string | null
           track_id?: string | null
           uazapi_admin_token?: string | null
           uazapi_base_url?: string | null
@@ -307,6 +309,7 @@ export type Database = {
           ghl_conversation_provider_id?: string | null
           global_webhook_url?: string | null
           id?: string
+          shared_from_user_id?: string | null
           track_id?: string | null
           uazapi_admin_token?: string | null
           uazapi_base_url?: string | null
@@ -323,6 +326,8 @@ export type Database = {
       cleanup_old_phone_mappings: { Args: never; Returns: undefined }
       cleanup_old_processed_messages: { Args: never; Returns: undefined }
       generate_embed_token: { Args: never; Returns: string }
+      get_effective_user_id: { Args: { p_user_id: string }; Returns: string }
+      get_token_owner: { Args: { p_agency_token: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       upsert_subaccounts: {
         Args: { p_locations: Json; p_user_id: string }

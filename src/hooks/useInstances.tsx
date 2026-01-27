@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
-import { useSettings } from "./useSettings";
+import { useSettings, getEffectiveUserId } from "./useSettings";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -33,14 +33,21 @@ export function useInstances(subaccountId?: string) {
   const { settings } = useSettings();
   const queryClient = useQueryClient();
 
+  // Check if this account is sharing from another user
+  const isSharedAccount = !!settings?.shared_from_user_id;
+
   const { data: instances, isLoading } = useQuery({
-    queryKey: ["instances", user?.id, subaccountId],
+    queryKey: ["instances", user?.id, subaccountId, settings?.shared_from_user_id],
     queryFn: async () => {
       if (!user) return [];
+      
+      // Get effective user ID (original owner if shared)
+      const effectiveUserId = await getEffectiveUserId(user.id);
+      
       let query = supabase
         .from("instances")
         .select("*")
-        .eq("user_id", user.id);
+        .eq("user_id", effectiveUserId);
 
       if (subaccountId) {
         query = query.eq("subaccount_id", subaccountId);
