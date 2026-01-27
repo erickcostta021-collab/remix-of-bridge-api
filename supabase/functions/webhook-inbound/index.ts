@@ -80,7 +80,15 @@ async function getValidToken(supabase: any, integration: any, settings: any): Pr
     });
 
     if (!tokenResponse.ok) {
-      throw new Error("Failed to refresh token");
+      const errorBody = await tokenResponse.text();
+      console.error("Token refresh failed:", { 
+        status: tokenResponse.status, 
+        body: errorBody,
+        hasClientId: !!settings.ghl_client_id,
+        hasClientSecret: !!settings.ghl_client_secret,
+        hasRefreshToken: !!integration.ghl_refresh_token,
+      });
+      throw new Error(`Failed to refresh token: ${tokenResponse.status} - ${errorBody.substring(0, 200)}`);
     }
 
     const tokenData = await tokenResponse.json();
