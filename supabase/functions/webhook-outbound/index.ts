@@ -433,19 +433,36 @@ serve(async (req: Request) => {
       return; // Already responded
     }
 
-    // Get phone from contact
+    // Get phone from contact - FIRST try our mapping table for the original WhatsApp ID
     let targetPhone = phoneRaw || "";
+    let usedMappingTable = false;
+    
     if (contactId) {
-      try {
-        if (settings?.ghl_client_id && settings?.ghl_client_secret) {
-          const token = await getValidToken(supabase, subaccount, settings);
-          if (token) {
-            const contactPhone = await fetchGhlContactPhone(token, contactId);
-            if (contactPhone) targetPhone = contactPhone;
+      // Try to get the original WhatsApp JID from our mapping table
+      const { data: mapping } = await supabase
+        .from("ghl_contact_phone_mapping")
+        .select("original_phone")
+        .eq("contact_id", contactId)
+        .eq("location_id", locationId)
+        .maybeSingle();
+      
+      if (mapping?.original_phone) {
+        targetPhone = mapping.original_phone;
+        usedMappingTable = true;
+        console.log("Found original phone in mapping table:", { contactId, originalPhone: targetPhone });
+      } else {
+        // Fallback to GHL contact lookup
+        try {
+          if (settings?.ghl_client_id && settings?.ghl_client_secret) {
+            const token = await getValidToken(supabase, subaccount, settings);
+            if (token) {
+              const contactPhone = await fetchGhlContactPhone(token, contactId);
+              if (contactPhone) targetPhone = contactPhone;
+            }
           }
+        } catch (e) {
+          console.error("Failed to resolve contact phone:", e);
         }
-      } catch (e) {
-        console.error("Failed to resolve contact phone:", e);
       }
     }
 
@@ -453,13 +470,16 @@ serve(async (req: Request) => {
     const isGroup = isGroupId(targetPhone);
     
     // Format phone for UAZAPI
+    // If we got the phone from mapping table, it's already in correct format
     // For groups: add @g.us suffix if not present
     // For regular numbers: clean to digits only
-    targetPhone = formatPhoneForUazapi(targetPhone);
-    
-    // If it's a group and doesn't have @g.us, add it
-    if (isGroup && !targetPhone.includes("@g.us")) {
-      targetPhone = `${targetPhone}@g.us`;
+    if (!usedMappingTable) {
+      targetPhone = formatPhoneForUazapi(targetPhone);
+      
+      // If it's a group and doesn't have @g.us, add it
+      if (isGroup && !targetPhone.includes("@g.us")) {
+        targetPhone = `${targetPhone}@g.us`;
+      }
     }
 
     if (!targetPhone) {
@@ -467,7 +487,7 @@ serve(async (req: Request) => {
       return; // Already responded
     }
 
-    console.log("Phone formatting:", { original: phoneRaw, formatted: targetPhone, isGroup });
+    console.log("Phone formatting:", { original: phoneRaw, formatted: targetPhone, isGroup, usedMappingTable });
 
     // Check if we have content to send
     if (!messageText && attachments.length === 0) {

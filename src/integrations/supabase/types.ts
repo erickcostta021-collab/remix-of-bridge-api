@@ -49,6 +49,33 @@ export type Database = {
           },
         ]
       }
+      ghl_contact_phone_mapping: {
+        Row: {
+          contact_id: string
+          created_at: string
+          id: string
+          location_id: string
+          original_phone: string
+          updated_at: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          id?: string
+          location_id: string
+          original_phone: string
+          updated_at?: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          id?: string
+          location_id?: string
+          original_phone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ghl_processed_messages: {
         Row: {
           created_at: string
