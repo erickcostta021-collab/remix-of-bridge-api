@@ -101,22 +101,6 @@ export function EmbedAssignUserDialog({
 
       if (error) throw error;
 
-      // Dispara sincronização para o banco unified_instance_ghl (projeto externo) mesmo no modo embed (sem login)
-      try {
-        await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-external-supabase-embed`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ embedToken, instanceId }),
-          }
-        );
-      } catch (syncErr) {
-        console.warn("[EmbedAssignUserDialog] External sync failed:", syncErr);
-      }
-
       const selectedUser = ghlUsers.find(u => u.id === userId);
       onAssigned(userId, selectedUser?.name || null);
       toast.success("Usuário atribuído com sucesso!");

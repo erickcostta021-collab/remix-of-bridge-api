@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSettings } from "@/hooks/useSettings";
-import { useExternalSupabase } from "@/hooks/useExternalSupabase";
 import { useAuth } from "@/hooks/useAuth";
 import { CANONICAL_APP_ORIGIN, getOAuthRedirectUri } from "@/lib/canonicalOrigin";
 import { Save, Loader2, Eye, EyeOff, Info, CheckCircle2, Wand2, Copy, Check, Lock } from "lucide-react";
@@ -18,7 +17,6 @@ const ADMIN_EMAILS = ["erickcostta021@gmail.com", "erickcostta.br@gmail.com"];
 
 export default function Settings() {
   const { settings, isLoading, updateSettings, applyGlobalWebhook, getOAuthUrl } = useSettings();
-  const { syncToExternal } = useExternalSupabase();
   const { user } = useAuth();
   const isAdmin = ADMIN_EMAILS.includes(user?.email || "");
   const [showTokens, setShowTokens] = useState(false);
@@ -32,7 +30,6 @@ export default function Settings() {
     uazapi_admin_token: "",
     uazapi_base_url: "",
     global_webhook_url: "",
-    external_supabase_pat: "",
   });
 
   useEffect(() => {
@@ -45,7 +42,6 @@ export default function Settings() {
         uazapi_admin_token: settings.uazapi_admin_token || "",
         uazapi_base_url: settings.uazapi_base_url || "",
         global_webhook_url: settings.global_webhook_url || "",
-        external_supabase_pat: settings.external_supabase_pat || "",
       });
     }
   }, [settings]);
@@ -65,26 +61,6 @@ export default function Settings() {
     }
   };
 
-  const handleSync = async () => {
-    if (!formData.external_supabase_pat) {
-      toast.error("Configure o Token PAT primeiro");
-      return;
-    }
-    
-    // Save settings first to ensure PAT is in database
-    try {
-      await new Promise<void>((resolve, reject) => {
-        updateSettings.mutate(formData, {
-          onSuccess: () => resolve(),
-          onError: (err) => reject(err),
-        });
-      });
-      // Then sync
-      syncToExternal.mutate();
-    } catch {
-      toast.error("Erro ao salvar configurações antes de sincronizar");
-    }
-  };
 
   const oauthUrl = getOAuthUrl();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
