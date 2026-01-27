@@ -18,6 +18,14 @@ export interface UserSettings {
   external_supabase_url: string | null;
   external_supabase_key: string | null;
   external_supabase_pat: string | null;
+  shared_from_user_id: string | null;
+}
+
+// Get the effective user ID (for shared accounts, returns the original owner's ID)
+export async function getEffectiveUserId(userId: string): Promise<string> {
+  const { data } = await supabase
+    .rpc("get_effective_user_id", { p_user_id: userId });
+  return data || userId;
 }
 
 // Configure global webhook on UAZAPI (admin level - all instances)
@@ -100,6 +108,35 @@ export function useSettings() {
     mutationFn: async (newSettings: Partial<Omit<UserSettings, "id" | "user_id">>) => {
       if (!user) throw new Error("Not authenticated");
 
+      // Check if agency token is being set and if it already belongs to another user
+      if (newSettings.ghl_agency_token) {
+        const { data: existingOwner } = await supabase
+          .rpc("get_token_owner", { p_agency_token: newSettings.ghl_agency_token });
+
+        if (existingOwner && existingOwner !== user.id) {
+          // Token already owned by someone else - set up sharing
+          const { data, error } = await supabase
+            .from("user_settings")
+            .update({ 
+              ...newSettings, 
+              shared_from_user_id: existingOwner 
+            })
+            .eq("user_id", user.id)
+            .select()
+            .single();
+
+          if (error) throw error;
+          
+          toast.info("Token já em uso! Espelhando dashboard da conta principal.");
+          return data;
+        }
+      }
+
+      // If changing token and was previously shared, clear sharing
+      if (newSettings.ghl_agency_token && settings?.shared_from_user_id) {
+        newSettings = { ...newSettings, shared_from_user_id: null } as typeof newSettings;
+      }
+
       const { data, error } = await supabase
         .from("user_settings")
         .update(newSettings)
@@ -112,6 +149,8 @@ export function useSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["subaccounts"] });
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success("Configurações salvas com sucesso!");
     },
     onError: (error) => {
