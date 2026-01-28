@@ -98,13 +98,27 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     }
 
     function updateDisplay(select, showFull) {
-        console.log("🔄 updateDisplay chamado:", { showFull, instanceData });
-        Array.from(select.options).forEach(option => {
-            const data = instanceData.find(i => i.id === option.value);
-            if (data) {
-                option.text = showFull && data.phone ? \`\${data.name} (\${data.phone})\` : data.name;
+        // Fallback: força o navegador a re-ler o texto das <option> recriando-as.
+        // Mantemos o texto SEMPRE como "Nome (Telefone)"; o "esconder telefone" é feito via CSS (ellipsis) no <select>.
+        try {
+            const currentValue = select.value;
+            const options = instanceData.map((i) => {
+                const label = i.phone ? \`\${i.name} (\${i.phone})\` : i.name;
+                return { value: i.id, label };
+            });
+
+            while (select.firstChild) select.removeChild(select.firstChild);
+            for (const opt of options) {
+                const o = document.createElement('option');
+                o.value = opt.value;
+                o.text = opt.label;
+                select.appendChild(o);
             }
-        });
+
+            if (currentValue) select.value = currentValue;
+        } catch (e) {
+            console.warn('⚠️ Falha ao re-renderizar options:', e);
+        }
     }
 
     function showAutoSwitchNotify(instanceName) {
@@ -123,17 +137,17 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             const wrapper = document.createElement('div');
             wrapper.id = 'bridge-api-container';
             wrapper.style.cssText = \`display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid \${CONFIG.theme.border}; border-radius: 20px; cursor: pointer;\`;
-            wrapper.innerHTML = \`<div style="display:flex; align-items:center; gap:6px;"><div id="bridge-status-indicator" style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div><select id="bridge-instance-selector" style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: \${CONFIG.theme.text}; outline: none; cursor: pointer; appearance: none; -webkit-appearance: none;"></select></div>\`;
+            // O texto das <option> já vem completo (Nome + Telefone).
+            // Para em repouso parecer que “mostra só o nome”, aplicamos ellipsis no próprio <select>.
+            wrapper.innerHTML = \`<div style="display:flex; align-items:center; gap:6px;"><div id="bridge-status-indicator" style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div><select id="bridge-instance-selector" style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: \${CONFIG.theme.text}; outline: none; cursor: pointer; appearance: none; -webkit-appearance: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;"></select></div>\`;
             actionBar.appendChild(wrapper);
             const select = wrapper.querySelector('#bridge-instance-selector');
             
             select.addEventListener('change', (e) => saveBridgePreference(e.target.value));
             
-            // Show phone numbers when dropdown is opened
+            // Re-renderização total (fallback) ao focar/abrir para forçar o navegador a “ler” novamente as options.
             select.addEventListener('mousedown', () => updateDisplay(select, true));
             select.addEventListener('focus', () => updateDisplay(select, true));
-            // Hide phone numbers when dropdown is closed
-            select.addEventListener('blur', () => updateDisplay(select, false));
             
             loadBridgeOptions(select);
 
@@ -155,13 +169,20 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
                 // Sort instances by name for consistent ordering
                 instanceData.sort((a, b) => a.name.localeCompare(b.name));
                 // Add placeholder option to prevent auto-selection
-                select.innerHTML = '<option value="" disabled>Carregando...</option>' + instanceData.map(i => \`<option value="\${i.id}">\${i.name}</option>\`).join('');
+                // As options já são criadas com "Nome (Telefone)" desde o início.
+                select.innerHTML = '<option value="" disabled>Carregando...</option>' + instanceData.map(i => {
+                    const label = i.phone ? \`\${i.name} (\${i.phone})\` : i.name;
+                    return \`<option value="\${i.id}">\${label}</option>\`;
+                }).join('');
                 select.value = '';
                 // Sync will set the correct value based on saved preference
                 await syncBridgeContext(select);
                 // Remove placeholder after sync
                 const placeholder = select.querySelector('option[value=""]');
                 if (placeholder) placeholder.remove();
+
+                // Fallback extra: força re-render das options logo após carregar
+                updateDisplay(select, true);
             }
         } catch (e) {
             console.error("❌ Erro ao carregar instâncias:", e);
