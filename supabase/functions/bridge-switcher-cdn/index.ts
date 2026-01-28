@@ -46,7 +46,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     }
 
     function getContactId() {
-        // GHL conversation URLs have format:
+        // GHL conversation URLs have formats:
         // /v2/location/{locationId}/conversations/{conversationId}
         // /v2/location/{locationId}/contacts/detail/{contactId}
         // The contactId is what we need for instance preferences
@@ -61,18 +61,24 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         }
         
         // Try to get conversationId from conversations/{conversationId} pattern
-        const convMatch = path.match(/conversations\\/([a-zA-Z0-9]+)/);
-        if (convMatch) {
+        // IMPORTANT: Only match if there's an actual ID after "conversations/"
+        // The pattern ensures we don't capture just "conversations" as the ID
+        const convMatch = path.match(/\\/conversations\\/([a-zA-Z0-9]{10,})/);
+        if (convMatch && convMatch[1] !== 'conversations') {
             console.log("🔍 Bridge: Found conversationId from URL:", convMatch[1]);
-            // For conversations, we might need to use this as contactId 
-            // since GHL uses the same ID in conversation context
             return convMatch[1];
         }
         
         // Fallback: last segment of URL that looks like an ID
+        // Must be at least 10 chars and not be a known route segment
         const segments = path.split('/').filter(Boolean);
         const lastSegment = segments[segments.length - 1];
-        if (lastSegment && lastSegment.length >= 10 && /^[a-zA-Z0-9]+$/.test(lastSegment)) {
+        const reservedWords = ['conversations', 'contacts', 'detail', 'location', 'v2', 'settings'];
+        
+        if (lastSegment && 
+            lastSegment.length >= 10 && 
+            /^[a-zA-Z0-9]+$/.test(lastSegment) &&
+            !reservedWords.includes(lastSegment.toLowerCase())) {
             console.log("🔍 Bridge: Found contactId from last segment:", lastSegment);
             return lastSegment;
         }
