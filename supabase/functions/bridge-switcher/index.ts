@@ -17,6 +17,22 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // Validate contactId to prevent saving preferences with placeholder values
+  function isValidContactId(value: string | null): boolean {
+    if (!value) return false;
+    const v = value.trim();
+    if (v.length < 10) return false;
+    
+    // Block known GHL placeholder values
+    const blocked = new Set(['conversations', 'contacts', 'detail', 'inbox', 'chat']);
+    if (blocked.has(v.toLowerCase())) return false;
+    
+    // Real IDs almost always have digits/underscores/hyphens, not pure alphabetic
+    if (/^[a-zA-Z]+$/.test(v)) return false;
+    
+    return true;
+  }
+
   try {
     // GET: Recuperar preferência atual do contato
     if (req.method === "GET") {
@@ -28,6 +44,15 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({ error: "contactId and locationId are required" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Validate contactId before processing
+      if (!isValidContactId(contactId)) {
+        console.log("Invalid contactId rejected:", contactId);
+        return new Response(
+          JSON.stringify({ activeInstanceId: null, debug: { rejected: true, reason: "invalid_contact_id", contactId } }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -124,6 +149,15 @@ Deno.serve(async (req) => {
       if (!instanceId || !contactId || !locationId) {
         return new Response(
           JSON.stringify({ error: "instanceId, contactId and locationId are required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Validate contactId before saving - CRITICAL to prevent cross-contact pollution
+      if (!isValidContactId(contactId)) {
+        console.log("POST rejected - invalid contactId:", contactId);
+        return new Response(
+          JSON.stringify({ success: false, error: "Invalid contactId - cannot save preference for placeholder values" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
