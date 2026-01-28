@@ -114,12 +114,18 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
                 instanceData = data.instances;
                 // Sort instances by name for consistent ordering
                 instanceData.sort((a, b) => a.name.localeCompare(b.name));
-                select.innerHTML = instanceData.map(i => \`<option value="\${i.id}">\${i.name}</option>\`).join('');
-                // Don't auto-select first - wait for syncBridgeContext to set correct one
+                // Add placeholder option to prevent auto-selection
+                select.innerHTML = '<option value="" disabled>Carregando...</option>' + instanceData.map(i => \`<option value="\${i.id}">\${i.name}</option>\`).join('');
                 select.value = '';
-                syncBridgeContext(select);
+                // Sync will set the correct value based on saved preference
+                await syncBridgeContext(select);
+                // Remove placeholder after sync
+                const placeholder = select.querySelector('option[value=""]');
+                if (placeholder) placeholder.remove();
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error("❌ Erro ao carregar instâncias:", e);
+        }
     }
 
     async function saveBridgePreference(instanceId) {
