@@ -30,8 +30,9 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             if (expanded) {
                 // Alguns browsers herdam a largura do <select> para renderizar a lista aberta.
                 // Expandimos temporariamente para exibir "Nome (Telefone)" completo.
-                select.style.maxWidth = '520px';
+                select.style.maxWidth = 'none';
                 select.style.width = '520px';
+                select.style.minWidth = '260px';
                 select.style.overflow = 'visible';
                 select.style.textOverflow = 'clip';
                 select.style.whiteSpace = 'nowrap';
@@ -39,12 +40,25 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
                 // Em repouso: mantém compacto (parece que mostra só o nome)
                 select.style.maxWidth = '180px';
                 select.style.width = '180px';
+                select.style.minWidth = '0px';
                 select.style.overflow = 'hidden';
                 select.style.textOverflow = 'ellipsis';
                 select.style.whiteSpace = 'nowrap';
             }
         } catch {
             // ignore
+        }
+    }
+
+    // Garante que o texto das <option> SEMPRE seja "Nome (Telefone)" (quando houver telefone)
+    // para evitar dependência de troca de label em tempo real.
+    function getOptionLabel(i) {
+        try {
+            const name = (i && i.name) ? String(i.name) : '';
+            const phone = (i && i.phone) ? String(i.phone) : '';
+            return phone ? \`\${name} (\${phone})\` : name;
+        } catch {
+            return '';
         }
     }
 
@@ -129,7 +143,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         try {
             const currentValue = select.value;
             const options = instanceData.map((i) => {
-                const label = i.phone ? \`\${i.name} (\${i.phone})\` : i.name;
+                const label = getOptionLabel(i);
                 return { value: i.id, label };
             });
 
@@ -178,8 +192,28 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             select.addEventListener('change', (e) => saveBridgePreference(e.target.value));
             
             // Re-renderização total (fallback) ao focar/abrir para forçar o navegador a “ler” novamente as options.
-            select.addEventListener('mousedown', () => updateDisplay(select, true));
-            select.addEventListener('focus', () => updateDisplay(select, true));
+            // Importante: usamos capture + pointerdown/mousedown para aplicar expansão ANTES do browser abrir o dropdown.
+            select.addEventListener('pointerdown', () => {
+                setSelectExpanded(select, true);
+                updateDisplay(select, true);
+            }, true);
+            select.addEventListener('mousedown', () => {
+                setSelectExpanded(select, true);
+                updateDisplay(select, true);
+            }, true);
+            select.addEventListener('focus', () => {
+                setSelectExpanded(select, true);
+                updateDisplay(select, true);
+            });
+
+            // Abertura por teclado (ArrowDown/Enter/Space)
+            select.addEventListener('keydown', (ev) => {
+                const k = ev && ev.key;
+                if (k === 'ArrowDown' || k === 'Enter' || k === ' ') {
+                    setSelectExpanded(select, true);
+                    updateDisplay(select, true);
+                }
+            }, true);
 
             // Ao fechar, volta a compactar
             select.addEventListener('blur', () => updateDisplay(select, false));
@@ -210,7 +244,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
                 // Add placeholder option to prevent auto-selection
                 // As options já são criadas com "Nome (Telefone)" desde o início.
                 select.innerHTML = '<option value="" disabled>Carregando...</option>' + instanceData.map(i => {
-                    const label = i.phone ? \`\${i.name} (\${i.phone})\` : i.name;
+                    const label = getOptionLabel(i);
                     return \`<option value="\${i.id}">\${label}</option>\`;
                 }).join('');
                 select.value = '';
