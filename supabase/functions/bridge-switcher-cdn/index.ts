@@ -31,12 +31,31 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     \`;
     document.head.appendChild(style);
 
+    function isValidContactId(value) {
+        if (!value) return false;
+        const v = String(value).trim();
+        if (v.length < 10) return false;
+
+        // GHL às vezes usa placeholders quando nenhum lead está selecionado.
+        // Se salvamos preferência nesse placeholder, ela “vaza” para todos os contatos.
+        const blocked = new Set(['conversations', 'contacts', 'detail', 'inbox', 'chat']);
+        if (blocked.has(v.toLowerCase())) return false;
+
+        // Evita valores puramente alfabéticos (IDs reais quase sempre têm dígitos/_/-)
+        if (/^[a-zA-Z]+$/.test(v)) return false;
+        return true;
+    }
+
     function getGHLContactId() {
         const url = new URL(window.location.href);
         const fromQuery = url.searchParams.get('contactId') || url.searchParams.get('contact_id');
-        if (fromQuery && fromQuery.length >= 10) return fromQuery;
+        if (isValidContactId(fromQuery)) return fromQuery;
+
         const match = window.location.pathname.match(/(?:contacts\\/detail\\/|conversations\\/)([a-zA-Z0-9_-]{10,})/);
-        return match ? match[1] : null;
+        const fromPath = match ? match[1] : null;
+        if (isValidContactId(fromPath)) return fromPath;
+
+        return null;
     }
 
     // Ordena as instâncias colocando a ativa no topo
