@@ -22,6 +22,32 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     let currentContactId = null;
     let syncInterval = null;
 
+    // Controla a apresentação do <select>: compacto (ellipsis) quando fechado,
+    // expandido quando aberto/focado, para o navegador renderizar o texto completo.
+    function setSelectExpanded(select, expanded) {
+        try {
+            if (!select) return;
+            if (expanded) {
+                // Alguns browsers herdam a largura do <select> para renderizar a lista aberta.
+                // Expandimos temporariamente para exibir "Nome (Telefone)" completo.
+                select.style.maxWidth = '520px';
+                select.style.width = '520px';
+                select.style.overflow = 'visible';
+                select.style.textOverflow = 'clip';
+                select.style.whiteSpace = 'nowrap';
+            } else {
+                // Em repouso: mantém compacto (parece que mostra só o nome)
+                select.style.maxWidth = '180px';
+                select.style.width = '180px';
+                select.style.overflow = 'hidden';
+                select.style.textOverflow = 'ellipsis';
+                select.style.whiteSpace = 'nowrap';
+            }
+        } catch {
+            // ignore
+        }
+    }
+
     // 1. Captura dinâmica do ID do contato (GHL costuma expor via querystring)
     function getGHLContactId() {
         try {
@@ -116,6 +142,9 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             }
 
             if (currentValue) select.value = currentValue;
+
+            // Mantém o estado visual coerente (compacto vs expandido)
+            setSelectExpanded(select, !!showFull);
         } catch (e) {
             console.warn('⚠️ Falha ao re-renderizar options:', e);
         }
@@ -142,12 +171,22 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             wrapper.innerHTML = \`<div style="display:flex; align-items:center; gap:6px;"><div id="bridge-status-indicator" style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div><select id="bridge-instance-selector" style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: \${CONFIG.theme.text}; outline: none; cursor: pointer; appearance: none; -webkit-appearance: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;"></select></div>\`;
             actionBar.appendChild(wrapper);
             const select = wrapper.querySelector('#bridge-instance-selector');
+
+            // Estado inicial: compacto
+            setSelectExpanded(select, false);
             
             select.addEventListener('change', (e) => saveBridgePreference(e.target.value));
             
             // Re-renderização total (fallback) ao focar/abrir para forçar o navegador a “ler” novamente as options.
             select.addEventListener('mousedown', () => updateDisplay(select, true));
             select.addEventListener('focus', () => updateDisplay(select, true));
+
+            // Ao fechar, volta a compactar
+            select.addEventListener('blur', () => updateDisplay(select, false));
+            select.addEventListener('change', () => {
+                // Alguns browsers disparam blur depois; garantimos compactação.
+                setTimeout(() => updateDisplay(select, false), 0);
+            });
             
             loadBridgeOptions(select);
 
@@ -183,6 +222,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
                 // Fallback extra: força re-render das options logo após carregar
                 updateDisplay(select, true);
+                setTimeout(() => updateDisplay(select, false), 0);
             }
         } catch (e) {
             console.error("❌ Erro ao carregar instâncias:", e);
