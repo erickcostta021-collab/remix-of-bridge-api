@@ -22,19 +22,51 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     let currentContactId = null;
     let syncInterval = null;
 
-    // 1. Captura dinâmica do ID do contato (Suporta Conversations e Contacts)
+    // 1. Captura dinâmica do ID do contato (GHL costuma expor via querystring)
     function getGHLContactId() {
-        const path = window.location.pathname;
-        const match = path.match(/(?:contacts\\/detail\\/|conversations\\/)([a-zA-Z0-9_-]{10,})/);
-        const id = match ? match[1] : null;
-        const reserved = ['messages', 'search', 'settings', 'list'];
-        return reserved.includes(id) ? null : id;
+        try {
+            const url = new URL(window.location.href);
+            // Em várias rotas do GHL, o contactId vem na query (?contactId=...)
+            const fromQuery = url.searchParams.get('contactId') || url.searchParams.get('contact_id');
+            if (fromQuery && fromQuery.length >= 10) return fromQuery;
+
+            const path = url.pathname;
+            const candidates = [
+                /\/contacts\/detail\/([a-zA-Z0-9_-]{10,})/,          // Contacts
+                /\/conversations\/messages\/([a-zA-Z0-9_-]{10,})/,  // Some UIs
+                /\/conversations\/view\/([a-zA-Z0-9_-]{10,})/,      // Some UIs
+                /\/conversations\/([a-zA-Z0-9_-]{10,})/             // Legacy conversations
+            ];
+
+            for (const re of candidates) {
+                const m = path.match(re);
+                if (m && m[1]) {
+                    const id = m[1];
+                    const reserved = ['messages', 'search', 'settings', 'list'];
+                    if (!reserved.includes(id)) return id;
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return null;
+    }
+
+    function getGHLLocationId() {
+        try {
+            const url = new URL(window.location.href);
+            const fromPath = url.pathname.match(/location\/([^\/]+)/)?.[1];
+            if (fromPath) return fromPath;
+            return url.searchParams.get('locationId') || url.searchParams.get('location_id');
+        } catch {
+            return null;
+        }
     }
 
     // 2. Sincronização com o Banco (Tabela contact_instance_preferences)
     async function syncBridgeContext(select) {
         const contactId = getGHLContactId();
-        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+        const locationId = getGHLLocationId();
         
         if (!contactId || !locationId) return;
 
@@ -105,7 +137,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     }
 
     async function loadBridgeOptions(select) {
-        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+        const locationId = getGHLLocationId();
         if (!locationId) return;
         try {
             const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locationId}\`);
@@ -130,7 +162,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     async function saveBridgePreference(instanceId) {
         const contactId = getGHLContactId();
-        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+        const locationId = getGHLLocationId();
         if (!contactId || !instanceId) return;
         await fetch(CONFIG.save_url, {
             method: 'POST',
@@ -154,7 +186,8 @@ Deno.serve(async (req) => {
     headers: {
       ...corsHeaders,
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "public, max-age=3600",
+      // Reduce cache to propagate hotfixes faster in GHL embedded environments
+      "Cache-Control": "public, max-age=60, must-revalidate",
     },
   });
 });
