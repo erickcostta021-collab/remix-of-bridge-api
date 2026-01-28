@@ -31,24 +31,50 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Buscar preferência existente
-      const { data: preference, error } = await supabase
+      console.log("GET preference request:", { contactId, locationId });
+
+      // Strategy 1: Try to find preference directly by contactId
+      let preference = null;
+      const { data: directPref, error: directError } = await supabase
         .from("contact_instance_preferences")
-        .select("instance_id")
+        .select("instance_id, contact_id, updated_at")
         .eq("contact_id", contactId)
         .eq("location_id", locationId)
         .maybeSingle();
 
-      if (error) {
-        console.error("Error fetching preference:", error);
-        return new Response(
-          JSON.stringify({ activeInstanceId: null }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (directPref) {
+        console.log("Found preference by contactId:", directPref);
+        preference = directPref;
+      } else {
+        // Strategy 2: Look for the most recently updated preference for this location
+        // This handles when the same phone has multiple GHL contact IDs
+        // Find all preferences for this location, ordered by updated_at DESC
+        const { data: allPrefs, error: allError } = await supabase
+          .from("contact_instance_preferences")
+          .select("instance_id, contact_id, updated_at")
+          .eq("location_id", locationId)
+          .order("updated_at", { ascending: false })
+          .limit(50);
+
+        if (allPrefs && allPrefs.length > 0) {
+          // Check if any of these contacts might be the same person
+          // by looking at the most recent one that was updated
+          console.log("No direct match, checking recent preferences:", allPrefs.length);
+          
+          // For now, just return null - the contact will need to send a message
+          // to establish preference. In the future, we could cross-reference by phone.
+        }
       }
 
       return new Response(
-        JSON.stringify({ activeInstanceId: preference?.instance_id || null }),
+        JSON.stringify({ 
+          activeInstanceId: preference?.instance_id || null,
+          debug: { 
+            foundBy: preference ? "direct_match" : "none",
+            contactId,
+            locationId 
+          }
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -65,7 +91,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log(`Saving preference: contact=${contactId}, instance=${instanceId}, action=${action}`);
+      console.log(`POST save preference: contact=${contactId}, instance=${instanceId}, action=${action}`);
 
       // Upsert da preferência (insert ou update)
       const { error } = await supabase
