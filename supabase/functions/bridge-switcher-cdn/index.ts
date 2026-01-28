@@ -128,6 +128,13 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             const select = wrapper.querySelector('#bridge-instance-selector');
             
             select.addEventListener('change', (e) => saveBridgePreference(e.target.value));
+            
+            // Show phone numbers when dropdown is opened
+            select.addEventListener('mousedown', () => updateDisplay(select, true));
+            select.addEventListener('focus', () => updateDisplay(select, true));
+            // Hide phone numbers when dropdown is closed
+            select.addEventListener('blur', () => updateDisplay(select, false));
+            
             loadBridgeOptions(select);
 
             // Inicia o monitoramento de mudança de URL e o Polling de 5s
