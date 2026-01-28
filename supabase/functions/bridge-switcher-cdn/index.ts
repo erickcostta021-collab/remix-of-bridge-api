@@ -49,31 +49,51 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     function getContactId() {
         const path = window.location.pathname;
+        console.log("🔍 Bridge: Parsing path for contactId:", path);
         
-        // Try to get contactId from contacts/detail/{contactId} pattern
+        // Reserved words that should NOT be considered as IDs
+        const reservedWords = ['conversations', 'contacts', 'detail', 'location', 'v2', 'settings', 'manual-actions', 'messages'];
+        
+        // Helper to validate ID format (alphanumeric, 10+ chars, not a reserved word)
+        function isValidId(str) {
+            return str && 
+                   str.length >= 10 && 
+                   /^[a-zA-Z0-9]+$/.test(str) && 
+                   !reservedWords.includes(str.toLowerCase());
+        }
+        
+        // Pattern 1: contacts/detail/{contactId}
         const detailMatch = path.match(/contacts\\/detail\\/([a-zA-Z0-9]+)/);
-        if (detailMatch) {
+        if (detailMatch && isValidId(detailMatch[1])) {
+            console.log("🔍 Bridge: Found contactId via detail pattern:", detailMatch[1]);
             return detailMatch[1];
         }
         
-        // Try to get conversationId from conversations/{conversationId} pattern
-        const convMatch = path.match(/\\/conversations\\/([a-zA-Z0-9]{10,})/);
-        if (convMatch && convMatch[1] !== 'conversations') {
-            return convMatch[1];
+        // Pattern 2: conversations/{conversationId}/... - the segment RIGHT AFTER "conversations"
+        const convPatternMatch = path.match(/\\/conversations\\/([a-zA-Z0-9]+)/);
+        if (convPatternMatch && isValidId(convPatternMatch[1])) {
+            console.log("🔍 Bridge: Found contactId via conversations pattern:", convPatternMatch[1]);
+            return convPatternMatch[1];
         }
         
-        // Fallback: last segment of URL that looks like an ID
+        // Pattern 3: Look for any segment that looks like an ID (20+ chars alphanumeric)
         const segments = path.split('/').filter(Boolean);
-        const lastSegment = segments[segments.length - 1];
-        const reservedWords = ['conversations', 'contacts', 'detail', 'location', 'v2', 'settings'];
+        for (let i = segments.length - 1; i >= 0; i--) {
+            const seg = segments[i];
+            if (seg.length >= 20 && /^[a-zA-Z0-9]+$/.test(seg) && !reservedWords.includes(seg.toLowerCase())) {
+                console.log("🔍 Bridge: Found contactId via segment scan:", seg);
+                return seg;
+            }
+        }
         
-        if (lastSegment && 
-            lastSegment.length >= 10 && 
-            /^[a-zA-Z0-9]+$/.test(lastSegment) &&
-            !reservedWords.includes(lastSegment.toLowerCase())) {
+        // Pattern 4: Last segment fallback (10+ chars)
+        const lastSegment = segments[segments.length - 1];
+        if (isValidId(lastSegment)) {
+            console.log("🔍 Bridge: Found contactId via last segment:", lastSegment);
             return lastSegment;
         }
         
+        console.log("🔍 Bridge: No valid contactId found in path");
         return null;
     }
 
