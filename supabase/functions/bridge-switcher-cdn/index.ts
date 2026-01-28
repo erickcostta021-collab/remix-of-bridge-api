@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v4.8.0 - Priority Sorting");
+    console.log("🚀 BRIDGE API: Switcher v4.9.0 - Contact Isolation Fix");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -61,19 +61,38 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
         if (!contactId || !locationId) return;
 
+        // Detect contact change - clear selection immediately to avoid showing wrong value
+        if (currentContactId && currentContactId !== contactId) {
+            console.log("🔄 Contato mudou, limpando seleção anterior...");
+            select.value = '';
+        }
+
         try {
             const res = await fetch(\`\${CONFIG.save_url}?contactId=\${contactId}&locationId=\${locationId}&t=\${Date.now()}\`);
             const data = await res.json();
             
-            if (data.activeInstanceId && select.value !== data.activeInstanceId) {
-                console.log("📍 Nova instância ativa detectada, reordenando...");
-                renderSortedOptions(select, data.activeInstanceId, false);
-                
-                const target = instanceData.find(i => i.id === data.activeInstanceId);
-                if (target && currentContactId === contactId) showAutoSwitchNotify(target.name);
+            if (data.activeInstanceId) {
+                // Always update if we have a preference for this contact
+                if (select.value !== data.activeInstanceId) {
+                    console.log("📍 Instância do contato carregada:", data.activeInstanceId);
+                    renderSortedOptions(select, data.activeInstanceId, false);
+                    
+                    const target = instanceData.find(i => i.id === data.activeInstanceId);
+                    if (target && currentContactId && currentContactId !== contactId) {
+                        showAutoSwitchNotify(target.name);
+                    }
+                }
+            } else {
+                // No preference for this contact - show first instance as default (no save)
+                console.log("📍 Nenhuma preferência para este contato, mostrando padrão");
+                if (instanceData.length > 0) {
+                    renderSortedOptions(select, instanceData[0].id, false);
+                }
             }
             currentContactId = contactId;
-        } catch (e) {}
+        } catch (e) {
+            console.error("Erro ao sincronizar contexto:", e);
+        }
     }
 
     function showAutoSwitchNotify(instanceName) {
