@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v4.9.0 - Contact Isolation Fix");
+    console.log("🚀 BRIDGE API: Switcher v5.0.0 - Phone Tag Auto-Switch");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -19,6 +19,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     let instanceData = [];
     let currentContactId = null;
+    let lastDetectedPhoneTag = null;
 
     const style = document.createElement('style');
     style.innerHTML = \`
@@ -36,12 +37,9 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         const v = String(value).trim();
         if (v.length < 10) return false;
 
-        // GHL às vezes usa placeholders quando nenhum lead está selecionado.
-        // Se salvamos preferência nesse placeholder, ela “vaza” para todos os contatos.
         const blocked = new Set(['conversations', 'contacts', 'detail', 'inbox', 'chat']);
         if (blocked.has(v.toLowerCase())) return false;
 
-        // Evita valores puramente alfabéticos (IDs reais quase sempre têm dígitos/_/-)
         if (/^[a-zA-Z]+$/.test(v)) return false;
         return true;
     }
@@ -58,11 +56,109 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         return null;
     }
 
+    // Normaliza número de telefone para comparação (remove tudo exceto dígitos)
+    function normalizePhone(phone) {
+        if (!phone) return '';
+        return String(phone).replace(/\\D/g, '');
+    }
+
+    // Detecta tags de telefone no DOM do GHL
+    function detectPhoneTags() {
+        const phoneTags = [];
+        
+        // Busca por tags que parecem ser números de telefone
+        // GHL geralmente usa chips/badges para mostrar tags
+        const tagElements = document.querySelectorAll('[class*="tag"], [class*="chip"], [class*="badge"], .hl-tag, .contact-tag, [data-tag]');
+        
+        tagElements.forEach(el => {
+            const text = el.textContent?.trim() || '';
+            // Verifica se parece com número de telefone (pelo menos 8 dígitos)
+            const normalized = normalizePhone(text);
+            if (normalized.length >= 8 && normalized.length <= 15) {
+                phoneTags.push({
+                    original: text,
+                    normalized: normalized,
+                    element: el
+                });
+            }
+        });
+
+        // Também busca em elementos específicos do GHL para telefone secundário
+        const phoneLabels = document.querySelectorAll('[class*="phone"], [class*="Phone"], [data-phone]');
+        phoneLabels.forEach(el => {
+            const text = el.textContent?.trim() || '';
+            const normalized = normalizePhone(text);
+            if (normalized.length >= 8 && normalized.length <= 15) {
+                // Evita duplicatas
+                if (!phoneTags.find(t => t.normalized === normalized)) {
+                    phoneTags.push({
+                        original: text,
+                        normalized: normalized,
+                        element: el
+                    });
+                }
+            }
+        });
+
+        return phoneTags;
+    }
+
+    // Encontra a instância que corresponde ao número de telefone
+    function findInstanceByPhone(phoneNormalized) {
+        if (!phoneNormalized || !instanceData.length) return null;
+        
+        return instanceData.find(inst => {
+            if (!inst.phone) return false;
+            const instPhoneNormalized = normalizePhone(inst.phone);
+            // Verifica se os últimos 8-11 dígitos coincidem (para lidar com códigos de país)
+            const minLen = Math.min(phoneNormalized.length, instPhoneNormalized.length, 11);
+            const phoneSuffix = phoneNormalized.slice(-minLen);
+            const instSuffix = instPhoneNormalized.slice(-minLen);
+            return phoneSuffix === instSuffix;
+        });
+    }
+
+    // Verifica tags e atualiza o dropdown se encontrar match
+    async function checkPhoneTagsAndUpdate(select) {
+        const contactId = getGHLContactId();
+        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+        
+        if (!contactId || !locationId || !isValidContactId(contactId)) return;
+        if (!instanceData.length) return;
+
+        const phoneTags = detectPhoneTags();
+        if (!phoneTags.length) return;
+
+        // Pega o último telefone detectado (mais recente)
+        const lastPhoneTag = phoneTags[phoneTags.length - 1];
+        
+        // Se já processamos esse telefone para esse contato, não faz nada
+        const tagKey = contactId + ':' + lastPhoneTag.normalized;
+        if (lastDetectedPhoneTag === tagKey) return;
+        
+        const matchedInstance = findInstanceByPhone(lastPhoneTag.normalized);
+        
+        if (matchedInstance && select.value !== matchedInstance.id) {
+            console.log("📱 Tag de telefone detectada:", lastPhoneTag.original, "-> Instância:", matchedInstance.name);
+            
+            // Atualiza o dropdown
+            renderSortedOptions(select, matchedInstance.id, false);
+            
+            // Salva a preferência
+            await saveBridgePreference(matchedInstance.id);
+            
+            // Marca como processado
+            lastDetectedPhoneTag = tagKey;
+            
+            // Mostra notificação
+            showAutoSwitchNotify(matchedInstance.name + ' (via tag)');
+        }
+    }
+
     // Ordena as instâncias colocando a ativa no topo
     function renderSortedOptions(select, activeId, showPhone) {
         if (!instanceData.length) return;
 
-        // Cria uma cópia e move a ativa para o início
         const sorted = [...instanceData].sort((a, b) => {
             if (a.id === activeId) return -1;
             if (b.id === activeId) return 1;
@@ -78,14 +174,13 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function syncBridgeContext(select) {
         const contactId = getGHLContactId();
         const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-        // HARD GUARD: GHL sometimes yields placeholder/invalid values (ex: "conversations").
-        // If we sync on placeholders we can overwrite/freeze the selector and break auto-switch.
         if (!contactId || !locationId || !isValidContactId(contactId)) return;
 
         // Detect contact change - clear selection immediately to avoid showing wrong value
         if (currentContactId && currentContactId !== contactId) {
             console.log("🔄 Contato mudou, limpando seleção anterior...");
             select.value = '';
+            lastDetectedPhoneTag = null; // Reset para novo contato
         }
 
         try {
@@ -93,7 +188,6 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             const data = await res.json();
             
             if (data.activeInstanceId) {
-                // Always update if we have a preference for this contact
                 if (select.value !== data.activeInstanceId) {
                     console.log("📍 Instância do contato carregada:", data.activeInstanceId);
                     renderSortedOptions(select, data.activeInstanceId, false);
@@ -104,9 +198,12 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
                     }
                 }
             } else {
-                // No preference for this contact - show first instance as default (no save)
-                console.log("📍 Nenhuma preferência para este contato, mostrando padrão");
-                if (instanceData.length > 0) {
+                // Sem preferência salva - verifica tags de telefone primeiro
+                console.log("📍 Sem preferência para este contato, verificando tags...");
+                await checkPhoneTagsAndUpdate(select);
+                
+                // Se ainda não tem seleção, usa a primeira instância
+                if (!select.value && instanceData.length > 0) {
                     renderSortedOptions(select, instanceData[0].id, false);
                 }
             }
@@ -148,7 +245,12 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             });
 
             loadBridgeOptions(select);
-            setInterval(() => syncBridgeContext(select), 5000);
+            
+            // Sync a cada 5s + verifica tags de telefone
+            setInterval(() => {
+                syncBridgeContext(select);
+                checkPhoneTagsAndUpdate(select);
+            }, 5000);
         }
     }
 
