@@ -111,6 +111,58 @@ async function getValidToken(supabase: any, integration: any, settings: any): Pr
   return integration.ghl_access_token;
 }
 
+// Helper to add tag to a contact in GHL
+async function addTagToContact(contactId: string, tag: string, token: string): Promise<void> {
+  if (!tag) return;
+  
+  console.log("Adding tag to contact:", { contactId, tag });
+  
+  // First get current tags
+  const getResponse = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Version": "2021-07-28",
+      "Accept": "application/json",
+    },
+  });
+
+  let currentTags: string[] = [];
+  if (getResponse.ok) {
+    const contactData = await getResponse.json();
+    currentTags = contactData.contact?.tags || [];
+  }
+
+  // Check if tag already exists
+  if (currentTags.includes(tag)) {
+    console.log("Tag already exists on contact:", tag);
+    return;
+  }
+
+  // Add new tag to existing tags
+  const updatedTags = [...currentTags, tag];
+
+  const response = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Version": "2021-07-28",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      tags: updatedTags,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Failed to add tag to contact:", errorText);
+    // Don't throw - tag update is not critical
+  } else {
+    console.log("Tag added successfully:", tag);
+  }
+}
+
 // Helper to search/create contact in GHL
 async function findOrCreateContact(
   phone: string,
@@ -763,6 +815,22 @@ serve(async (req) => {
     const profilePhoto = chatData.imagePreview || chatData.image || "";
     if (profilePhoto && contact.id) {
       await updateContactPhoto(contact.id, profilePhoto, token);
+    }
+
+    // Add tag with the connected instance phone number
+    // This helps identify which WhatsApp number is associated with this contact
+    if (contact.id && instance.phone) {
+      // Format the phone number for the tag (e.g., "WA: +55 11 99999-9999")
+      const formattedPhone = instance.phone.replace(/\D/g, '');
+      let phoneTag = `WA: +${formattedPhone}`;
+      if (formattedPhone.length >= 12) {
+        phoneTag = `WA: +${formattedPhone.slice(0, 2)} ${formattedPhone.slice(2, 4)} ${formattedPhone.slice(4, 9)}-${formattedPhone.slice(9)}`;
+      } else if (formattedPhone.length >= 10) {
+        phoneTag = `WA: +${formattedPhone.slice(0, 2)} ${formattedPhone.slice(2)}`;
+      }
+      
+      console.log("Adding instance phone tag to contact:", { contactId: contact.id, phoneTag });
+      await addTagToContact(contact.id, phoneTag, token);
     }
 
     // Auto-assign contact to GHL user if configured on this instance
