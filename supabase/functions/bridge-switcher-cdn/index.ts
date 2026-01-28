@@ -78,7 +78,9 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function syncBridgeContext(select) {
         const contactId = getGHLContactId();
         const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-        if (!contactId || !locationId) return;
+        // HARD GUARD: GHL sometimes yields placeholder/invalid values (ex: "conversations").
+        // If we sync on placeholders we can overwrite/freeze the selector and break auto-switch.
+        if (!contactId || !locationId || !isValidContactId(contactId)) return;
 
         // Detect contact change - clear selection immediately to avoid showing wrong value
         if (currentContactId && currentContactId !== contactId) {
