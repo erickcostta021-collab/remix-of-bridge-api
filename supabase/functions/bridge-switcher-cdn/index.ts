@@ -98,11 +98,11 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     }
 
     function updateDisplay(select, showFull) {
+        console.log("🔄 updateDisplay chamado:", { showFull, instanceData });
         Array.from(select.options).forEach(option => {
             const data = instanceData.find(i => i.id === option.value);
             if (data) {
-                const phone = data.phone ? \` (\${data.phone})\` : "";
-                option.text = showFull ? \`\${data.name}\${phone}\` : data.name;
+                option.text = showFull && data.phone ? \`\${data.name} (\${data.phone})\` : data.name;
             }
         });
     }
@@ -149,6 +149,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         try {
             const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locationId}\`);
             const data = await res.json();
+            console.log("📦 Dados carregados:", data.instances);
             if (data.instances && data.instances.length > 0) {
                 instanceData = data.instances;
                 // Sort instances by name for consistent ordering
