@@ -526,13 +526,21 @@ serve(async (req) => {
     const from = chatData.wa_chatid || messageData.chatid || eventData.Chat || messageData.sender || "";
     const instanceToken = body.token || body.instanceToken || messageData.instanceToken || "";
     
+    // Check if message was sent by the connected WhatsApp instance (fromMe)
+    const isFromMeCheck = messageData.fromMe === true;
+    
     // For groups, check if it's a group chat and use group name
     const isGroupChat = from.endsWith("@g.us") || messageData.isGroup === true || chatData.wa_isGroup === true;
     
     // Extract names correctly:
-    // - senderName: the person who sent the message (member in a group)
-    // - groupName: the name of the group (from messageData.groupName or chatData.wa_name/name)
+    // - senderName: the person who sent the message (from messageData.senderName)
+    // - wa_contactName / wa_name / name from chatData: the name of the contact/chat (the lead)
     const senderName = messageData.senderName || "";
+    
+    // CRITICAL FIX: When isFromMe=true, we are sending TO the lead, so we need the LEAD's name (wa_contactName/name)
+    // NOT the sender's name (which would be the instance's WhatsApp profile name)
+    // chatData.wa_contactName or chatData.name contains the lead's saved name in the WhatsApp contact list
+    const leadName = chatData.wa_contactName || chatData.name || "";
     
     // For group name, prioritize messageData.groupName, then fallback to chat data
     // Only use chat.wa_name/name for groups - these contain the group name, not sender name
@@ -543,13 +551,15 @@ serve(async (req) => {
         : (chatData.wa_name || chatData.name || "");
     }
     
-    // For individual chats, use sender name from chat data as fallback
-    const individualName = senderName || chatData.wa_name || chatData.name || "";
+    // For individual chats:
+    // - If isFromMe (we sent the message): use leadName (the contact we're messaging)
+    // - If not isFromMe (lead sent the message): use senderName or leadName
+    const individualName = isFromMeCheck ? leadName : (senderName || leadName || "");
     
     // Use group name for contact creation with 👥 emoji prefix for groups
     const pushName = isGroupChat ? `👥 ${groupName || "Grupo"}` : individualName;
     // Store member name for group message formatting
-    const memberName = isGroupChat ? (senderName || individualName) : "";
+    const memberName = isGroupChat ? (senderName || "") : "";
     
     // Detect media vs text message - including stickers
     const contentRaw = messageData.content;
