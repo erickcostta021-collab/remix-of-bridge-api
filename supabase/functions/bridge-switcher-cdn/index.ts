@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v4.4.1 - Smart Display & Notify");
+    console.log("🚀 BRIDGE API: Switcher v4.5.0 - URL Change Detection");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -19,6 +19,8 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     };
 
     let instanceData = [];
+    let currentContactId = null;
+    let currentLocationId = null;
 
     // Função de notificação (Toast)
     function showAutoSwitchNotify(instanceName) {
@@ -36,6 +38,22 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             toast.style.opacity = '0'; 
             setTimeout(() => toast.remove(), 500); 
         }, 3500);
+    }
+
+    function getLocationId() {
+        return window.location.pathname.match(/location\\/([^\\/]+)/)?.[1] || null;
+    }
+
+    function getContactId() {
+        // Extract contact ID from URL - it's typically the last segment in conversation pages
+        const path = window.location.pathname;
+        const segments = path.split('/').filter(Boolean);
+        const lastSegment = segments[segments.length - 1];
+        // Contact IDs are typically 20+ chars alphanumeric
+        if (lastSegment && lastSegment.length >= 5 && /^[a-zA-Z0-9]+$/.test(lastSegment)) {
+            return lastSegment;
+        }
+        return null;
     }
 
     function injectBridgeUI() {
@@ -91,8 +109,10 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     }
 
     async function loadBridgeOptions(select) {
-        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+        const locationId = getLocationId();
         if (!locationId) return;
+        
+        currentLocationId = locationId;
 
         try {
             const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locationId}\`);
@@ -114,31 +134,35 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     }
 
     async function syncBridgeContext(select, locationId) {
-        const contactId = window.location.pathname.split('/').pop();
-        if (!contactId || contactId.length < 5) return;
+        const contactId = getContactId();
+        if (!contactId) return;
+        
+        // Track current contact for URL change detection
+        currentContactId = contactId;
+        
         try {
-            // Adicionado timestamp para evitar cache e garantir que pegue a mudança do banco
             const res = await fetch(\`\${CONFIG.save_url}?contactId=\${contactId}&locationId=\${locationId}&t=\${Date.now()}\`);
             const data = await res.json();
             
             if (data.activeInstanceId && select.value !== data.activeInstanceId) {
                 const targetInstance = instanceData.find(i => i.id === data.activeInstanceId);
                 
-                select.value = data.activeInstanceId;
-                updateDisplay(select, false);
-
-                // Dispara a notificação apenas se houver uma mudança automática
+                // Only update if the instance exists in the dropdown
                 if (targetInstance) {
+                    select.value = data.activeInstanceId;
+                    updateDisplay(select, false);
                     showAutoSwitchNotify(targetInstance.name);
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            console.log("Bridge sync error:", e);
+        }
     }
 
     async function saveBridgePreference(instanceId) {
-        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-        const contactId = window.location.pathname.split('/').pop();
-        if (!contactId || !instanceId || contactId.length < 5) return;
+        const locationId = getLocationId();
+        const contactId = getContactId();
+        if (!contactId || !instanceId) return;
 
         await fetch(CONFIG.save_url, {
             method: 'POST',
@@ -147,10 +171,38 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         });
     }
 
+    // Check for URL changes (SPA navigation) and re-sync
+    function checkUrlChange() {
+        const newContactId = getContactId();
+        const newLocationId = getLocationId();
+        
+        // If contact changed, re-sync the bridge context
+        if (newContactId && newContactId !== currentContactId) {
+            console.log("🔄 Bridge: Contact changed, re-syncing...", { from: currentContactId, to: newContactId });
+            const select = document.getElementById('bridge-instance-selector');
+            if (select && instanceData.length > 0) {
+                syncBridgeContext(select, newLocationId || currentLocationId);
+            }
+        }
+        
+        // If location changed, reload everything
+        if (newLocationId && newLocationId !== currentLocationId) {
+            console.log("🔄 Bridge: Location changed, reloading instances...");
+            const select = document.getElementById('bridge-instance-selector');
+            if (select) {
+                loadBridgeOptions(select);
+            }
+        }
+    }
+
+    // Observe DOM changes (for initial injection)
     const observer = new MutationObserver(() => {
         if (!document.getElementById('bridge-api-container')) injectBridgeUI();
     });
     observer.observe(document.body, { childList: true, subtree: true });
+    
+    // Poll for URL changes (handles SPA navigation)
+    setInterval(checkUrlChange, 500);
     
     setTimeout(injectBridgeUI, 1000);
 })();`;
