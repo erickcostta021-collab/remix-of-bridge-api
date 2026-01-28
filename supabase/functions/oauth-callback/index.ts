@@ -174,17 +174,35 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get user settings to retrieve OAuth credentials
-    const { data: settings, error: settingsError } = await supabase
-      .from("user_settings")
-      .select("ghl_client_id, ghl_client_secret, ghl_conversation_provider_id")
-      .eq("user_id", userId)
-      .single();
+    // Get OAuth credentials - try admin credentials first, then user's own
+    let clientId: string | null = null;
+    let clientSecret: string | null = null;
 
-    if (settingsError || !settings?.ghl_client_id || !settings?.ghl_client_secret) {
-      console.error("OAuth credentials not found:", settingsError);
+    // Try admin credentials first (shared across all users)
+    const { data: adminCreds } = await supabase.rpc("get_admin_oauth_credentials");
+    if (adminCreds && adminCreds.length > 0 && adminCreds[0].ghl_client_id && adminCreds[0].ghl_client_secret) {
+      clientId = adminCreds[0].ghl_client_id;
+      clientSecret = adminCreds[0].ghl_client_secret;
+      console.log("Using admin OAuth credentials");
+    } else {
+      // Fallback to user's own credentials
+      const { data: userSettings } = await supabase
+        .from("user_settings")
+        .select("ghl_client_id, ghl_client_secret")
+        .eq("user_id", userId)
+        .single();
+      
+      if (userSettings?.ghl_client_id && userSettings?.ghl_client_secret) {
+        clientId = userSettings.ghl_client_id;
+        clientSecret = userSettings.ghl_client_secret;
+        console.log("Using user's own OAuth credentials");
+      }
+    }
+
+    if (!clientId || !clientSecret) {
+      console.error("OAuth credentials not found from admin or user");
       return new Response(
-        JSON.stringify({ error: "OAuth credentials not configured" }),
+        JSON.stringify({ error: "OAuth credentials not configured. Please contact the administrator." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -197,8 +215,8 @@ serve(async (req) => {
 
     // Exchange code for tokens
     const tokenParams = new URLSearchParams({
-      client_id: settings.ghl_client_id,
-      client_secret: settings.ghl_client_secret,
+      client_id: clientId,
+      client_secret: clientSecret,
       grant_type: "authorization_code",
       code,
       redirect_uri: redirectUri,
