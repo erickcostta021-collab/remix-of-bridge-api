@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v5.0.0 - Phone Tag Auto-Switch");
+    console.log("🚀 BRIDGE API: Switcher v6.0.0 - Auto-Sync from Webhook");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -19,7 +19,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     let instanceData = [];
     let currentContactId = null;
-    let lastDetectedPhoneTag = null;
+    let lastSyncedInstanceId = null;
 
     const style = document.createElement('style');
     style.innerHTML = \`
@@ -37,7 +37,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         const v = String(value).trim();
         if (v.length < 10) return false;
 
-        const blocked = new Set(['conversations', 'contacts', 'detail', 'inbox', 'chat']);
+        const blocked = new Set(['conversations', 'contacts', 'detail', 'inbox', 'chat', 'undefined', 'null']);
         if (blocked.has(v.toLowerCase())) return false;
 
         if (/^[a-zA-Z]+$/.test(v)) return false;
@@ -46,113 +46,37 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     function getGHLContactId() {
         const url = new URL(window.location.href);
+        
+        // Strategy 1: Check query params
         const fromQuery = url.searchParams.get('contactId') || url.searchParams.get('contact_id');
         if (isValidContactId(fromQuery)) return fromQuery;
 
+        // Strategy 2: Check path - /contacts/detail/{id} or /conversations/{id}
         const match = window.location.pathname.match(/(?:contacts\\/detail\\/|conversations\\/)([a-zA-Z0-9_-]{10,})/);
         const fromPath = match ? match[1] : null;
         if (isValidContactId(fromPath)) return fromPath;
 
+        // Strategy 3: Try to extract from GHL's internal state (React fiber)
+        try {
+            const conversationContainer = document.querySelector('[class*="conversation-detail"]') || 
+                                         document.querySelector('[class*="ConversationDetail"]') ||
+                                         document.querySelector('[data-contact-id]');
+            if (conversationContainer) {
+                const dataContactId = conversationContainer.getAttribute('data-contact-id');
+                if (isValidContactId(dataContactId)) return dataContactId;
+            }
+        } catch (e) {}
+
+        // Strategy 4: Look for contact ID in visible elements
+        try {
+            const contactIdElements = document.querySelectorAll('[class*="contact-id"], [data-testid*="contact"]');
+            for (const el of contactIdElements) {
+                const text = el.textContent?.trim() || el.getAttribute('data-contact-id') || '';
+                if (isValidContactId(text)) return text;
+            }
+        } catch (e) {}
+
         return null;
-    }
-
-    // Normaliza número de telefone para comparação (remove tudo exceto dígitos)
-    function normalizePhone(phone) {
-        if (!phone) return '';
-        return String(phone).replace(/\\D/g, '');
-    }
-
-    // Detecta tags de telefone no DOM do GHL
-    function detectPhoneTags() {
-        const phoneTags = [];
-        
-        // Busca por tags que parecem ser números de telefone
-        // GHL geralmente usa chips/badges para mostrar tags
-        const tagElements = document.querySelectorAll('[class*="tag"], [class*="chip"], [class*="badge"], .hl-tag, .contact-tag, [data-tag]');
-        
-        tagElements.forEach(el => {
-            const text = el.textContent?.trim() || '';
-            // Verifica se parece com número de telefone (pelo menos 8 dígitos)
-            const normalized = normalizePhone(text);
-            if (normalized.length >= 8 && normalized.length <= 15) {
-                phoneTags.push({
-                    original: text,
-                    normalized: normalized,
-                    element: el
-                });
-            }
-        });
-
-        // Também busca em elementos específicos do GHL para telefone secundário
-        const phoneLabels = document.querySelectorAll('[class*="phone"], [class*="Phone"], [data-phone]');
-        phoneLabels.forEach(el => {
-            const text = el.textContent?.trim() || '';
-            const normalized = normalizePhone(text);
-            if (normalized.length >= 8 && normalized.length <= 15) {
-                // Evita duplicatas
-                if (!phoneTags.find(t => t.normalized === normalized)) {
-                    phoneTags.push({
-                        original: text,
-                        normalized: normalized,
-                        element: el
-                    });
-                }
-            }
-        });
-
-        return phoneTags;
-    }
-
-    // Encontra a instância que corresponde ao número de telefone
-    function findInstanceByPhone(phoneNormalized) {
-        if (!phoneNormalized || !instanceData.length) return null;
-        
-        return instanceData.find(inst => {
-            if (!inst.phone) return false;
-            const instPhoneNormalized = normalizePhone(inst.phone);
-            // Verifica se os últimos 8-11 dígitos coincidem (para lidar com códigos de país)
-            const minLen = Math.min(phoneNormalized.length, instPhoneNormalized.length, 11);
-            const phoneSuffix = phoneNormalized.slice(-minLen);
-            const instSuffix = instPhoneNormalized.slice(-minLen);
-            return phoneSuffix === instSuffix;
-        });
-    }
-
-    // Verifica tags e atualiza o dropdown se encontrar match
-    async function checkPhoneTagsAndUpdate(select) {
-        const contactId = getGHLContactId();
-        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-        
-        if (!contactId || !locationId || !isValidContactId(contactId)) return;
-        if (!instanceData.length) return;
-
-        const phoneTags = detectPhoneTags();
-        if (!phoneTags.length) return;
-
-        // Pega o último telefone detectado (mais recente)
-        const lastPhoneTag = phoneTags[phoneTags.length - 1];
-        
-        // Se já processamos esse telefone para esse contato, não faz nada
-        const tagKey = contactId + ':' + lastPhoneTag.normalized;
-        if (lastDetectedPhoneTag === tagKey) return;
-        
-        const matchedInstance = findInstanceByPhone(lastPhoneTag.normalized);
-        
-        if (matchedInstance && select.value !== matchedInstance.id) {
-            console.log("📱 Tag de telefone detectada:", lastPhoneTag.original, "-> Instância:", matchedInstance.name);
-            
-            // Atualiza o dropdown
-            renderSortedOptions(select, matchedInstance.id, false);
-            
-            // Salva a preferência
-            await saveBridgePreference(matchedInstance.id);
-            
-            // Marca como processado
-            lastDetectedPhoneTag = tagKey;
-            
-            // Mostra notificação
-            showAutoSwitchNotify(matchedInstance.name + ' (via tag)');
-        }
     }
 
     // Ordena as instâncias colocando a ativa no topo
@@ -174,13 +98,23 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function syncBridgeContext(select) {
         const contactId = getGHLContactId();
         const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-        if (!contactId || !locationId || !isValidContactId(contactId)) return;
+        
+        if (!locationId) return;
 
         // Detect contact change - clear selection immediately to avoid showing wrong value
         if (currentContactId && currentContactId !== contactId) {
             console.log("🔄 Contato mudou, limpando seleção anterior...");
             select.value = '';
-            lastDetectedPhoneTag = null; // Reset para novo contato
+            lastSyncedInstanceId = null;
+        }
+
+        // If no valid contactId, just show first instance but don't save preference
+        if (!contactId || !isValidContactId(contactId)) {
+            console.log("⚠️ ContactId inválido ou não detectado, aguardando...");
+            if (!select.value && instanceData.length > 0) {
+                renderSortedOptions(select, instanceData[0].id, false);
+            }
+            return;
         }
 
         try {
@@ -188,23 +122,25 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             const data = await res.json();
             
             if (data.activeInstanceId) {
-                if (select.value !== data.activeInstanceId) {
-                    console.log("📍 Instância do contato carregada:", data.activeInstanceId);
+                // Only update UI if the backend has a different instance than what's currently shown
+                // This allows webhook-inbound to control the dropdown by saving preferences
+                if (data.activeInstanceId !== lastSyncedInstanceId) {
+                    console.log("📍 Instância atualizada pelo backend:", data.activeInstanceId);
                     renderSortedOptions(select, data.activeInstanceId, false);
+                    lastSyncedInstanceId = data.activeInstanceId;
                     
+                    // Show notification only when contact changes
                     const target = instanceData.find(i => i.id === data.activeInstanceId);
                     if (target && currentContactId && currentContactId !== contactId) {
                         showAutoSwitchNotify(target.name);
                     }
                 }
             } else {
-                // Sem preferência salva - verifica tags de telefone primeiro
-                console.log("📍 Sem preferência para este contato, verificando tags...");
-                await checkPhoneTagsAndUpdate(select);
-                
-                // Se ainda não tem seleção, usa a primeira instância
+                // No preference saved - use first instance
+                console.log("📍 Sem preferência para este contato, usando primeira instância");
                 if (!select.value && instanceData.length > 0) {
                     renderSortedOptions(select, instanceData[0].id, false);
+                    lastSyncedInstanceId = instanceData[0].id;
                 }
             }
             currentContactId = contactId;
@@ -218,7 +154,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         const toast = document.createElement('div');
         toast.id = 'bridge-notify';
         toast.style.cssText = \`position: fixed; bottom: 20px; right: 20px; z-index: 10000; background: #1f2937; color: white; padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border-left: 4px solid \${CONFIG.theme.primary};\`;
-        toast.innerHTML = \`✅ Instância <b>\${instanceName}</b> selecionada.\`;
+        toast.innerHTML = \`✅ Instância <b>\${instanceName}</b> selecionada automaticamente.\`;
         document.body.appendChild(toast);
         setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 3000);
     }
@@ -242,15 +178,15 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             select.addEventListener('change', (e) => {
                 saveBridgePreference(e.target.value);
                 renderSortedOptions(select, e.target.value, false);
+                lastSyncedInstanceId = e.target.value; // Track manual selection
             });
 
             loadBridgeOptions(select);
             
-            // Sync a cada 5s + verifica tags de telefone
+            // Sync every 3s - faster polling to catch webhook-inbound updates quicker
             setInterval(() => {
                 syncBridgeContext(select);
-                checkPhoneTagsAndUpdate(select);
-            }, 5000);
+            }, 3000);
         }
     }
 
@@ -271,7 +207,10 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function saveBridgePreference(instanceId) {
         const contactId = getGHLContactId();
         const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-        if (!contactId || !instanceId) return;
+        if (!contactId || !instanceId || !isValidContactId(contactId)) {
+            console.log("⚠️ Não é possível salvar preferência - contactId inválido:", contactId);
+            return;
+        }
         await fetch(CONFIG.save_url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
