@@ -416,16 +416,14 @@ serve(async (req: Request) => {
     }
 
     // Verificar se há preferência de instância para este contato (Bridge Switcher)
-    // O script GHL salva usando conversationId (que é o que aparece na URL do GHL)
-    // então precisamos buscar por conversationId primeiro, depois por contactId
+    // webhook-inbound salva usando contactId, então buscamos APENAS por contactId
     let instance = instances[0]; // Default: primeira instância
     
-    const lookupId = conversationId || contactId;
-    if (lookupId) {
+    if (contactId) {
       const { data: preference } = await supabase
         .from("contact_instance_preferences")
         .select("instance_id")
-        .eq("contact_id", lookupId)
+        .eq("contact_id", contactId)
         .eq("location_id", locationId)
         .maybeSingle();
       
@@ -434,13 +432,15 @@ serve(async (req: Request) => {
         const preferredInstance = instances.find(i => i.id === preference.instance_id);
         if (preferredInstance) {
           instance = preferredInstance;
-          console.log("Using preferred instance from Bridge Switcher:", { instanceId: instance.id, lookupId });
+          console.log("Using preferred instance from contact preference:", { instanceId: instance.id, contactId });
         } else {
           console.log("Preferred instance not found in subaccount instances, using default");
         }
       } else {
-        console.log("No preference found for:", { lookupId, locationId });
+        console.log("No preference found for contactId:", { contactId, locationId });
       }
+    } else {
+      console.log("No contactId in payload, using default instance");
     }
 
     const { data: settings, error: settingsErr } = await supabase
