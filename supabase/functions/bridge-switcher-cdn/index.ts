@@ -43,15 +43,21 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             const res = await fetch(\`\${CONFIG.save_url}?contactId=\${contactId}&locationId=\${locationId}&t=\${Date.now()}\`);
             const data = await res.json();
             
-            if (data.activeInstanceId && select.value !== data.activeInstanceId) {
-                console.log(\`🔄 Instância atualizada para: \${data.activeInstanceId}\`);
-                select.value = data.activeInstanceId;
-                updateDisplay(select, false);
-                
-                const target = instanceData.find(i => i.id === data.activeInstanceId);
-                if (target && currentContactId === contactId) {
-                    showAutoSwitchNotify(target.name);
+            if (data.activeInstanceId) {
+                if (select.value !== data.activeInstanceId) {
+                    console.log(\`🔄 Instância atualizada para: \${data.activeInstanceId}\`);
+                    select.value = data.activeInstanceId;
+                    updateDisplay(select, false);
+                    
+                    const target = instanceData.find(i => i.id === data.activeInstanceId);
+                    if (target && currentContactId === contactId) {
+                        showAutoSwitchNotify(target.name);
+                    }
                 }
+            } else if (!select.value && instanceData.length > 0) {
+                // No preference found - select first instance as default but don't save
+                select.value = instanceData[0].id;
+                updateDisplay(select, false);
             }
             currentContactId = contactId;
         } catch (e) {
@@ -104,9 +110,13 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         try {
             const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locationId}\`);
             const data = await res.json();
-            if (data.instances) {
+            if (data.instances && data.instances.length > 0) {
                 instanceData = data.instances;
+                // Sort instances by name for consistent ordering
+                instanceData.sort((a, b) => a.name.localeCompare(b.name));
                 select.innerHTML = instanceData.map(i => \`<option value="\${i.id}">\${i.name}</option>\`).join('');
+                // Don't auto-select first - wait for syncBridgeContext to set correct one
+                select.value = '';
                 syncBridgeContext(select);
             }
         } catch (e) {}
