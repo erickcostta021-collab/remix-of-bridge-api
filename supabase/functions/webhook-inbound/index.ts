@@ -605,8 +605,9 @@ serve(async (req) => {
     
     // For individual chats:
     // - If isFromMe (we sent the message): use leadName (the contact we're messaging)
-    // - If not isFromMe (lead sent the message): use senderName or leadName
-    const individualName = isFromMeCheck ? leadName : (senderName || leadName || "");
+    // - If not isFromMe (lead sent the message): PRIORITIZE leadName (wa_contactName = saved contact name)
+    //   over senderName (WhatsApp profile name) - the saved name is more meaningful for the user
+    const individualName = isFromMeCheck ? leadName : (leadName || senderName || "");
     
     // Use group name for contact creation with 👥 emoji prefix for groups
     const pushName = isGroupChat ? `👥 ${groupName || "Grupo"}` : individualName;
