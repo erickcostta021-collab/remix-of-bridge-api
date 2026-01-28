@@ -96,30 +96,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Strategy 3: Look for the most recently updated preference for this location (fallback)
+        // Strategy 3 REMOVED: Do NOT use preferences from other contacts
+        // Each contact must have its own isolated preference
         if (!preference) {
-          const { data: recentPref } = await supabase
-            .from("contact_instance_preferences")
-            .select("instance_id, contact_id, updated_at")
-            .eq("location_id", locationId)
-            .order("updated_at", { ascending: false })
-            .limit(1);
-
-          if (recentPref && recentPref.length > 0) {
-            // Check if this preference was updated in the last 5 minutes
-            // This handles the case where the same person is messaging from a new contact
-            const prefTime = new Date(recentPref[0].updated_at).getTime();
-            const now = Date.now();
-            const fiveMinutesAgo = now - 5 * 60 * 1000;
-            
-            if (prefTime >= fiveMinutesAgo) {
-              console.log("Using recent preference (within 5 min):", recentPref[0]);
-              preference = recentPref[0];
-              foundBy = "recent_fallback";
-            } else {
-              console.log("No recent preference found, checked:", recentPref.length);
-            }
-          }
+          console.log("No preference found for contact:", contactId);
         }
       }
 
