@@ -5,11 +5,12 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v5.0.0 - Auto-Sync Instance");
+    console.log("🚀 BRIDGE API: Switcher v5.1.0 - Real-Time Auto-Switch");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
         save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
+        poll_interval: 3000, // Poll for changes every 3 seconds
         theme: {
             primary: '#22c55e',
             error: '#ef4444',
@@ -21,7 +22,8 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     let instanceData = [];
     let currentContactId = null;
     let currentLocationId = null;
-    let lastSyncedContactId = null;
+    let lastActiveInstanceId = null;
+    let pollIntervalId = null;
 
     // Função de notificação (Toast)
     function showAutoSwitchNotify(instanceName) {
@@ -46,31 +48,21 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     }
 
     function getContactId() {
-        // GHL conversation URLs have formats:
-        // /v2/location/{locationId}/conversations/{conversationId}
-        // /v2/location/{locationId}/contacts/detail/{contactId}
-        // The contactId is what we need for instance preferences
-        
         const path = window.location.pathname;
         
         // Try to get contactId from contacts/detail/{contactId} pattern
         const detailMatch = path.match(/contacts\\/detail\\/([a-zA-Z0-9]+)/);
         if (detailMatch) {
-            console.log("🔍 Bridge: Found contactId from detail URL:", detailMatch[1]);
             return detailMatch[1];
         }
         
         // Try to get conversationId from conversations/{conversationId} pattern
-        // IMPORTANT: Only match if there's an actual ID after "conversations/"
-        // The pattern ensures we don't capture just "conversations" as the ID
         const convMatch = path.match(/\\/conversations\\/([a-zA-Z0-9]{10,})/);
         if (convMatch && convMatch[1] !== 'conversations') {
-            console.log("🔍 Bridge: Found conversationId from URL:", convMatch[1]);
             return convMatch[1];
         }
         
         // Fallback: last segment of URL that looks like an ID
-        // Must be at least 10 chars and not be a known route segment
         const segments = path.split('/').filter(Boolean);
         const lastSegment = segments[segments.length - 1];
         const reservedWords = ['conversations', 'contacts', 'detail', 'location', 'v2', 'settings'];
@@ -79,11 +71,9 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             lastSegment.length >= 10 && 
             /^[a-zA-Z0-9]+$/.test(lastSegment) &&
             !reservedWords.includes(lastSegment.toLowerCase())) {
-            console.log("🔍 Bridge: Found contactId from last segment:", lastSegment);
             return lastSegment;
         }
         
-        console.log("🔍 Bridge: No contactId found in URL:", path);
         return null;
     }
 
@@ -123,9 +113,14 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             select.addEventListener('change', (e) => {
                 saveBridgePreference(e.target.value);
                 updateDisplay(select, false);
+                // Update lastActiveInstanceId to prevent toast on manual change
+                lastActiveInstanceId = e.target.value;
             });
             
             loadBridgeOptions(select);
+            
+            // Start continuous polling for preference changes
+            startPolling();
         }
     }
 
@@ -154,10 +149,10 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
                 select.innerHTML = instanceData.map(i => \`<option value="\${i.id}">\${i.name}</option>\`).join('');
                 document.getElementById('bridge-status-indicator').style.background = CONFIG.theme.primary;
                 
-                // Force sync after loading options
+                // Initial sync
                 const contactId = getContactId();
                 if (contactId) {
-                    syncBridgeContext(select, locationId, contactId);
+                    await syncBridgeContext(select, locationId, contactId, false);
                 }
             } else {
                 select.innerHTML = \`<option value="">Offline</option>\`;
@@ -169,43 +164,34 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         }
     }
 
-    async function syncBridgeContext(select, locationId, contactId) {
-        if (!contactId || !locationId) {
-            console.log("🔄 Bridge: Missing contactId or locationId for sync");
-            return;
-        }
+    async function syncBridgeContext(select, locationId, contactId, showToast = true) {
+        if (!contactId || !locationId) return;
         
-        // Track last synced contact to show toast only on actual changes
-        const wasAlreadySynced = lastSyncedContactId === contactId;
-        lastSyncedContactId = contactId;
         currentContactId = contactId;
-        
-        console.log("🔄 Bridge: Syncing context for contact:", contactId);
         
         try {
             const res = await fetch(\`\${CONFIG.save_url}?contactId=\${contactId}&locationId=\${locationId}&t=\${Date.now()}\`);
             const data = await res.json();
             
-            console.log("🔄 Bridge: Sync response:", data);
-            
             if (data.activeInstanceId) {
                 const targetInstance = instanceData.find(i => i.id === data.activeInstanceId);
                 
-                // Only update if the instance exists in the dropdown and value is different
+                // Only update if the instance exists and value is different
                 if (targetInstance && select.value !== data.activeInstanceId) {
-                    console.log("🔄 Bridge: Switching to instance:", targetInstance.name, "from:", select.value);
+                    console.log("🔄 Bridge: Switching to instance:", targetInstance.name);
                     select.value = data.activeInstanceId;
                     updateDisplay(select, false);
                     
-                    // Show toast only if this is a new contact (not page reload)
-                    if (!wasAlreadySynced) {
+                    // Show toast only if it's a real change (not initial load)
+                    if (showToast && lastActiveInstanceId && lastActiveInstanceId !== data.activeInstanceId) {
                         showAutoSwitchNotify(targetInstance.name);
                     }
-                } else if (targetInstance) {
-                    console.log("🔄 Bridge: Already on correct instance:", targetInstance.name);
+                    
+                    lastActiveInstanceId = data.activeInstanceId;
+                } else if (!lastActiveInstanceId && data.activeInstanceId) {
+                    // First time setting - don't show toast
+                    lastActiveInstanceId = data.activeInstanceId;
                 }
-            } else {
-                console.log("🔄 Bridge: No preference found for contact, keeping current selection");
             }
         } catch (e) {
             console.error("Bridge sync error:", e);
@@ -215,10 +201,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function saveBridgePreference(instanceId) {
         const locationId = getLocationId();
         const contactId = getContactId();
-        if (!contactId || !instanceId) {
-            console.log("Bridge: Cannot save preference - missing data:", { contactId, instanceId });
-            return;
-        }
+        if (!contactId || !instanceId) return;
 
         console.log("💾 Bridge: Saving preference:", { contactId, instanceId, locationId });
         
@@ -229,23 +212,42 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         });
     }
 
-    // Check for URL changes (SPA navigation) and re-sync
+    // Start polling for preference changes (real-time updates when messages arrive)
+    function startPolling() {
+        if (pollIntervalId) return; // Already polling
+        
+        pollIntervalId = setInterval(async () => {
+            const contactId = getContactId();
+            const locationId = getLocationId();
+            const select = document.getElementById('bridge-instance-selector');
+            
+            if (select && contactId && locationId && instanceData.length > 0) {
+                await syncBridgeContext(select, locationId, contactId, true);
+            }
+        }, CONFIG.poll_interval);
+        
+        console.log("🔄 Bridge: Started polling for preference changes every", CONFIG.poll_interval, "ms");
+    }
+
+    // Check for URL changes (SPA navigation)
     function checkUrlChange() {
         const newContactId = getContactId();
         const newLocationId = getLocationId();
         
-        // If contact changed, re-sync the bridge context
+        // If contact changed, reset lastActiveInstanceId and re-sync
         if (newContactId && newContactId !== currentContactId) {
-            console.log("🔄 Bridge: Contact changed, re-syncing...", { from: currentContactId, to: newContactId });
+            console.log("🔄 Bridge: Contact changed:", { from: currentContactId, to: newContactId });
+            lastActiveInstanceId = null; // Reset to prevent false toast
             const select = document.getElementById('bridge-instance-selector');
             if (select && instanceData.length > 0) {
-                syncBridgeContext(select, newLocationId || currentLocationId, newContactId);
+                syncBridgeContext(select, newLocationId || currentLocationId, newContactId, false);
             }
         }
         
         // If location changed, reload everything
         if (newLocationId && newLocationId !== currentLocationId) {
             console.log("🔄 Bridge: Location changed, reloading instances...");
+            lastActiveInstanceId = null;
             const select = document.getElementById('bridge-instance-selector');
             if (select) {
                 loadBridgeOptions(select);
