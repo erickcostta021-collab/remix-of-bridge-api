@@ -5,14 +5,13 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v4.7.0 - On-Demand Phone Display");
+    console.log("🚀 BRIDGE API: Switcher v4.8.0 - Priority Sorting");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
         save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
         theme: {
             primary: '#22c55e',
-            error: '#ef4444',
             border: '#d1d5db',
             text: '#374151'
         }
@@ -21,26 +20,13 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     let instanceData = [];
     let currentContactId = null;
 
-    // Injeção de CSS para remover a linha azul e formatar o seletor
     const style = document.createElement('style');
     style.innerHTML = \`
-        #bridge-instance-selector:focus, 
-        #bridge-instance-selector:focus-visible,
-        #bridge-api-container:focus-within { 
-            outline: none !important; 
-            box-shadow: none !important; 
-            border: 1px solid \${CONFIG.theme.border} !important;
-        }
+        #bridge-instance-selector:focus { outline: none !important; box-shadow: none !important; border: 1px solid \${CONFIG.theme.border} !important; }
         #bridge-instance-selector {
-            border: none;
-            background: transparent;
-            font-size: 12px;
-            font-weight: 700;
-            color: \${CONFIG.theme.text};
-            cursor: pointer;
-            appearance: none;
-            -webkit-appearance: none;
-            padding-right: 4px;
+            border: none; background: transparent; font-size: 12px; font-weight: 700;
+            color: \${CONFIG.theme.text}; cursor: pointer; appearance: none; -webkit-appearance: none;
+            padding-right: 4px; width: 100%; max-width: 160px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
         }
     \`;
     document.head.appendChild(style);
@@ -53,14 +39,21 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         return match ? match[1] : null;
     }
 
-    // Função que decide se mostra o telefone ou não
-    function updateOptionsLabels(select, showPhone) {
-        Array.from(select.options).forEach(option => {
-            const data = instanceData.find(i => i.id === option.value);
-            if (data) {
-                option.text = (showPhone && data.phone) ? \`\${data.name} (\${data.phone})\` : data.name;
-            }
+    // Ordena as instâncias colocando a ativa no topo
+    function renderSortedOptions(select, activeId, showPhone) {
+        if (!instanceData.length) return;
+
+        // Cria uma cópia e move a ativa para o início
+        const sorted = [...instanceData].sort((a, b) => {
+            if (a.id === activeId) return -1;
+            if (b.id === activeId) return 1;
+            return a.name.localeCompare(b.name);
         });
+
+        select.innerHTML = sorted.map(i => {
+            const label = (showPhone && i.phone) ? \`\${i.name} (\${i.phone})\` : i.name;
+            return \`<option value="\${i.id}" \${i.id === activeId ? 'selected' : ''}>\${label}</option>\`;
+        }).join('');
     }
 
     async function syncBridgeContext(select) {
@@ -71,8 +64,11 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         try {
             const res = await fetch(\`\${CONFIG.save_url}?contactId=\${contactId}&locationId=\${locationId}&t=\${Date.now()}\`);
             const data = await res.json();
+            
             if (data.activeInstanceId && select.value !== data.activeInstanceId) {
-                select.value = data.activeInstanceId;
+                console.log("📍 Nova instância ativa detectada, reordenando...");
+                renderSortedOptions(select, data.activeInstanceId, false);
+                
                 const target = instanceData.find(i => i.id === data.activeInstanceId);
                 if (target && currentContactId === contactId) showAutoSwitchNotify(target.name);
             }
@@ -98,18 +94,17 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             wrapper.style.cssText = \`display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid \${CONFIG.theme.border}; border-radius: 20px;\`;
             wrapper.innerHTML = \`
                 <div style="display:flex; align-items:center; gap:6px;">
-                    <div id="bridge-status-indicator" style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div>
+                    <div style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div>
                     <select id="bridge-instance-selector"></select>
                 </div>\`;
             actionBar.appendChild(wrapper);
             const select = wrapper.querySelector('#bridge-instance-selector');
 
-            // Eventos para mostrar/esconder o número
-            select.addEventListener('mousedown', () => updateOptionsLabels(select, true));
-            select.addEventListener('blur', () => updateOptionsLabels(select, false));
+            select.addEventListener('mousedown', () => renderSortedOptions(select, select.value, true));
+            select.addEventListener('blur', () => renderSortedOptions(select, select.value, false));
             select.addEventListener('change', (e) => {
                 saveBridgePreference(e.target.value);
-                updateOptionsLabels(select, false);
+                renderSortedOptions(select, e.target.value, false);
             });
 
             loadBridgeOptions(select);
@@ -125,8 +120,8 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             const data = await res.json();
             if (data.instances) {
                 instanceData = data.instances;
-                select.innerHTML = instanceData.map(i => \`<option value="\${i.id}">\${i.name}</option>\`).join('');
-                syncBridgeContext(select);
+                await syncBridgeContext(select);
+                if (!select.value && instanceData.length) renderSortedOptions(select, instanceData[0].id, false);
             }
         } catch (e) {}
     }
