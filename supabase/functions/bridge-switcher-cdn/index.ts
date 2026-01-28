@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v4.5.0 - SPA Optimized");
+    console.log("🚀 BRIDGE API: Switcher v4.6.0 - Clean UI Edition");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -20,158 +20,70 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     let instanceData = [];
     let currentContactId = null;
-    let syncInterval = null;
 
-    // Controla a apresentação do <select>: compacto (ellipsis) quando fechado,
-    // expandido quando aberto/focado, para o navegador renderizar o texto completo.
-    function setSelectExpanded(select, expanded) {
-        try {
-            if (!select) return;
-            if (expanded) {
-                // Alguns browsers herdam a largura do <select> para renderizar a lista aberta.
-                // Expandimos temporariamente para exibir "Nome (Telefone)" completo.
-                select.style.maxWidth = 'none';
-                select.style.width = '520px';
-                select.style.minWidth = '260px';
-                select.style.overflow = 'visible';
-                select.style.textOverflow = 'clip';
-                select.style.whiteSpace = 'nowrap';
-            } else {
-                // Em repouso: mantém compacto (parece que mostra só o nome)
-                select.style.maxWidth = '180px';
-                select.style.width = '180px';
-                select.style.minWidth = '0px';
-                select.style.overflow = 'hidden';
-                select.style.textOverflow = 'ellipsis';
-                select.style.whiteSpace = 'nowrap';
-            }
-        } catch {
-            // ignore
+    // 1. Injeção de CSS para matar a linha azul e formatar o dropdown
+    const style = document.createElement('style');
+    style.innerHTML = \`
+        #bridge-instance-selector:focus, 
+        #bridge-instance-selector:focus-visible,
+        #bridge-api-container:focus-within { 
+            outline: none !important; 
+            box-shadow: none !important; 
+            border: 1px solid \${CONFIG.theme.border} !important;
         }
-    }
-
-    // Garante que o texto das <option> SEMPRE seja "Nome (Telefone)" (quando houver telefone)
-    // para evitar dependência de troca de label em tempo real.
-    function getOptionLabel(i) {
-        try {
-            const name = (i && i.name) ? String(i.name) : '';
-            const phone = (i && i.phone) ? String(i.phone) : '';
-            return phone ? \`\${name} (\${phone})\` : name;
-        } catch {
-            return '';
+        #bridge-instance-selector {
+            max-width: 150px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+            border: none;
+            background: transparent;
+            font-size: 12px;
+            font-weight: 700;
+            color: \${CONFIG.theme.text};
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
         }
-    }
+    \`;
+    document.head.appendChild(style);
 
-    // 1. Captura dinâmica do ID do contato (GHL costuma expor via querystring)
     function getGHLContactId() {
-        try {
-            const url = new URL(window.location.href);
-            // Em várias rotas do GHL, o contactId vem na query (?contactId=...)
-            const fromQuery = url.searchParams.get('contactId') || url.searchParams.get('contact_id');
-            if (fromQuery && fromQuery.length >= 10) return fromQuery;
+        const url = new URL(window.location.href);
+        const fromQuery = url.searchParams.get('contactId') || url.searchParams.get('contact_id');
+        if (fromQuery && fromQuery.length >= 10) return fromQuery;
 
-            const path = url.pathname;
-            const candidates = [
-                /\/contacts\/detail\/([a-zA-Z0-9_-]{10,})/,          // Contacts
-                /\/conversations\/messages\/([a-zA-Z0-9_-]{10,})/,  // Some UIs
-                /\/conversations\/view\/([a-zA-Z0-9_-]{10,})/,      // Some UIs
-                /\/conversations\/([a-zA-Z0-9_-]{10,})/             // Legacy conversations
-            ];
-
-            for (const re of candidates) {
-                const m = path.match(re);
-                if (m && m[1]) {
-                    const id = m[1];
-                    const reserved = ['messages', 'search', 'settings', 'list'];
-                    if (!reserved.includes(id)) return id;
-                }
-            }
-        } catch {
-            // ignore
-        }
-        return null;
+        const path = url.pathname;
+        const match = path.match(/(?:contacts\\/detail\\/|conversations\\/)([a-zA-Z0-9_-]{10,})/);
+        return match ? match[1] : null;
     }
 
-    function getGHLLocationId() {
-        try {
-            const url = new URL(window.location.href);
-            const fromPath = url.pathname.match(/location\/([^\/]+)/)?.[1];
-            if (fromPath) return fromPath;
-            return url.searchParams.get('locationId') || url.searchParams.get('location_id');
-        } catch {
-            return null;
-        }
-    }
-
-    // 2. Sincronização com o Banco (Tabela contact_instance_preferences)
     async function syncBridgeContext(select) {
         const contactId = getGHLContactId();
-        const locationId = getGHLLocationId();
-        
+        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
         if (!contactId || !locationId) return;
 
         try {
-            // Timestamp para evitar cache do navegador
             const res = await fetch(\`\${CONFIG.save_url}?contactId=\${contactId}&locationId=\${locationId}&t=\${Date.now()}\`);
             const data = await res.json();
             
-            if (data.activeInstanceId) {
-                if (select.value !== data.activeInstanceId) {
-                    console.log(\`🔄 Instância atualizada para: \${data.activeInstanceId}\`);
-                    select.value = data.activeInstanceId;
-                    updateDisplay(select, false);
-                    
-                    const target = instanceData.find(i => i.id === data.activeInstanceId);
-                    if (target && currentContactId === contactId) {
-                        showAutoSwitchNotify(target.name);
-                    }
-                }
-            } else if (!select.value && instanceData.length > 0) {
-                // No preference found - select first instance as default but don't save
-                select.value = instanceData[0].id;
-                updateDisplay(select, false);
+            if (data.activeInstanceId && select.value !== data.activeInstanceId) {
+                select.value = data.activeInstanceId;
+                const target = instanceData.find(i => i.id === data.activeInstanceId);
+                if (target && currentContactId === contactId) showAutoSwitchNotify(target.name);
             }
             currentContactId = contactId;
-        } catch (e) {
-            console.error("❌ Erro ao sincronizar instância:", e);
-        }
-    }
-
-    function updateDisplay(select, showFull) {
-        // Fallback: força o navegador a re-ler o texto das <option> recriando-as.
-        // Mantemos o texto SEMPRE como "Nome (Telefone)"; o "esconder telefone" é feito via CSS (ellipsis) no <select>.
-        try {
-            const currentValue = select.value;
-            const options = instanceData.map((i) => {
-                const label = getOptionLabel(i);
-                return { value: i.id, label };
-            });
-
-            while (select.firstChild) select.removeChild(select.firstChild);
-            for (const opt of options) {
-                const o = document.createElement('option');
-                o.value = opt.value;
-                o.text = opt.label;
-                select.appendChild(o);
-            }
-
-            if (currentValue) select.value = currentValue;
-
-            // Mantém o estado visual coerente (compacto vs expandido)
-            setSelectExpanded(select, !!showFull);
-        } catch (e) {
-            console.warn('⚠️ Falha ao re-renderizar options:', e);
-        }
+        } catch (e) {}
     }
 
     function showAutoSwitchNotify(instanceName) {
         if (document.getElementById('bridge-notify')) return;
         const toast = document.createElement('div');
         toast.id = 'bridge-notify';
-        toast.style.cssText = \`position: fixed; bottom: 20px; right: 20px; z-index: 10000; background: #1f2937; color: white; padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-left: 4px solid \${CONFIG.theme.primary}; transition: opacity 0.5s ease;\`;
+        toast.style.cssText = \`position: fixed; bottom: 20px; right: 20px; z-index: 10000; background: #1f2937; color: white; padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border-left: 4px solid \${CONFIG.theme.primary}; transition: opacity 0.5s ease;\`;
         toast.innerHTML = \`✅ Instância <b>\${instanceName}</b> selecionada.\`;
         document.body.appendChild(toast);
-        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 3500);
+        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 3000);
     }
 
     function injectBridgeUI() {
@@ -179,93 +91,41 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         if (actionBar && !document.getElementById('bridge-api-container')) {
             const wrapper = document.createElement('div');
             wrapper.id = 'bridge-api-container';
-            wrapper.style.cssText = \`display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid \${CONFIG.theme.border}; border-radius: 20px; cursor: pointer;\`;
-            // O texto das <option> já vem completo (Nome + Telefone).
-            // Para em repouso parecer que “mostra só o nome”, aplicamos ellipsis no próprio <select>.
-            wrapper.innerHTML = \`<div style="display:flex; align-items:center; gap:6px;"><div id="bridge-status-indicator" style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div><select id="bridge-instance-selector" style="border: none; background: transparent; font-size: 12px; font-weight: 700; color: \${CONFIG.theme.text}; outline: none; cursor: pointer; appearance: none; -webkit-appearance: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;"></select></div>\`;
+            wrapper.style.cssText = \`display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid \${CONFIG.theme.border}; border-radius: 20px;\`;
+            wrapper.innerHTML = \`
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <div id="bridge-status-indicator" style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div>
+                    <select id="bridge-instance-selector"></select>
+                </div>\`;
             actionBar.appendChild(wrapper);
             const select = wrapper.querySelector('#bridge-instance-selector');
-
-            // Estado inicial: compacto
-            setSelectExpanded(select, false);
-            
             select.addEventListener('change', (e) => saveBridgePreference(e.target.value));
-            
-            // Re-renderização total (fallback) ao focar/abrir para forçar o navegador a “ler” novamente as options.
-            // Importante: usamos capture + pointerdown/mousedown para aplicar expansão ANTES do browser abrir o dropdown.
-            select.addEventListener('pointerdown', () => {
-                setSelectExpanded(select, true);
-                updateDisplay(select, true);
-            }, true);
-            select.addEventListener('mousedown', () => {
-                setSelectExpanded(select, true);
-                updateDisplay(select, true);
-            }, true);
-            select.addEventListener('focus', () => {
-                setSelectExpanded(select, true);
-                updateDisplay(select, true);
-            });
-
-            // Abertura por teclado (ArrowDown/Enter/Space)
-            select.addEventListener('keydown', (ev) => {
-                const k = ev && ev.key;
-                if (k === 'ArrowDown' || k === 'Enter' || k === ' ') {
-                    setSelectExpanded(select, true);
-                    updateDisplay(select, true);
-                }
-            }, true);
-
-            // Ao fechar, volta a compactar
-            select.addEventListener('blur', () => updateDisplay(select, false));
-            select.addEventListener('change', () => {
-                // Alguns browsers disparam blur depois; garantimos compactação.
-                setTimeout(() => updateDisplay(select, false), 0);
-            });
-            
             loadBridgeOptions(select);
-
-            // Inicia o monitoramento de mudança de URL e o Polling de 5s
-            if (syncInterval) clearInterval(syncInterval);
-            syncInterval = setInterval(() => syncBridgeContext(select), 5000);
+            setInterval(() => syncBridgeContext(select), 5000);
         }
     }
 
     async function loadBridgeOptions(select) {
-        const locationId = getGHLLocationId();
+        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
         if (!locationId) return;
         try {
             const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locationId}\`);
             const data = await res.json();
-            console.log("📦 Dados carregados:", data.instances);
-            if (data.instances && data.instances.length > 0) {
+            if (data.instances) {
                 instanceData = data.instances;
-                // Sort instances by name for consistent ordering
-                instanceData.sort((a, b) => a.name.localeCompare(b.name));
-                // Add placeholder option to prevent auto-selection
-                // As options já são criadas com "Nome (Telefone)" desde o início.
-                select.innerHTML = '<option value="" disabled>Carregando...</option>' + instanceData.map(i => {
-                    const label = getOptionLabel(i);
+                // O segredo: já cria a option com o telefone no label
+                select.innerHTML = instanceData.map(i => {
+                    const label = i.phone ? \`\${i.name} (\${i.phone})\` : i.name;
                     return \`<option value="\${i.id}">\${label}</option>\`;
                 }).join('');
-                select.value = '';
-                // Sync will set the correct value based on saved preference
-                await syncBridgeContext(select);
-                // Remove placeholder after sync
-                const placeholder = select.querySelector('option[value=""]');
-                if (placeholder) placeholder.remove();
-
-                // Fallback extra: força re-render das options logo após carregar
-                updateDisplay(select, true);
-                setTimeout(() => updateDisplay(select, false), 0);
+                syncBridgeContext(select);
             }
-        } catch (e) {
-            console.error("❌ Erro ao carregar instâncias:", e);
-        }
+        } catch (e) {}
     }
 
     async function saveBridgePreference(instanceId) {
         const contactId = getGHLContactId();
-        const locationId = getGHLLocationId();
+        const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
         if (!contactId || !instanceId) return;
         await fetch(CONFIG.save_url, {
             method: 'POST',
