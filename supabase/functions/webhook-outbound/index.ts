@@ -338,6 +338,7 @@ serve(async (req: Request) => {
     // Extract message data first to check if it's a valid outbound message
     const eventType = String(body.type ?? "");
     const direction = String(body.direction ?? "");
+    const source = String(body.source ?? "");
     const messageText: string = String(body.message ?? body.body ?? "");
     const phoneRaw: string = String(body.phone ?? body.to ?? "");
     const attachments: string[] = Array.isArray(body.attachments) ? body.attachments : [];
@@ -350,6 +351,26 @@ serve(async (req: Request) => {
     
     if (!isOutbound && !isSmsWithContent) {
       console.log("Ignoring non-outbound event:", { eventType, direction });
+      return; // Already responded
+    }
+
+    // CRITICAL: Check if this message was synced from WhatsApp via webhook-inbound
+    // When a message is sent from the phone, webhook-inbound syncs it to GHL and stores the GHL messageId.
+    // If source is NOT from GHL UI/workflow (source !== "workflow" && source !== "direct"), it might be a synced message.
+    // We should only process messages that originated from GHL, not messages that were synced FROM WhatsApp.
+    // 
+    // Source values:
+    // - "app" = GHL web interface
+    // - "workflow" = GHL automation
+    // - "direct" = direct API call from GHL
+    // - Others = potentially synced from external source
+    const isFromGhlInterface = source === "app" || source === "workflow" || source === "direct";
+    
+    // If the message has status "delivered" and is NOT from GHL interface, it's likely a synced message
+    // from webhook-inbound - we should NOT re-send it
+    const status = String(body.status ?? "");
+    if (status === "delivered" && !isFromGhlInterface) {
+      console.log("Ignoring already-delivered message (likely synced from WhatsApp):", { source, status, messageId });
       return; // Already responded
     }
 
