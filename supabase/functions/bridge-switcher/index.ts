@@ -35,7 +35,9 @@ Deno.serve(async (req) => {
 
       // Strategy 1: Try to find preference directly by contactId
       let preference = null;
-      const { data: directPref, error: directError } = await supabase
+      let foundBy = "none";
+      
+      const { data: directPref } = await supabase
         .from("contact_instance_preferences")
         .select("instance_id, contact_id, updated_at")
         .eq("contact_id", contactId)
@@ -45,24 +47,79 @@ Deno.serve(async (req) => {
       if (directPref) {
         console.log("Found preference by contactId:", directPref);
         preference = directPref;
+        foundBy = "direct_match";
       } else {
-        // Strategy 2: Look for the most recently updated preference for this location
-        // This handles when the same phone has multiple GHL contact IDs
-        // Find all preferences for this location, ordered by updated_at DESC
-        const { data: allPrefs, error: allError } = await supabase
-          .from("contact_instance_preferences")
-          .select("instance_id, contact_id, updated_at")
+        // Strategy 2: Use phone mapping to find preferences for the same phone number
+        // First, check if this contactId has a phone mapping
+        const { data: phoneMapping } = await supabase
+          .from("ghl_contact_phone_mapping")
+          .select("original_phone")
+          .eq("contact_id", contactId)
           .eq("location_id", locationId)
-          .order("updated_at", { ascending: false })
-          .limit(50);
+          .maybeSingle();
 
-        if (allPrefs && allPrefs.length > 0) {
-          // Check if any of these contacts might be the same person
-          // by looking at the most recent one that was updated
-          console.log("No direct match, checking recent preferences:", allPrefs.length);
-          
-          // For now, just return null - the contact will need to send a message
-          // to establish preference. In the future, we could cross-reference by phone.
+        if (phoneMapping?.original_phone) {
+          // Find other contactIds with the same phone
+          const { data: relatedMappings } = await supabase
+            .from("ghl_contact_phone_mapping")
+            .select("contact_id")
+            .eq("original_phone", phoneMapping.original_phone)
+            .eq("location_id", locationId);
+
+          if (relatedMappings && relatedMappings.length > 0) {
+            const relatedContactIds = relatedMappings.map(m => m.contact_id);
+            
+            // Find preferences for any of these related contactIds
+            const { data: relatedPrefs } = await supabase
+              .from("contact_instance_preferences")
+              .select("instance_id, contact_id, updated_at")
+              .in("contact_id", relatedContactIds)
+              .eq("location_id", locationId)
+              .order("updated_at", { ascending: false })
+              .limit(1);
+
+            if (relatedPrefs && relatedPrefs.length > 0) {
+              console.log("Found preference via phone mapping:", relatedPrefs[0]);
+              preference = relatedPrefs[0];
+              foundBy = "phone_mapping";
+              
+              // Also save this preference for the current contactId for faster future lookups
+              await supabase
+                .from("contact_instance_preferences")
+                .upsert({
+                  contact_id: contactId,
+                  location_id: locationId,
+                  instance_id: relatedPrefs[0].instance_id,
+                  updated_at: new Date().toISOString(),
+                }, { onConflict: "contact_id,location_id" });
+            }
+          }
+        }
+
+        // Strategy 3: Look for the most recently updated preference for this location (fallback)
+        if (!preference) {
+          const { data: recentPref } = await supabase
+            .from("contact_instance_preferences")
+            .select("instance_id, contact_id, updated_at")
+            .eq("location_id", locationId)
+            .order("updated_at", { ascending: false })
+            .limit(1);
+
+          if (recentPref && recentPref.length > 0) {
+            // Check if this preference was updated in the last 5 minutes
+            // This handles the case where the same person is messaging from a new contact
+            const prefTime = new Date(recentPref[0].updated_at).getTime();
+            const now = Date.now();
+            const fiveMinutesAgo = now - 5 * 60 * 1000;
+            
+            if (prefTime >= fiveMinutesAgo) {
+              console.log("Using recent preference (within 5 min):", recentPref[0]);
+              preference = recentPref[0];
+              foundBy = "recent_fallback";
+            } else {
+              console.log("No recent preference found, checked:", recentPref.length);
+            }
+          }
         }
       }
 
@@ -70,7 +127,7 @@ Deno.serve(async (req) => {
         JSON.stringify({ 
           activeInstanceId: preference?.instance_id || null,
           debug: { 
-            foundBy: preference ? "direct_match" : "none",
+            foundBy,
             contactId,
             locationId 
           }

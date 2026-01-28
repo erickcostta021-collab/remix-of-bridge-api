@@ -718,19 +718,18 @@ serve(async (req) => {
       token
     );
 
-    // Save the original WhatsApp JID ONLY for groups
-    // GHL transforms group JIDs (like "558181055296-1620737537@g.us") into numeric format
-    // For regular contacts (@s.whatsapp.net), GHL preserves the phone correctly - no mapping needed
-    if (contact.id && from && isGroup) {
+    // Save the original WhatsApp JID for all contacts (groups and individuals)
+    // This allows bridge-switcher to find preferences when GHL creates new contactIds for the same phone
+    if (contact.id && from) {
       try {
         await supabase
           .from("ghl_contact_phone_mapping")
           .upsert({
             contact_id: contact.id,
             location_id: subaccount.location_id,
-            original_phone: from, // Full WhatsApp JID like "558181055296-1620737537@g.us"
+            original_phone: from, // Full WhatsApp JID
           }, { onConflict: "contact_id,location_id" });
-        console.log("Saved GROUP phone mapping:", { contactId: contact.id, originalPhone: from });
+        console.log("Saved phone mapping:", { contactId: contact.id, originalPhone: from, isGroup });
       } catch (e) {
         console.error("Failed to save phone mapping:", e);
         // Don't fail the message processing
