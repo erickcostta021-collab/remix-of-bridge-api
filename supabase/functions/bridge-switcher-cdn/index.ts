@@ -49,16 +49,24 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     // Try to extract phone number from the GHL interface
     function getLeadPhoneFromUI() {
-        // Method 1: Look for phone in contact details panel
+        // Method 1: Look for phone in common contact/conversation elements
         const phoneSelectors = [
+            // Very common community/custom CSS hooks
+            '.contact-phone',
+            '.contact-phone *',
+
             // Contact detail page phone field
             '.contact-phone-number',
             '[data-testid="contact-phone"]',
+            '[data-testid="contact-phone"] *',
+
+            // Tel links
             'a[href^="tel:"]',
+
             // Conversation header phone display
             '.conversation-header .phone-number',
-            '[class*="phone"]',
-            // Generic phone pattern in visible text
+            '.conversation-header [class*="phone"]',
+            '.hl_conversations--header [class*="phone"]',
         ];
         
         for (const selector of phoneSelectors) {
@@ -73,7 +81,20 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             }
         }
         
-        // Method 2: Look for phone pattern in conversation sidebar or header
+        // Method 2: Header scan (some GHL themes put the phone only in the header/title)
+        const headerEl = document.querySelector(
+            '.conversation-header, .hl_conversations--header, header, [data-testid="conversation-header"]'
+        );
+        if (headerEl) {
+            const headerText = headerEl.textContent || '';
+            const phoneFromHeader = extractPhoneNumber(headerText);
+            if (phoneFromHeader) {
+                console.log("📱 Telefone detectado no GHL (header):", phoneFromHeader);
+                return phoneFromHeader;
+            }
+        }
+
+        // Method 3: Look for phone pattern in conversation sidebar/details
         const conversationArea = document.querySelector('.conversation-details, .contact-sidebar, .hl_conversations--details');
         if (conversationArea) {
             const text = conversationArea.textContent || '';
@@ -84,7 +105,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             }
         }
         
-        // Method 3: Check data attributes
+        // Method 4: Check data attributes
         const contactElements = document.querySelectorAll('[data-phone], [data-contact-phone]');
         for (const el of contactElements) {
             const phone = el.getAttribute('data-phone') || el.getAttribute('data-contact-phone');
