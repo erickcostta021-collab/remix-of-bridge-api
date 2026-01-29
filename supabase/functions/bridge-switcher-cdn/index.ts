@@ -6,20 +6,20 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.6
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.6');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.2.0
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.2.0');
 
 try {
 (function() {
-    const VERSION = "6.1.6";
+    const VERSION = "6.2.0";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
         save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
         reinject_interval: 200,    // Intervalo para verificar/reinjetar dropdown
-        sync_interval: 3000,       // Sync background
-        sync_lock_duration: 100,   // Trava de sincronização REDUZIDA (era 500ms)
+        sync_interval: 2000,       // Sync background mais frequente (era 3000ms)
+        sync_lock_duration: 100,   // Trava de sincronização
         value_check_delay: 500,    // Delay para validar valor após DOM estabilizar
         theme: {
             primary: '#22c55e',
@@ -37,10 +37,11 @@ try {
         warn: (msg, data) => console.warn(\`\${LOG_PREFIX} ⚠️ \${msg}\`, data !== undefined ? data : ''),
         error: (msg, data) => console.error(\`\${LOG_PREFIX} ❌ \${msg}\`, data !== undefined ? data : ''),
         nav: (msg, data) => console.log(\`\${LOG_PREFIX} 🔄 \${msg}\`, data !== undefined ? data : ''),
-        api: (msg, data) => console.log(\`\${LOG_PREFIX} 📡 \${msg}\`, data !== undefined ? data : '')
+        api: (msg, data) => console.log(\`\${LOG_PREFIX} 📡 \${msg}\`, data !== undefined ? data : ''),
+        compare: (msg, data) => console.log(\`\${LOG_PREFIX} 🔍 \${msg}\`, data !== undefined ? data : '')
     };
 
-    log.info(\`Switcher v\${VERSION} - Stable Sync\`);
+    log.info(\`Switcher v\${VERSION} - Inbound Reactivity\`);
 
     // =====================================================
     // STATE MANAGEMENT
@@ -52,9 +53,9 @@ try {
         lastUrl: window.location.href,
         isInjected: false,
         isSyncingDropdown: false,      // Flag para evitar loop ao sincronizar visualmente
-        syncLockUntil: 0,              // NOVO: Timestamp até quando ignorar novas ordens de sync
-        pendingSyncId: null,           // NOVO: ID pendente para sincronizar após lock
-        lastKnownActiveId: null        // Última instância ativa conhecida do banco
+        syncLockUntil: 0,              // Timestamp até quando ignorar novas ordens de sync
+        pendingSyncId: null,           // ID pendente para sincronizar após lock
+        lastKnownActiveId: null        // Última instância ativa conhecida do banco (SEMPRE ID, nunca nome)
     };
 
     // =====================================================
@@ -752,7 +753,7 @@ try {
     }
 
     // =====================================================
-    // VERIFICAÇÃO DE ATUALIZAÇÕES INBOUND
+    // VERIFICAÇÃO DE ATUALIZAÇÕES INBOUND (REATIVIDADE)
     // =====================================================
     async function checkForInboundUpdates() {
         try {
@@ -771,21 +772,26 @@ try {
             if (!res.ok) return;
             
             const data = await res.json();
-            const serverActiveId = data.activeInstanceId;
+            const serverActiveId = data.activeInstanceId; // SEMPRE um UUID, nunca nome
             
             if (!serverActiveId) return;
             
             const select = document.getElementById('bridge-instance-selector');
             const currentDropdownValue = select ? select.value : null;
             
-            // Se o servidor tem um valor diferente do dropdown OU diferente do último conhecido
-            // PRIORIDADE: Mudança externa sempre tem prioridade (isExternalUpdate = true)
-            if (serverActiveId !== currentDropdownValue || serverActiveId !== state.lastKnownActiveId) {
-                if (serverActiveId !== state.lastKnownActiveId) {
-                    state.lastKnownActiveId = serverActiveId;
-                    // Chama com flag de atualização externa para ignorar lock
-                    requestDropdownSync(serverActiveId, true);
-                }
+            // LOG DE COMPARAÇÃO - Sempre usa IDs
+            log.compare(\`Comparando: Dropdown(\${currentDropdownValue ? currentDropdownValue.slice(0,8) : 'null'}) vs Banco(\${serverActiveId.slice(0,8)})\`);
+            
+            // FORÇA ATUALIZAÇÃO se dropdown difere do banco, IGNORANDO lastKnownActiveId
+            // Isso garante reatividade imediata quando mensagem inbound muda a preferência
+            if (serverActiveId !== currentDropdownValue) {
+                log.info(\`📥 Diferença detectada! Atualizando dropdown...\`);
+                state.lastKnownActiveId = serverActiveId;
+                // Chama com flag de atualização externa para ignorar lock
+                requestDropdownSync(serverActiveId, true);
+            } else if (serverActiveId !== state.lastKnownActiveId) {
+                // Atualiza estado interno mesmo se dropdown já está correto
+                state.lastKnownActiveId = serverActiveId;
             }
         } catch (e) {
             // Silencioso - não loga erros de sync check
