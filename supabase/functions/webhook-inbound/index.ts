@@ -797,54 +797,128 @@ serve(async (req) => {
     // for the same lead (since each instance may create a different GHL contact)
     if (contact.id && instance.id && from) {
       try {
-        // Normalize phone: remove @s.whatsapp.net, @g.us, and any non-digit characters
-        const normalizedPhone = from.split("@")[0].replace(/\D/g, "");
+        // LIMPEZA TOTAL DO TELEFONE: remove @s.whatsapp.net, @g.us, e TODOS caracteres não-numéricos
+        const rawPhone = from.split("@")[0].replace(/\D/g, "");
         
-        console.log("[Inbound] Mensagem recebida da instância:", instance.id, `(${instance.instance_name})`);
-        console.log("[Inbound] Tentando atualizar preferência para o contato:", normalizedPhone);
+        // Remover prefixo 55 (Brasil) se existir para normalização consistente
+        // Mantém apenas o número "core" para matching agressivo
+        const normalizedPhone = rawPhone.startsWith("55") ? rawPhone.slice(2) : rawPhone;
         
-        const { error: prefError } = await supabase
+        // Extrair últimos 8 dígitos para matching sem o nono dígito (problema clássico BR)
+        const last8Digits = normalizedPhone.slice(-8);
+        
+        console.log("[Inbound] 📞 Mensagem recebida da instância:", instance.id, `(${instance.instance_name})`);
+        console.log("[Inbound] 📞 Telefone recebido:", { raw: from, cleaned: rawPhone, normalized: normalizedPhone, last8: last8Digits });
+        
+        // PRIORIDADE 1: Buscar por contact_id exato (chave primária infalível do GHL)
+        const contactIdStr = contact.id;
+        console.log("[Inbound] 🔍 Tentando update por contact_id:", contactIdStr);
+        
+        const { data: existingByContactId, error: findByContactError } = await supabase
           .from("contact_instance_preferences")
-          .upsert({
-            contact_id: contact.id,
-            location_id: subaccount.location_id,
-            instance_id: instance.id,
-            lead_phone: normalizedPhone, // Normalized phone (digits only)
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "lead_phone,location_id" });
+          .select("id, lead_phone")
+          .eq("contact_id", contactIdStr)
+          .eq("location_id", subaccount.location_id)
+          .limit(1);
         
-        if (prefError) {
-          console.error("[Inbound] ❌ Erro ao atualizar banco:", prefError.message, prefError.code);
+        if (existingByContactId && existingByContactId.length > 0) {
+          // Encontrado por contact_id - atualizar diretamente
+          console.log("[Inbound] ✅ Encontrado registro existente por contact_id:", existingByContactId[0].id);
           
-          // If lead_phone conflict fails, try with contact_id conflict as fallback
-          const { error: fallbackError } = await supabase
+          const { error: updateError } = await supabase
             .from("contact_instance_preferences")
-            .upsert({
-              contact_id: contact.id,
-              location_id: subaccount.location_id,
+            .update({
               instance_id: instance.id,
               lead_phone: normalizedPhone,
               updated_at: new Date().toISOString(),
-            }, { onConflict: "contact_id,location_id" });
+            })
+            .eq("id", existingByContactId[0].id);
           
-          if (fallbackError) {
-            console.error("[Inbound] ❌ Erro fallback ao atualizar:", fallbackError.message);
+          if (updateError) {
+            console.error("[Inbound] ❌ Erro ao atualizar por contact_id:", updateError.message);
           } else {
-            console.log("[Inbound] ✅ Sucesso ao atualizar banco (via fallback contact_id)");
+            console.log(`[Inbound] 📌 Atualizado por contact_id: ${normalizedPhone} → Instância ${instance.instance_name}`);
           }
         } else {
-          console.log("[Inbound] ✅ Sucesso ao atualizar banco:", { 
-            contactId: contact.id.substring(0, 10), 
-            instanceId: instance.id.substring(0, 10),
-            instanceName: instance.instance_name,
-            locationId: subaccount.location_id.substring(0, 10),
-            leadPhone: normalizedPhone
-          });
-          // LOG DE CONFIRMAÇÃO FORÇADA
-          console.log(`[Inbound] 📌 Confirmado no banco: Contato ${normalizedPhone} agora é Instância ${instance.instance_name} (${instance.id})`);
+          // PRIORIDADE 2: Buscar por telefone com LIKE nos últimos 8 dígitos (ignora nono dígito)
+          console.log("[Inbound] 🔍 Buscando por telefone (últimos 8 dígitos):", last8Digits);
+          
+          const { data: existingByPhone, error: findByPhoneError } = await supabase
+            .from("contact_instance_preferences")
+            .select("id, contact_id, lead_phone")
+            .eq("location_id", subaccount.location_id)
+            .like("lead_phone", `%${last8Digits}`)
+            .limit(1);
+          
+          if (existingByPhone && existingByPhone.length > 0) {
+            // Encontrado por telefone - atualizar
+            console.log("[Inbound] ✅ Encontrado registro existente por telefone:", { 
+              id: existingByPhone[0].id, 
+              storedPhone: existingByPhone[0].lead_phone,
+              matchedWith: last8Digits 
+            });
+            
+            const { error: updateError } = await supabase
+              .from("contact_instance_preferences")
+              .update({
+                contact_id: contactIdStr, // Atualiza também o contact_id mais recente
+                instance_id: instance.id,
+                lead_phone: normalizedPhone, // Atualiza com formato mais recente
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existingByPhone[0].id);
+            
+            if (updateError) {
+              console.error("[Inbound] ❌ Erro ao atualizar por telefone:", updateError.message);
+            } else {
+              console.log(`[Inbound] 📌 Atualizado por telefone: ${normalizedPhone} → Instância ${instance.instance_name}`);
+            }
+          } else {
+            // PRIORIDADE 3: Não encontrado - inserir novo registro
+            console.log("[Inbound] ❌ Contato não localizado no banco para o telefone:", normalizedPhone);
+            console.log("[Inbound] 🆕 Inserindo novo registro de preferência...");
+            
+            const { error: insertError } = await supabase
+              .from("contact_instance_preferences")
+              .insert({
+                contact_id: contactIdStr,
+                location_id: subaccount.location_id,
+                instance_id: instance.id,
+                lead_phone: normalizedPhone,
+                updated_at: new Date().toISOString(),
+              });
+            
+            if (insertError) {
+              // Se falhar por conflito, tentar upsert como fallback
+              if (insertError.code === "23505") {
+                console.log("[Inbound] ⚠️ Conflito detectado, tentando upsert...");
+                const { error: upsertError } = await supabase
+                  .from("contact_instance_preferences")
+                  .upsert({
+                    contact_id: contactIdStr,
+                    location_id: subaccount.location_id,
+                    instance_id: instance.id,
+                    lead_phone: normalizedPhone,
+                    updated_at: new Date().toISOString(),
+                  }, { onConflict: "contact_id,location_id" });
+                
+                if (upsertError) {
+                  console.error("[Inbound] ❌ Erro no upsert fallback:", upsertError.message);
+                } else {
+                  console.log(`[Inbound] 📌 Inserido via upsert: ${normalizedPhone} → Instância ${instance.instance_name}`);
+                }
+              } else {
+                console.error("[Inbound] ❌ Erro ao inserir:", insertError.message);
+              }
+            } else {
+              console.log(`[Inbound] 📌 Novo registro criado: ${normalizedPhone} → Instância ${instance.instance_name}`);
+            }
+          }
         }
+        
+        console.log(`[Inbound] ✅ Processamento de preferência concluído para: ${normalizedPhone}`);
       } catch (e) {
-        console.error("[Inbound] ❌ Erro ao atualizar:", e);
+        console.error("[Inbound] ❌ Erro crítico ao atualizar preferências:", e);
         // Don't fail the message processing
       }
     }
