@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
     }
 
     // =====================================================
-    // LOOKUP PREFERENCE BY PHONE (unified path)
+    // LOOKUP PREFERENCE BY PHONE (unified path) - PRIORITY 1
     // =====================================================
     if (resolvedPhone) {
       // Normalize phone for matching
@@ -171,24 +171,51 @@ Deno.serve(async (req) => {
 
     // =====================================================
     // FALLBACK: Direct contactId lookup (backward compatibility)
+    // Only use if we have contactId AND either no phone OR no preference found by phone
     // =====================================================
     if (!activeInstanceId && contactId && contactId.length >= 10) {
-      console.log("[get-instances] Fallback: looking up by contact_id directly");
+      console.log("[get-instances] Fallback: looking up by contact_id directly:", contactId.slice(0, 15));
       
-      const { data: preference } = await supabase
+      // First, check if THIS specific contactId has a preference with a lead_phone
+      // If it does, use that phone to find the LATEST preference across all contacts with same phone
+      const { data: contactPref } = await supabase
         .from("contact_instance_preferences")
-        .select("instance_id, updated_at")
+        .select("instance_id, lead_phone, updated_at")
         .eq("contact_id", contactId)
         .eq("location_id", locationId)
-        .order("updated_at", { ascending: false })
         .limit(1);
       
-      const pref = preference?.[0];
-      if (pref?.instance_id) {
+      const pref = contactPref?.[0];
+      
+      if (pref?.lead_phone) {
+        // This contact has a phone - find the LATEST preference for this phone across ALL contacts
+        const normalizedPhone = pref.lead_phone.replace(/\D/g, '');
+        const last10 = normalizedPhone.slice(-10);
+        
+        console.log("[get-instances] Contact has phone, searching latest preference for phone:", last10);
+        
+        const { data: phonePrefs } = await supabase
+          .from("contact_instance_preferences")
+          .select("instance_id, updated_at")
+          .eq("location_id", locationId)
+          .or(`lead_phone.eq.${pref.lead_phone},lead_phone.like.%${normalizedPhone},lead_phone.like.%${last10}%`)
+          .order("updated_at", { ascending: false })
+          .limit(1);
+        
+        if (phonePrefs && phonePrefs.length > 0) {
+          const latestPref = phonePrefs[0];
+          const exists = formattedInstances.some(i => i.id === latestPref.instance_id);
+          if (exists) {
+            activeInstanceId = latestPref.instance_id;
+            console.log("[get-instances] ✅ Found preference by contact's phone (latest):", activeInstanceId);
+          }
+        }
+      } else if (pref?.instance_id) {
+        // Contact has no phone, just use its direct preference
         const exists = formattedInstances.some(i => i.id === pref.instance_id);
         if (exists) {
           activeInstanceId = pref.instance_id;
-          console.log("[get-instances] ✅ Found preference by contactId fallback (latest):", activeInstanceId);
+          console.log("[get-instances] ✅ Found preference by contactId (no phone):", activeInstanceId);
         }
       }
     }
