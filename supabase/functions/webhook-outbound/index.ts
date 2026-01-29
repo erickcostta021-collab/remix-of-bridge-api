@@ -422,7 +422,7 @@ serve(async (req: Request) => {
     if (contactId) {
       const { data: preference } = await supabase
         .from("contact_instance_preferences")
-        .select("instance_id")
+        .select("instance_id, lead_phone")
         .eq("contact_id", contactId)
         .eq("location_id", locationId)
         .maybeSingle();
@@ -433,11 +433,16 @@ serve(async (req: Request) => {
         if (preferredInstance) {
           instance = preferredInstance;
           console.log("Using preferred instance from contact preference:", { instanceId: instance.id, contactId });
+          
+          // Se a preferência existe mas NÃO tem lead_phone, tentar preencher depois
+          if (!preference.lead_phone) {
+            console.log("[Outbound] ⚠️ Preferência existe mas lead_phone está NULL, será atualizado após resolver o telefone");
+          }
         } else {
           console.log("Preferred instance not found in subaccount instances, using default");
         }
       } else {
-        console.log("No preference found for contactId:", { contactId, locationId });
+        console.log("No preference found for contactId, will create one after resolving phone:", { contactId, locationId });
       }
     } else {
       console.log("No contactId in payload, using default instance");
@@ -509,6 +514,63 @@ serve(async (req: Request) => {
     }
 
     console.log("Phone formatting:", { original: phoneRaw, formatted: targetPhone, isGroup, usedMappingTable });
+
+    // =======================================================================
+    // IMPORTANTE: Atualizar/criar preferência com lead_phone para bridge-switcher
+    // Isso garante que o dropdown no GHL saiba qual instância usar para este contato
+    // =======================================================================
+    if (contactId && targetPhone && locationId && !isGroup) {
+      try {
+        // Normalizar telefone para armazenamento (remover caracteres especiais)
+        const normalizedPhone = targetPhone.replace(/\D/g, "");
+        
+        // Verificar se já existe preferência para este contactId
+        const { data: existingPref } = await supabase
+          .from("contact_instance_preferences")
+          .select("id, lead_phone, instance_id")
+          .eq("contact_id", contactId)
+          .eq("location_id", locationId)
+          .maybeSingle();
+        
+        if (existingPref) {
+          // Atualizar lead_phone se estiver NULL ou diferente
+          if (!existingPref.lead_phone || existingPref.lead_phone !== normalizedPhone) {
+            console.log("[Outbound] 📱 Atualizando lead_phone na preferência existente:", { 
+              contactId: contactId.slice(0, 10), 
+              oldPhone: existingPref.lead_phone || "NULL", 
+              newPhone: normalizedPhone.slice(0, 10)
+            });
+            
+            await supabase
+              .from("contact_instance_preferences")
+              .update({ 
+                lead_phone: normalizedPhone,
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", existingPref.id);
+          }
+        } else {
+          // Criar novo registro de preferência com a instância padrão
+          console.log("[Outbound] 📱 Criando nova preferência com lead_phone:", { 
+            contactId: contactId.slice(0, 10), 
+            phone: normalizedPhone.slice(0, 10),
+            instanceId: instance.id
+          });
+          
+          await supabase
+            .from("contact_instance_preferences")
+            .insert({
+              contact_id: contactId,
+              location_id: locationId,
+              instance_id: instance.id,
+              lead_phone: normalizedPhone,
+            });
+        }
+      } catch (prefError) {
+        console.error("[Outbound] ❌ Erro ao atualizar preferência:", prefError);
+        // Não falhar o envio por causa disso
+      }
+    }
 
     // Check if we have content to send
     if (!messageText && attachments.length === 0) {
