@@ -794,6 +794,8 @@ serve(async (req) => {
     // for the same lead (since each instance may create a different GHL contact)
     if (contact.id && instance.id && from) {
       try {
+        console.log("[Webhook Inbound] 🔄 Atualizando contato", contact.id.substring(0, 10), "para a instância", instance.id.substring(0, 10), `(${instance.instance_name})`);
+        
         await supabase
           .from("contact_instance_preferences")
           .upsert({
@@ -803,14 +805,15 @@ serve(async (req) => {
             lead_phone: from, // The WhatsApp JID (e.g., 5521980014713@s.whatsapp.net)
             updated_at: new Date().toISOString(),
           }, { onConflict: "lead_phone,location_id" });
-        console.log("Updated contact instance preference by lead_phone:", { 
-          contactId: contact.id, 
-          instanceId: instance.id,
-          locationId: subaccount.location_id,
-          leadPhone: from
+        console.log("[Webhook Inbound] ✅ Preferência atualizada com sucesso:", { 
+          contactId: contact.id.substring(0, 10), 
+          instanceId: instance.id.substring(0, 10),
+          instanceName: instance.instance_name,
+          locationId: subaccount.location_id.substring(0, 10),
+          leadPhone: from.substring(0, 15)
         });
       } catch (e) {
-        console.error("Failed to update contact instance preference:", e);
+        console.error("[Webhook Inbound] ❌ Falha ao atualizar preferência:", e);
         // Don't fail the message processing
       }
     }
