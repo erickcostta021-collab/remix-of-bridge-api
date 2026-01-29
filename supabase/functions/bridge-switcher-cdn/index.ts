@@ -385,14 +385,91 @@ try {
     // =====================================================
     function updateDropdown(activeId) {
         try {
-            const select = document.getElementById('bridge-instance-selector');
-            if (!select || !state.instances.length) return;
-
-            select.innerHTML = state.instances.map(function(i) {
-                return '<option value="' + i.id + '"' + (i.id === activeId ? ' selected' : '') + '>' + i.name + '</option>';
-            }).join('');
+            log.info(\`🎯 Tentando definir dropdown para: \${activeId}\`);
+            
+            // Delay de 300ms para garantir que o GHL terminou de renderizar
+            setTimeout(function() {
+                setDropdownValueWithRetry(activeId, 0);
+            }, 300);
         } catch (e) {
             log.error('Erro ao atualizar dropdown:', e.message);
+        }
+    }
+
+    function setDropdownValueWithRetry(activeId, attempt) {
+        const MAX_ATTEMPTS = 3;
+        const RETRY_DELAY = 200;
+
+        try {
+            const select = document.getElementById('bridge-instance-selector');
+            
+            if (!select) {
+                log.warn(\`Dropdown não encontrado (tentativa \${attempt + 1}/\${MAX_ATTEMPTS})\`);
+                if (attempt < MAX_ATTEMPTS - 1) {
+                    setTimeout(function() {
+                        setDropdownValueWithRetry(activeId, attempt + 1);
+                    }, RETRY_DELAY);
+                }
+                return;
+            }
+
+            if (!state.instances.length) {
+                log.warn('Sem instâncias para popular dropdown');
+                return;
+            }
+
+            // Popula as opções primeiro
+            select.innerHTML = state.instances.map(function(i) {
+                return '<option value="' + i.id + '">' + i.name + '</option>';
+            }).join('');
+
+            // Verifica se a opção com o activeId existe
+            const optionExists = Array.from(select.options).some(function(opt) {
+                return opt.value === activeId;
+            });
+
+            if (!optionExists) {
+                log.warn(\`Opção \${activeId} não existe no dropdown (tentativa \${attempt + 1}/\${MAX_ATTEMPTS})\`);
+                if (attempt < MAX_ATTEMPTS - 1) {
+                    setTimeout(function() {
+                        setDropdownValueWithRetry(activeId, attempt + 1);
+                    }, RETRY_DELAY);
+                }
+                return;
+            }
+
+            // Define o valor
+            select.value = activeId;
+            
+            // Força o navegador a reconhecer a mudança
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Verifica se o valor foi realmente definido
+            if (select.value === activeId) {
+                log.success(\`✅ Dropdown sincronizado para: \${activeId}\`);
+                // Remove borda de debug se existir
+                select.style.border = '';
+            } else {
+                log.warn(\`⚠️ Dropdown não sincronizou corretamente. Esperado: \${activeId}, Atual: \${select.value}\`);
+                // Adiciona borda vermelha temporária para debug visual
+                select.style.border = '2px solid red';
+                setTimeout(function() {
+                    select.style.border = '';
+                }, 3000);
+                
+                if (attempt < MAX_ATTEMPTS - 1) {
+                    setTimeout(function() {
+                        setDropdownValueWithRetry(activeId, attempt + 1);
+                    }, RETRY_DELAY);
+                }
+            }
+        } catch (e) {
+            log.error(\`Erro ao definir valor do dropdown (tentativa \${attempt + 1}): \${e.message}\`);
+            if (attempt < MAX_ATTEMPTS - 1) {
+                setTimeout(function() {
+                    setDropdownValueWithRetry(activeId, attempt + 1);
+                }, RETRY_DELAY);
+            }
         }
     }
 
