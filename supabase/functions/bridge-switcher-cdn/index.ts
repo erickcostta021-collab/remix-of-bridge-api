@@ -6,12 +6,12 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.5
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.5');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.6
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.6');
 
 try {
 (function() {
-    const VERSION = "6.1.5";
+    const VERSION = "6.1.6";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
@@ -19,7 +19,8 @@ try {
         save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
         reinject_interval: 200,    // Intervalo para verificar/reinjetar dropdown
         sync_interval: 3000,       // Sync background
-        sync_lock_duration: 500,   // Trava de sincronização (evita múltiplas tentativas simultâneas)
+        sync_lock_duration: 100,   // Trava de sincronização REDUZIDA (era 500ms)
+        value_check_delay: 500,    // Delay para validar valor após DOM estabilizar
         theme: {
             primary: '#22c55e',
             border: '#d1d5db',
@@ -398,23 +399,30 @@ try {
     // =====================================================
     // SINCRONIZAÇÃO VISUAL COM TRAVA (evita múltiplas ordens simultâneas)
     // =====================================================
-    function requestDropdownSync(activeId) {
+    function requestDropdownSync(activeId, isExternalUpdate = false) {
         if (!activeId) return;
         
         const now = Date.now();
         
-        // TRAVA: Se uma sincronização está em curso, ignora novas ordens
-        if (now < state.syncLockUntil) {
+        // PRIORIDADE: Mudanças externas (inbound) ignoram o lock
+        if (now < state.syncLockUntil && !isExternalUpdate) {
             log.info(\`🔒 Sync ignorado (lock ativo por mais \${state.syncLockUntil - now}ms), pendente: \${activeId.slice(0,8)}\`);
-            state.pendingSyncId = activeId; // Guarda para executar depois
+            state.pendingSyncId = activeId;
             return;
         }
         
-        // Ativa trava
+        // Ativa trava (mais curta agora - 100ms)
         state.syncLockUntil = now + CONFIG.sync_lock_duration;
         state.pendingSyncId = null;
         
-        log.info(\`🎯 Tentando definir dropdown para: \${activeId.slice(0,8)}\`);
+        const instanceName = state.instances.find(function(i) { return i.id === activeId; });
+        const nameStr = instanceName ? instanceName.name : activeId.slice(0,8);
+        
+        if (isExternalUpdate) {
+            log.info(\`📥 Atualização detectada via Webhook! Mudando para: \${nameStr}\`);
+        } else {
+            log.info(\`🎯 Tentando definir dropdown para: \${nameStr}\`);
+        }
         
         // Ativa flag de sincronização
         state.isSyncingDropdown = true;
@@ -615,15 +623,7 @@ try {
         // Already injected?
         const existingContainer = document.getElementById('bridge-api-container');
         if (existingContainer) {
-            // Verifica se o valor está correto
-            const select = existingContainer.querySelector('#bridge-instance-selector');
-            if (select && state.lastKnownActiveId && select.value !== state.lastKnownActiveId) {
-                // Valor errado, força correção
-                if (!state.isSyncingDropdown) {
-                    log.info('Dropdown existe mas valor incorreto, forçando correção');
-                    requestDropdownSync(state.lastKnownActiveId);
-                }
-            }
+            // SUAVIZADO: Não verifica valor aqui, deixa o setupPersistentInjection fazer com delay
             return true;
         }
 
@@ -679,6 +679,8 @@ try {
 
     function setupPersistentInjection() {
         try {
+            let lastValueCheckTime = 0;
+            
             // NOVO: setInterval curto que verifica continuamente
             setInterval(function() {
                 if (!isConversationPage()) return;
@@ -693,11 +695,17 @@ try {
                     }
                     injectDropdown();
                 } else {
-                    // Dropdown existe, verifica se valor está correto
+                    // SUAVIZADO: Só verifica valor após delay de 500ms desde última verificação
+                    const now = Date.now();
+                    if (now - lastValueCheckTime < CONFIG.value_check_delay) {
+                        return; // Espera DOM estabilizar
+                    }
+                    
                     const select = container.querySelector('#bridge-instance-selector');
                     if (select && state.lastKnownActiveId && select.value !== state.lastKnownActiveId) {
                         if (!state.isSyncingDropdown) {
-                            log.info('Valor incorreto detectado, corrigindo...');
+                            lastValueCheckTime = now;
+                            log.info('Valor incorreto detectado após estabilização, corrigindo...');
                             requestDropdownSync(state.lastKnownActiveId);
                         }
                     }
@@ -770,13 +778,14 @@ try {
             const select = document.getElementById('bridge-instance-selector');
             const currentDropdownValue = select ? select.value : null;
             
-            // Se o servidor tem um valor diferente do dropdown E diferente do último conhecido
-            if (serverActiveId !== currentDropdownValue && serverActiveId !== state.lastKnownActiveId) {
-                const instanceName = state.instances.find(function(i) { return i.id === serverActiveId; });
-                log.info(\`📨 Inbound detectado! Atualizando para: \${instanceName ? instanceName.name : serverActiveId.slice(0,8)}\`);
-                
-                state.lastKnownActiveId = serverActiveId;
-                requestDropdownSync(serverActiveId);
+            // Se o servidor tem um valor diferente do dropdown OU diferente do último conhecido
+            // PRIORIDADE: Mudança externa sempre tem prioridade (isExternalUpdate = true)
+            if (serverActiveId !== currentDropdownValue || serverActiveId !== state.lastKnownActiveId) {
+                if (serverActiveId !== state.lastKnownActiveId) {
+                    state.lastKnownActiveId = serverActiveId;
+                    // Chama com flag de atualização externa para ignorar lock
+                    requestDropdownSync(serverActiveId, true);
+                }
             }
         } catch (e) {
             // Silencioso - não loga erros de sync check
