@@ -807,12 +807,17 @@ serve(async (req) => {
         // Extrair últimos 8 dígitos para matching sem o nono dígito (problema clássico BR)
         const last8Digits = normalizedPhone.slice(-8);
         
-        console.log("[Inbound] 📞 Mensagem recebida da instância:", instance.id, `(${instance.instance_name})`);
-        console.log("[Inbound] 📞 Telefone recebido:", { raw: from, cleaned: rawPhone, normalized: normalizedPhone, last8: last8Digits });
+        // === LOGS DE DEBUG DETALHADOS ===
+        console.log("=== [INBOUND] ATUALIZANDO PREFERÊNCIA DE INSTÂNCIA ===");
+        console.log("[Inbound] 📞 Instância que processou:", { id: instance.id, name: instance.instance_name });
+        console.log("[Inbound] 📞 Contato GHL:", { contactId: contact.id, phone: phoneNumber });
+        console.log("[Inbound] 📞 Telefone original (from):", from);
+        console.log("[Inbound] 📞 Telefone processado:", { raw: rawPhone, normalized: normalizedPhone, last8: last8Digits });
+        console.log("[Inbound] 📞 Location ID:", subaccount.location_id);
         
         // PRIORIDADE 1: Buscar por contact_id exato (chave primária infalível do GHL)
         const contactIdStr = contact.id;
-        console.log("[Inbound] 🔍 Tentando update por contact_id:", contactIdStr);
+        console.log("[Inbound] 🔍 Buscando registro existente por contact_id:", contactIdStr);
         
         const { data: existingByContactId, error: findByContactError } = await supabase
           .from("contact_instance_preferences")
@@ -824,24 +829,29 @@ serve(async (req) => {
         if (existingByContactId && existingByContactId.length > 0) {
           // Encontrado por contact_id - atualizar diretamente
           console.log("[Inbound] ✅ Encontrado registro existente por contact_id:", existingByContactId[0].id);
+          console.log("[Inbound] 📊 Lead phone atual no registro:", existingByContactId[0].lead_phone || "NULL");
+          console.log("[Inbound] 📊 Novo lead phone a ser salvo:", normalizedPhone);
           
-          const { error: updateError } = await supabase
+          const { data: updateResult, error: updateError } = await supabase
             .from("contact_instance_preferences")
             .update({
               instance_id: instance.id,
               lead_phone: normalizedPhone,
               updated_at: new Date().toISOString(),
             })
-            .eq("id", existingByContactId[0].id);
+            .eq("id", existingByContactId[0].id)
+            .select("id, lead_phone, instance_id");
           
           if (updateError) {
             console.error("[Inbound] ❌ Erro ao atualizar por contact_id:", updateError.message);
+            console.error("[Inbound] ❌ Detalhes do erro:", JSON.stringify(updateError));
           } else {
             console.log(`[Inbound] 📌 Atualizado por contact_id: ${normalizedPhone} → Instância ${instance.instance_name}`);
+            console.log("[Inbound] 📊 Resultado do update:", JSON.stringify(updateResult));
           }
         } else {
           // PRIORIDADE 2: Buscar por telefone com LIKE nos últimos 8 dígitos (ignora nono dígito)
-          console.log("[Inbound] 🔍 Buscando por telefone (últimos 8 dígitos):", last8Digits);
+          console.log("[Inbound] 🔍 Não encontrou por contact_id, buscando por telefone (últimos 8 dígitos):", last8Digits);
           
           const { data: existingByPhone, error: findByPhoneError } = await supabase
             .from("contact_instance_preferences")
