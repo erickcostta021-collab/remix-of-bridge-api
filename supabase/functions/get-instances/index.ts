@@ -2,8 +2,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Credentials": "true",
 };
 
 Deno.serve(async (req) => {
@@ -20,7 +21,7 @@ Deno.serve(async (req) => {
 
     if (!locationId) {
       return new Response(
-        JSON.stringify({ error: "locationId is required" }),
+        JSON.stringify({ error: "locationId is required", instances: [], activeInstanceId: null }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -43,14 +44,16 @@ Deno.serve(async (req) => {
 
     if (subError) {
       console.error("[get-instances] Error fetching subaccount:", subError);
+      // FALLBACK: Retorna array vazio em vez de erro, para o dropdown não sumir
       return new Response(
-        JSON.stringify({ error: "Error fetching subaccount", instances: [], activeInstanceId: null }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ instances: [], activeInstanceId: null, error: "Error fetching subaccount" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (!subaccount) {
       console.log("[get-instances] No subaccount found for locationId:", locationId);
+      // FALLBACK: Retorna array vazio em vez de null
       return new Response(
         JSON.stringify({ instances: [], activeInstanceId: null }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -67,19 +70,22 @@ Deno.serve(async (req) => {
 
     if (instError) {
       console.error("[get-instances] Error fetching instances:", instError);
+      // FALLBACK: Retorna array vazio em vez de erro
       return new Response(
-        JSON.stringify({ error: "Error fetching instances", instances: [], activeInstanceId: null }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ instances: [], activeInstanceId: null, error: "Error fetching instances" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Format instances
+    // Format instances - SEMPRE retorna um array, mesmo que vazio
     const formattedInstances = (instances || []).map((i) => ({
       id: i.id,
       name: i.instance_name,
       phone: i.phone,
       profilePic: i.profile_pic_url,
     }));
+
+    console.log("[get-instances] Found instances:", formattedInstances.length);
 
     // Check for active instance preference
     let activeInstanceId: string | null = null;
@@ -163,6 +169,12 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Se não encontrou preferência mas tem instâncias, usa a primeira como fallback
+    if (!activeInstanceId && formattedInstances.length > 0) {
+      activeInstanceId = formattedInstances[0].id;
+      console.log("[get-instances] Using first instance as fallback:", activeInstanceId);
+    }
+
     const activeInstanceName = formattedInstances.find(i => i.id === activeInstanceId)?.name || null;
     console.log(`[get-instances] Returning ${formattedInstances.length} instances, active: ${activeInstanceName || 'none'}`);
 
@@ -175,9 +187,10 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error("[get-instances] Unexpected error:", error);
+    // FALLBACK: Sempre retorna estrutura válida, nunca null
     return new Response(
       JSON.stringify({ error: "Internal server error", instances: [], activeInstanceId: null }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
