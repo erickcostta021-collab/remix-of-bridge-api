@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v5.0.0 - Contact Isolation Reset");
+    console.log("🚀 BRIDGE API: Switcher v5.1.0 - Auto-sync on message");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -148,7 +148,13 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         const contactId = getGHLContactId();
         const locationId = getLocationId();
         
-        if (!contactId || !locationId) return;
+        // Log current state for debugging
+        console.log("🔄 Sync check:", { contactId, locationId, lastContactId, currentValue: select.value });
+        
+        if (!locationId) {
+            console.log("⚠️ No locationId found, skipping sync");
+            return;
+        }
         
         // CRITICAL: If contact changed, clear dropdown and reload
         if (contactId !== lastContactId) {
@@ -158,17 +164,28 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             return;
         }
 
-        // Same contact - just check for updates
+        // If no valid contactId, skip preference check
+        if (!contactId || isInvalidId(contactId)) {
+            console.log("⚠️ No valid contactId, skipping preference sync");
+            return;
+        }
+
+        // Same contact - check for backend updates (e.g., message received on another instance)
         try {
             const res = await fetch(\`\${CONFIG.save_url}?contactId=\${contactId}&locationId=\${locationId}\`);
             const data = await res.json();
             
+            console.log("📡 Backend preference:", { activeInstanceId: data.activeInstanceId, currentValue: select.value });
+            
             if (data.activeInstanceId && select.value !== data.activeInstanceId) {
                 const target = instanceData.find(i => i.id === data.activeInstanceId);
                 if (target) {
+                    console.log("🔀 Updating dropdown to match backend:", target.name);
                     select.value = data.activeInstanceId;
                     renderOptions(select, data.activeInstanceId);
                     showNotification(target.name);
+                } else {
+                    console.log("⚠️ Target instance not in dropdown:", data.activeInstanceId);
                 }
             }
         } catch (e) {
@@ -267,8 +284,8 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             // Initial load
             loadInstances(select);
             
-            // Sync every 5 seconds
-            setInterval(() => syncContext(select), 5000);
+            // Sync every 3 seconds for faster updates
+            setInterval(() => syncContext(select), 3000);
         }
     }
 
