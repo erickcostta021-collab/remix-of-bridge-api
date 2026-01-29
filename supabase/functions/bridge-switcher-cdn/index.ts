@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v6.0.0 - Auto-Sync from Webhook");
+    console.log("🚀 BRIDGE API: Switcher v4.8.0 - Priority Sorting");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -19,7 +19,6 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     let instanceData = [];
     let currentContactId = null;
-    let lastSyncedInstanceId = null;
 
     const style = document.createElement('style');
     style.innerHTML = \`
@@ -32,57 +31,19 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     \`;
     document.head.appendChild(style);
 
-    function isValidContactId(value) {
-        if (!value) return false;
-        const v = String(value).trim();
-        if (v.length < 10) return false;
-
-        const blocked = new Set(['conversations', 'contacts', 'detail', 'inbox', 'chat', 'undefined', 'null']);
-        if (blocked.has(v.toLowerCase())) return false;
-
-        if (/^[a-zA-Z]+$/.test(v)) return false;
-        return true;
-    }
-
     function getGHLContactId() {
         const url = new URL(window.location.href);
-        
-        // Strategy 1: Check query params
         const fromQuery = url.searchParams.get('contactId') || url.searchParams.get('contact_id');
-        if (isValidContactId(fromQuery)) return fromQuery;
-
-        // Strategy 2: Check path - /contacts/detail/{id} or /conversations/{id}
+        if (fromQuery && fromQuery.length >= 10) return fromQuery;
         const match = window.location.pathname.match(/(?:contacts\\/detail\\/|conversations\\/)([a-zA-Z0-9_-]{10,})/);
-        const fromPath = match ? match[1] : null;
-        if (isValidContactId(fromPath)) return fromPath;
-
-        // Strategy 3: Try to extract from GHL's internal state (React fiber)
-        try {
-            const conversationContainer = document.querySelector('[class*="conversation-detail"]') || 
-                                         document.querySelector('[class*="ConversationDetail"]') ||
-                                         document.querySelector('[data-contact-id]');
-            if (conversationContainer) {
-                const dataContactId = conversationContainer.getAttribute('data-contact-id');
-                if (isValidContactId(dataContactId)) return dataContactId;
-            }
-        } catch (e) {}
-
-        // Strategy 4: Look for contact ID in visible elements
-        try {
-            const contactIdElements = document.querySelectorAll('[class*="contact-id"], [data-testid*="contact"]');
-            for (const el of contactIdElements) {
-                const text = el.textContent?.trim() || el.getAttribute('data-contact-id') || '';
-                if (isValidContactId(text)) return text;
-            }
-        } catch (e) {}
-
-        return null;
+        return match ? match[1] : null;
     }
 
     // Ordena as instâncias colocando a ativa no topo
     function renderSortedOptions(select, activeId, showPhone) {
         if (!instanceData.length) return;
 
+        // Cria uma cópia e move a ativa para o início
         const sorted = [...instanceData].sort((a, b) => {
             if (a.id === activeId) return -1;
             if (b.id === activeId) return 1;
@@ -98,55 +59,21 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function syncBridgeContext(select) {
         const contactId = getGHLContactId();
         const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-        
-        if (!locationId) return;
-
-        // Detect contact change - clear selection immediately to avoid showing wrong value
-        if (currentContactId && currentContactId !== contactId) {
-            console.log("🔄 Contato mudou, limpando seleção anterior...");
-            select.value = '';
-            lastSyncedInstanceId = null;
-        }
-
-        // If no valid contactId, just show first instance but don't save preference
-        if (!contactId || !isValidContactId(contactId)) {
-            console.log("⚠️ ContactId inválido ou não detectado, aguardando...");
-            if (!select.value && instanceData.length > 0) {
-                renderSortedOptions(select, instanceData[0].id, false);
-            }
-            return;
-        }
+        if (!contactId || !locationId) return;
 
         try {
             const res = await fetch(\`\${CONFIG.save_url}?contactId=\${contactId}&locationId=\${locationId}&t=\${Date.now()}\`);
             const data = await res.json();
             
-            if (data.activeInstanceId) {
-                // Only update UI if the backend has a different instance than what's currently shown
-                // This allows webhook-inbound to control the dropdown by saving preferences
-                if (data.activeInstanceId !== lastSyncedInstanceId) {
-                    console.log("📍 Instância atualizada pelo backend:", data.activeInstanceId);
-                    renderSortedOptions(select, data.activeInstanceId, false);
-                    lastSyncedInstanceId = data.activeInstanceId;
-                    
-                    // Show notification only when contact changes
-                    const target = instanceData.find(i => i.id === data.activeInstanceId);
-                    if (target && currentContactId && currentContactId !== contactId) {
-                        showAutoSwitchNotify(target.name);
-                    }
-                }
-            } else {
-                // No preference saved - use first instance
-                console.log("📍 Sem preferência para este contato, usando primeira instância");
-                if (!select.value && instanceData.length > 0) {
-                    renderSortedOptions(select, instanceData[0].id, false);
-                    lastSyncedInstanceId = instanceData[0].id;
-                }
+            if (data.activeInstanceId && select.value !== data.activeInstanceId) {
+                console.log("📍 Nova instância ativa detectada, reordenando...");
+                renderSortedOptions(select, data.activeInstanceId, false);
+                
+                const target = instanceData.find(i => i.id === data.activeInstanceId);
+                if (target && currentContactId === contactId) showAutoSwitchNotify(target.name);
             }
             currentContactId = contactId;
-        } catch (e) {
-            console.error("Erro ao sincronizar contexto:", e);
-        }
+        } catch (e) {}
     }
 
     function showAutoSwitchNotify(instanceName) {
@@ -154,7 +81,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         const toast = document.createElement('div');
         toast.id = 'bridge-notify';
         toast.style.cssText = \`position: fixed; bottom: 20px; right: 20px; z-index: 10000; background: #1f2937; color: white; padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border-left: 4px solid \${CONFIG.theme.primary};\`;
-        toast.innerHTML = \`✅ Instância <b>\${instanceName}</b> selecionada automaticamente.\`;
+        toast.innerHTML = \`✅ Instância <b>\${instanceName}</b> selecionada.\`;
         document.body.appendChild(toast);
         setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 3000);
     }
@@ -178,15 +105,10 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
             select.addEventListener('change', (e) => {
                 saveBridgePreference(e.target.value);
                 renderSortedOptions(select, e.target.value, false);
-                lastSyncedInstanceId = e.target.value; // Track manual selection
             });
 
             loadBridgeOptions(select);
-            
-            // Sync every 3s - faster polling to catch webhook-inbound updates quicker
-            setInterval(() => {
-                syncBridgeContext(select);
-            }, 3000);
+            setInterval(() => syncBridgeContext(select), 5000);
         }
     }
 
@@ -207,10 +129,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function saveBridgePreference(instanceId) {
         const contactId = getGHLContactId();
         const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-        if (!contactId || !instanceId || !isValidContactId(contactId)) {
-            console.log("⚠️ Não é possível salvar preferência - contactId inválido:", contactId);
-            return;
-        }
+        if (!contactId || !instanceId) return;
         await fetch(CONFIG.save_url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
