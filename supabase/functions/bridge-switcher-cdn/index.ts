@@ -6,19 +6,20 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.4
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.4');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.5
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.5');
 
 try {
 (function() {
-    const VERSION = "6.1.4";
+    const VERSION = "6.1.5";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
         save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
-        reinject_delay: 400,
-        sync_interval: 3000, // Reduzido para 3s para sincronização mais rápida
+        reinject_interval: 200,    // Intervalo para verificar/reinjetar dropdown
+        sync_interval: 3000,       // Sync background
+        sync_lock_duration: 500,   // Trava de sincronização (evita múltiplas tentativas simultâneas)
         theme: {
             primary: '#22c55e',
             border: '#d1d5db',
@@ -38,7 +39,7 @@ try {
         api: (msg, data) => console.log(\`\${LOG_PREFIX} 📡 \${msg}\`, data !== undefined ? data : '')
     };
 
-    log.info(\`Switcher v\${VERSION} - Master Sync\`);
+    log.info(\`Switcher v\${VERSION} - Stable Sync\`);
 
     // =====================================================
     // STATE MANAGEMENT
@@ -49,8 +50,10 @@ try {
         currentLocationId: null,
         lastUrl: window.location.href,
         isInjected: false,
-        isSyncingDropdown: false, // Flag para evitar loop ao sincronizar visualmente
-        lastKnownActiveId: null   // Última instância ativa conhecida do banco
+        isSyncingDropdown: false,      // Flag para evitar loop ao sincronizar visualmente
+        syncLockUntil: 0,              // NOVO: Timestamp até quando ignorar novas ordens de sync
+        pendingSyncId: null,           // NOVO: ID pendente para sincronizar após lock
+        lastKnownActiveId: null        // Última instância ativa conhecida do banco
     };
 
     // =====================================================
@@ -275,33 +278,30 @@ try {
             
             const data = await res.json();
 
-            // FALLBACK: Se não houver instâncias, usa array vazio mas não esconde o dropdown
             if (data.instances && data.instances.length > 0) {
                 state.instances = data.instances;
                 
                 const activeId = data.activeInstanceId || (data.instances[0] ? data.instances[0].id : null);
-                state.lastKnownActiveId = activeId; // Armazena para sincronização
+                state.lastKnownActiveId = activeId;
                 
                 const activeName = state.instances.find(function(i) { return i.id === activeId; });
                 const activeNameStr = activeName ? activeName.name : 'N/A';
                 
                 log.success(\`\${data.instances.length} instâncias carregadas, ativa: \${activeNameStr}\`);
                 
-                syncDropdownVisual(activeId);
+                requestDropdownSync(activeId);
             } else {
                 log.warn('Nenhuma instância encontrada, mantendo dropdown com estado anterior');
-                // Mantém dropdown visível mesmo sem instâncias
                 if (state.instances.length === 0) {
                     state.instances = [{ id: 'none', name: 'Sem instâncias', phone: null }];
-                    syncDropdownVisual('none');
+                    requestDropdownSync('none');
                 }
             }
         } catch (e) {
             log.error('Erro ao carregar instâncias:', e.message);
-            // FALLBACK: Em caso de erro, mantém o dropdown com uma opção padrão
             if (state.instances.length === 0) {
                 state.instances = [{ id: 'error', name: 'Erro ao carregar', phone: null }];
-                syncDropdownVisual('error');
+                requestDropdownSync('error');
             }
         }
     }
@@ -338,13 +338,13 @@ try {
                 const activeName = state.instances.find(function(i) { return i.id === data.activeInstanceId; });
                 const activeNameStr = activeName ? activeName.name : 'Desconhecida';
                 log.success(\`Instância ativa recuperada: \${activeNameStr}\`);
-                syncDropdownVisual(data.activeInstanceId);
+                requestDropdownSync(data.activeInstanceId);
             } else {
                 log.info('Nenhuma preferência encontrada, usando primeira instância');
                 const firstInstance = state.instances[0];
                 const fallbackId = firstInstance ? firstInstance.id : null;
                 state.lastKnownActiveId = fallbackId;
-                syncDropdownVisual(fallbackId);
+                requestDropdownSync(fallbackId);
             }
         } catch (e) {
             log.error('Erro ao buscar instância ativa:', e.message);
@@ -396,28 +396,36 @@ try {
     }
 
     // =====================================================
-    // SINCRONIZAÇÃO VISUAL (sem salvar - para inbound)
+    // SINCRONIZAÇÃO VISUAL COM TRAVA (evita múltiplas ordens simultâneas)
     // =====================================================
-    function syncDropdownVisual(activeId) {
-        try {
-            if (!activeId) return;
-            
-            log.info(\`🎯 Sincronizando dropdown visual para: \${activeId.slice(0,8)}\`);
-            
-            // Ativa flag ANTES de qualquer operação para evitar que o change event dispare
-            state.isSyncingDropdown = true;
-            
-            // Delay de 300ms para garantir que o GHL terminou de renderizar
-            setTimeout(function() {
-                setDropdownValueWithRetry(activeId, 0);
-            }, 300);
-        } catch (e) {
-            log.error('Erro ao sincronizar dropdown:', e.message);
-            state.isSyncingDropdown = false;
+    function requestDropdownSync(activeId) {
+        if (!activeId) return;
+        
+        const now = Date.now();
+        
+        // TRAVA: Se uma sincronização está em curso, ignora novas ordens
+        if (now < state.syncLockUntil) {
+            log.info(\`🔒 Sync ignorado (lock ativo por mais \${state.syncLockUntil - now}ms), pendente: \${activeId.slice(0,8)}\`);
+            state.pendingSyncId = activeId; // Guarda para executar depois
+            return;
         }
+        
+        // Ativa trava
+        state.syncLockUntil = now + CONFIG.sync_lock_duration;
+        state.pendingSyncId = null;
+        
+        log.info(\`🎯 Tentando definir dropdown para: \${activeId.slice(0,8)}\`);
+        
+        // Ativa flag de sincronização
+        state.isSyncingDropdown = true;
+        
+        // Delay de 300ms para garantir que o GHL terminou de renderizar
+        setTimeout(function() {
+            executeDropdownSync(activeId, 0);
+        }, 300);
     }
 
-    function setDropdownValueWithRetry(activeId, attempt) {
+    function executeDropdownSync(activeId, attempt) {
         const MAX_ATTEMPTS = 3;
         const RETRY_DELAY = 200;
 
@@ -428,17 +436,17 @@ try {
                 log.warn(\`Dropdown não encontrado (tentativa \${attempt + 1}/\${MAX_ATTEMPTS})\`);
                 if (attempt < MAX_ATTEMPTS - 1) {
                     setTimeout(function() {
-                        setDropdownValueWithRetry(activeId, attempt + 1);
+                        executeDropdownSync(activeId, attempt + 1);
                     }, RETRY_DELAY);
                 } else {
-                    state.isSyncingDropdown = false;
+                    finishSync();
                 }
                 return;
             }
 
             if (!state.instances.length) {
                 log.warn('Sem instâncias para popular dropdown');
-                state.isSyncingDropdown = false;
+                finishSync();
                 return;
             }
 
@@ -456,10 +464,10 @@ try {
                 log.warn(\`Opção \${activeId.slice(0,8)} não existe no dropdown (tentativa \${attempt + 1}/\${MAX_ATTEMPTS})\`);
                 if (attempt < MAX_ATTEMPTS - 1) {
                     setTimeout(function() {
-                        setDropdownValueWithRetry(activeId, attempt + 1);
+                        executeDropdownSync(activeId, attempt + 1);
                     }, RETRY_DELAY);
                 } else {
-                    state.isSyncingDropdown = false;
+                    finishSync();
                 }
                 return;
             }
@@ -475,24 +483,36 @@ try {
                 
                 if (attempt < MAX_ATTEMPTS - 1) {
                     setTimeout(function() {
-                        setDropdownValueWithRetry(activeId, attempt + 1);
+                        executeDropdownSync(activeId, attempt + 1);
                     }, RETRY_DELAY);
                     return;
                 }
             }
             
-            // Desativa flag após sincronização (sucesso ou falha final)
-            state.isSyncingDropdown = false;
+            finishSync();
             
         } catch (e) {
             log.error(\`Erro ao definir valor do dropdown (tentativa \${attempt + 1}): \${e.message}\`);
             if (attempt < MAX_ATTEMPTS - 1) {
                 setTimeout(function() {
-                    setDropdownValueWithRetry(activeId, attempt + 1);
+                    executeDropdownSync(activeId, attempt + 1);
                 }, RETRY_DELAY);
             } else {
-                state.isSyncingDropdown = false;
+                finishSync();
             }
+        }
+    }
+
+    function finishSync() {
+        state.isSyncingDropdown = false;
+        
+        // Se há um ID pendente, processa após o lock expirar
+        if (state.pendingSyncId) {
+            const pendingId = state.pendingSyncId;
+            state.pendingSyncId = null;
+            setTimeout(function() {
+                requestDropdownSync(pendingId);
+            }, 100);
         }
     }
 
@@ -511,7 +531,6 @@ try {
     }
 
     function hidePhoneNumbers(select) {
-        // Apenas repopula com nomes curtos, mantendo o valor atual
         try {
             if (!state.instances.length) return;
             const currentValue = select.value;
@@ -545,7 +564,7 @@ try {
     }
 
     // =====================================================
-    // ROBUST INJECTION (with continuous retry)
+    // ROBUST INJECTION (with continuous interval check)
     // =====================================================
     function createDropdownElement() {
         const wrapper = document.createElement('div');
@@ -568,19 +587,48 @@ try {
         return wrapper;
     }
 
+    function findActionBar() {
+        // Tenta múltiplos seletores em ordem de prioridade
+        const selectors = [
+            '.msg-composer-actions',
+            '.flex.flex-row.gap-2.items-center.pl-2',
+            '[data-testid="message-actions"]',
+            '.hl_conversations--composer-actions',
+            // Fallbacks alternativos
+            '.ghl-footer',
+            '.item-contact-details',
+            '.conversation-footer',
+            '.message-input-container'
+        ];
+        
+        for (const selector of selectors) {
+            const el = document.querySelector(selector);
+            if (el) {
+                return el;
+            }
+        }
+        
+        return null;
+    }
+
     function injectDropdown() {
         // Already injected?
-        if (document.getElementById('bridge-api-container')) {
+        const existingContainer = document.getElementById('bridge-api-container');
+        if (existingContainer) {
+            // Verifica se o valor está correto
+            const select = existingContainer.querySelector('#bridge-instance-selector');
+            if (select && state.lastKnownActiveId && select.value !== state.lastKnownActiveId) {
+                // Valor errado, força correção
+                if (!state.isSyncingDropdown) {
+                    log.info('Dropdown existe mas valor incorreto, forçando correção');
+                    requestDropdownSync(state.lastKnownActiveId);
+                }
+            }
             return true;
         }
 
         try {
-            // Try multiple possible action bar selectors
-            const actionBar = 
-                document.querySelector('.msg-composer-actions') || 
-                document.querySelector('.flex.flex-row.gap-2.items-center.pl-2') ||
-                document.querySelector('[data-testid="message-actions"]') ||
-                document.querySelector('.hl_conversations--composer-actions');
+            const actionBar = findActionBar();
 
             if (!actionBar) {
                 return false;
@@ -607,14 +655,20 @@ try {
                 hidePhoneNumbers(select);
             });
 
-            // Populate if we have data
-            if (state.instances.length) {
-                const activeId = state.lastKnownActiveId || (state.instances[0] ? state.instances[0].id : null);
-                syncDropdownVisual(activeId);
-            }
-
             state.isInjected = true;
             log.success('Dropdown injetado com sucesso');
+
+            // NOVO: Sincroniza IMEDIATAMENTE após injeção bem-sucedida
+            if (state.instances.length && state.lastKnownActiveId) {
+                log.info('Sincronizando dropdown pós-injeção');
+                requestDropdownSync(state.lastKnownActiveId);
+            } else if (state.instances.length) {
+                const firstId = state.instances[0] ? state.instances[0].id : null;
+                if (firstId) {
+                    requestDropdownSync(firstId);
+                }
+            }
+
             return true;
 
         } catch (e) {
@@ -623,44 +677,39 @@ try {
         }
     }
 
-    function setupRobustInjection() {
+    function setupPersistentInjection() {
         try {
-            // Initial injection attempt
-            injectDropdown();
-
-            // MutationObserver for re-injection when GHL removes our element
-            const observer = new MutationObserver(function(mutations) {
-                // Check if our container was removed
-                if (!document.getElementById('bridge-api-container')) {
+            // NOVO: setInterval curto que verifica continuamente
+            setInterval(function() {
+                if (!isConversationPage()) return;
+                
+                const container = document.getElementById('bridge-api-container');
+                
+                if (!container) {
+                    // Dropdown sumiu, reinjeta
                     if (state.isInjected) {
                         log.warn('Dropdown removido pelo GHL, reinjetando...');
                         state.isInjected = false;
                     }
-                    
-                    // Try to reinject with a small delay
-                    setTimeout(function() {
-                        if (!document.getElementById('bridge-api-container')) {
-                            injectDropdown();
-                        }
-                    }, CONFIG.reinject_delay);
-                }
-            });
-
-            observer.observe(document.body, { 
-                childList: true, 
-                subtree: true 
-            });
-
-            // Fallback interval for injection (safety net)
-            setInterval(function() {
-                if (!document.getElementById('bridge-api-container') && isConversationPage()) {
                     injectDropdown();
+                } else {
+                    // Dropdown existe, verifica se valor está correto
+                    const select = container.querySelector('#bridge-instance-selector');
+                    if (select && state.lastKnownActiveId && select.value !== state.lastKnownActiveId) {
+                        if (!state.isSyncingDropdown) {
+                            log.info('Valor incorreto detectado, corrigindo...');
+                            requestDropdownSync(state.lastKnownActiveId);
+                        }
+                    }
                 }
-            }, 500);
+            }, CONFIG.reinject_interval);
+
+            // Injeção inicial
+            injectDropdown();
             
-            log.success('Sistema de injeção robusto configurado');
+            log.success('Sistema de injeção persistente configurado');
         } catch (e) {
-            log.error('Erro ao configurar injeção robusta:', e.message);
+            log.error('Erro ao configurar injeção persistente:', e.message);
         }
     }
 
@@ -682,7 +731,7 @@ try {
                     return;
                 }
                 
-                // NOVO: Verifica se a instância ativa no banco mudou (inbound message)
+                // Verifica se a instância ativa no banco mudou (inbound message)
                 if (currentContactId && state.currentLocationId) {
                     await checkForInboundUpdates();
                 }
@@ -716,10 +765,8 @@ try {
             const data = await res.json();
             const serverActiveId = data.activeInstanceId;
             
-            // Se não há activeId do servidor, não faz nada
             if (!serverActiveId) return;
             
-            // Compara com o valor atual do dropdown
             const select = document.getElementById('bridge-instance-selector');
             const currentDropdownValue = select ? select.value : null;
             
@@ -728,9 +775,8 @@ try {
                 const instanceName = state.instances.find(function(i) { return i.id === serverActiveId; });
                 log.info(\`📨 Inbound detectado! Atualizando para: \${instanceName ? instanceName.name : serverActiveId.slice(0,8)}\`);
                 
-                // Atualiza o estado e sincroniza visualmente (sem salvar)
                 state.lastKnownActiveId = serverActiveId;
-                syncDropdownVisual(serverActiveId);
+                requestDropdownSync(serverActiveId);
             }
         } catch (e) {
             // Silencioso - não loga erros de sync check
@@ -763,7 +809,7 @@ try {
 
             // Setup systems
             setupNavigationObserver();
-            setupRobustInjection();
+            setupPersistentInjection();
             setupBackgroundSync();
 
             // Initial load
