@@ -235,48 +235,91 @@ Deno.serve(async (req) => {
       
       console.log("Resolved leadPhone:", leadPhone);
 
+      const nowIso = new Date().toISOString();
+      
       if (leadPhone) {
-        // Save by lead_phone (primary method - works across all GHL contacts)
-        const { error } = await supabase
+        // STRATEGY: First try to update existing record by phone, then insert if not found
+        // This avoids upsert issues with composite keys
+        
+        const normalizedPhone = leadPhone.replace(/\D/g, '');
+        const last10 = normalizedPhone.slice(-10);
+        
+        // Step 1: Check if a preference exists for this phone in this location
+        const { data: existing } = await supabase
           .from("contact_instance_preferences")
-          .upsert(
-            {
+          .select("id, contact_id, lead_phone")
+          .eq("location_id", locationId)
+          .or(`lead_phone.eq.${leadPhone},lead_phone.like.%${normalizedPhone},lead_phone.like.%${last10}%`)
+          .limit(1);
+        
+        const existingPref = existing?.[0];
+        
+        if (existingPref) {
+          // Step 2a: UPDATE existing record
+          console.log("Updating existing preference:", existingPref.id);
+          const { error: updateError } = await supabase
+            .from("contact_instance_preferences")
+            .update({
+              instance_id: instanceId,
+              contact_id: contactId || existingPref.contact_id, // Keep original if no new one
+              lead_phone: leadPhone, // Normalize phone
+              updated_at: nowIso,
+            })
+            .eq("id", existingPref.id);
+          
+          if (updateError) {
+            console.error("Error updating preference:", updateError);
+            return new Response(
+              JSON.stringify({ success: false, error: updateError.message }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } else {
+          // Step 2b: INSERT new record
+          console.log("Inserting new preference for phone:", leadPhone.slice(0, 15));
+          const { error: insertError } = await supabase
+            .from("contact_instance_preferences")
+            .insert({
               contact_id: contactId || `phone_${leadPhone}`,
               location_id: locationId,
               instance_id: instanceId,
               lead_phone: leadPhone,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "lead_phone,location_id" }
-          );
-
-        if (error) {
-          console.error("Error saving preference by lead_phone:", error);
-          // Try fallback to contact_id if we have it
-          if (contactId && isValidContactId(contactId)) {
-            const { error: fallbackError } = await supabase
-              .from("contact_instance_preferences")
-              .upsert(
-                {
-                  contact_id: contactId,
-                  location_id: locationId,
-                  instance_id: instanceId,
-                  updated_at: new Date().toISOString(),
-                },
-                { onConflict: "contact_id,location_id" }
-              );
-
-            if (fallbackError) {
-              console.error("Fallback error saving preference:", fallbackError);
+              updated_at: nowIso,
+            });
+          
+          if (insertError) {
+            console.error("Error inserting preference:", insertError);
+            // Try fallback with contactId if available
+            if (contactId && isValidContactId(contactId)) {
+              const { error: fallbackError } = await supabase
+                .from("contact_instance_preferences")
+                .upsert(
+                  {
+                    contact_id: contactId,
+                    location_id: locationId,
+                    instance_id: instanceId,
+                    updated_at: nowIso,
+                  },
+                  { onConflict: "contact_id,location_id" }
+                );
+              
+              if (fallbackError) {
+                console.error("Fallback error:", fallbackError);
+                return new Response(
+                  JSON.stringify({ success: false, error: fallbackError.message }),
+                  { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+              }
+            } else {
               return new Response(
-                JSON.stringify({ success: false, error: fallbackError.message }),
+                JSON.stringify({ success: false, error: insertError.message }),
                 { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
               );
             }
           }
         }
       } else if (contactId && isValidContactId(contactId)) {
-        // Fallback: save by contact_id only
+        // No phone available - use contact_id based upsert
         const { error } = await supabase
           .from("contact_instance_preferences")
           .upsert(
@@ -284,13 +327,13 @@ Deno.serve(async (req) => {
               contact_id: contactId,
               location_id: locationId,
               instance_id: instanceId,
-              updated_at: new Date().toISOString(),
+              updated_at: nowIso,
             },
             { onConflict: "contact_id,location_id" }
           );
 
         if (error) {
-          console.error("Error saving preference:", error);
+          console.error("Error saving preference by contactId:", error);
           return new Response(
             JSON.stringify({ success: false, error: error.message }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
