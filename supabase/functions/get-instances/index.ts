@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const locationId = url.searchParams.get("locationId");
     const contactId = url.searchParams.get("contactId");
-    const phone = url.searchParams.get("phone"); // New: direct phone parameter
+    const phone = url.searchParams.get("phone"); // Direct phone parameter (legacy support)
 
     if (!locationId) {
       return new Response(
@@ -25,8 +25,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log("Get instances request:", { locationId, contactId, phone });
-    console.log(`Query recebida: phone=${phone}, contactId=${contactId}`);
+    console.log("[get-instances] Request:", { locationId, contactId: contactId?.slice(0, 10), phone: phone?.slice(0, 10) });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -43,7 +42,7 @@ Deno.serve(async (req) => {
     const subaccount = subaccounts?.[0] || null;
 
     if (subError) {
-      console.error("Error fetching subaccount:", subError);
+      console.error("[get-instances] Error fetching subaccount:", subError);
       return new Response(
         JSON.stringify({ error: "Error fetching subaccount", instances: [], activeInstanceId: null }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -51,7 +50,7 @@ Deno.serve(async (req) => {
     }
 
     if (!subaccount) {
-      console.log("No subaccount found for locationId:", locationId);
+      console.log("[get-instances] No subaccount found for locationId:", locationId);
       return new Response(
         JSON.stringify({ instances: [], activeInstanceId: null }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -67,7 +66,7 @@ Deno.serve(async (req) => {
       .order("instance_name", { ascending: true });
 
     if (instError) {
-      console.error("Error fetching instances:", instError);
+      console.error("[get-instances] Error fetching instances:", instError);
       return new Response(
         JSON.stringify({ error: "Error fetching instances", instances: [], activeInstanceId: null }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -84,33 +83,22 @@ Deno.serve(async (req) => {
 
     // Check for active instance preference
     let activeInstanceId: string | null = null;
-    
-    // Priority 1: Direct phone parameter (most reliable - comes from GHL UI)
+    let resolvedPhone: string | null = null;
+
+    // =====================================================
+    // PRIORITY 1: Direct phone parameter (from GHL UI)
+    // =====================================================
     if (phone && phone.length >= 10) {
-      console.log("Looking up preference by direct phone:", phone);
-      
-      // Normalize the phone to match stored format
-      const normalizedPhone = phone.replace(/\D/g, '');
-      
-      const { data: preference } = await supabase
-        .from("contact_instance_preferences")
-        .select("instance_id")
-        .eq("location_id", locationId)
-        .or(`lead_phone.eq.${normalizedPhone},lead_phone.like.%${normalizedPhone.slice(-10)}`)
-        .maybeSingle();
-      
-      if (preference?.instance_id) {
-        const exists = formattedInstances.some(i => i.id === preference.instance_id);
-        if (exists) {
-          activeInstanceId = preference.instance_id;
-          console.log("Found preference by direct phone:", { phone: normalizedPhone, activeInstanceId });
-        }
-      }
+      console.log("[get-instances] Lookup by direct phone:", phone.slice(0, 10));
+      resolvedPhone = phone.replace(/\D/g, '');
     }
-    
-    // Priority 2: ContactId -> Phone mapping (fallback)
-    if (!activeInstanceId && contactId && contactId.length >= 10) {
-      // Step 1: Get the lead's original phone from the contact mapping
+
+    // =====================================================
+    // PRIORITY 2: ContactId -> Silent phone lookup from mapping table
+    // =====================================================
+    if (!resolvedPhone && contactId && contactId.length >= 10) {
+      console.log("[get-instances] Looking up phone from ghl_contact_phone_mapping for contactId:", contactId.slice(0, 10));
+      
       const { data: phoneMapping } = await supabase
         .from("ghl_contact_phone_mapping")
         .select("original_phone")
@@ -118,47 +106,65 @@ Deno.serve(async (req) => {
         .eq("location_id", locationId)
         .maybeSingle();
       
-      console.log("Phone mapping lookup:", { contactId, originalPhone: phoneMapping?.original_phone });
-      
       if (phoneMapping?.original_phone) {
-        // Step 2: Look up preference by lead_phone (this works across all GHL contacts for the same lead)
-        const { data: preference } = await supabase
-          .from("contact_instance_preferences")
-          .select("instance_id")
-          .eq("lead_phone", phoneMapping.original_phone)
-          .eq("location_id", locationId)
-          .maybeSingle();
-        
-        if (preference?.instance_id) {
-          // Verify the instance is still in our available list
-          const exists = formattedInstances.some(i => i.id === preference.instance_id);
-          if (exists) {
-            activeInstanceId = preference.instance_id;
-          }
-        }
-        
-        console.log("Lead phone preference lookup:", { leadPhone: phoneMapping.original_phone, activeInstanceId });
+        resolvedPhone = phoneMapping.original_phone;
+        console.log("[get-instances] Found phone in mapping:", phoneMapping.original_phone.slice(0, 15));
       } else {
-        // Fallback: Try old method with contact_id for backward compatibility
-        const { data: preference } = await supabase
-          .from("contact_instance_preferences")
-          .select("instance_id")
-          .eq("contact_id", contactId)
-          .eq("location_id", locationId)
-          .maybeSingle();
-        
-        if (preference?.instance_id) {
-          const exists = formattedInstances.some(i => i.id === preference.instance_id);
-          if (exists) {
-            activeInstanceId = preference.instance_id;
-          }
-        }
-        
-        console.log("Contact ID fallback preference lookup:", { contactId, activeInstanceId });
+        console.log("[get-instances] No phone mapping found for contactId");
       }
     }
 
-    console.log(`Returning ${formattedInstances.length} instances for locationId: ${locationId}, activeInstanceId: ${activeInstanceId}`);
+    // =====================================================
+    // LOOKUP PREFERENCE BY PHONE (unified path)
+    // =====================================================
+    if (resolvedPhone) {
+      // Normalize phone for matching
+      const normalizedPhone = resolvedPhone.replace(/\D/g, '');
+      const last10Digits = normalizedPhone.slice(-10);
+      
+      console.log("[get-instances] Searching preference by phone:", { normalizedPhone: normalizedPhone.slice(0, 10), last10: last10Digits });
+      
+      // Try exact match first, then partial match
+      const { data: preferences } = await supabase
+        .from("contact_instance_preferences")
+        .select("instance_id, lead_phone")
+        .eq("location_id", locationId)
+        .or(`lead_phone.eq.${resolvedPhone},lead_phone.like.%${normalizedPhone},lead_phone.like.%${last10Digits}%`);
+      
+      if (preferences && preferences.length > 0) {
+        const preference = preferences[0];
+        const exists = formattedInstances.some(i => i.id === preference.instance_id);
+        if (exists) {
+          activeInstanceId = preference.instance_id;
+          console.log("[get-instances] ✅ Found preference by phone:", { activeInstanceId, leadPhone: preference.lead_phone?.slice(0, 15) });
+        }
+      }
+    }
+
+    // =====================================================
+    // FALLBACK: Direct contactId lookup (backward compatibility)
+    // =====================================================
+    if (!activeInstanceId && contactId && contactId.length >= 10) {
+      console.log("[get-instances] Fallback: looking up by contact_id directly");
+      
+      const { data: preference } = await supabase
+        .from("contact_instance_preferences")
+        .select("instance_id")
+        .eq("contact_id", contactId)
+        .eq("location_id", locationId)
+        .maybeSingle();
+      
+      if (preference?.instance_id) {
+        const exists = formattedInstances.some(i => i.id === preference.instance_id);
+        if (exists) {
+          activeInstanceId = preference.instance_id;
+          console.log("[get-instances] ✅ Found preference by contactId fallback:", activeInstanceId);
+        }
+      }
+    }
+
+    const activeInstanceName = formattedInstances.find(i => i.id === activeInstanceId)?.name || null;
+    console.log(`[get-instances] Returning ${formattedInstances.length} instances, active: ${activeInstanceName || 'none'}`);
 
     return new Response(
       JSON.stringify({ 
@@ -168,7 +174,7 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Unexpected error:", error);
+    console.error("[get-instances] Unexpected error:", error);
     return new Response(
       JSON.stringify({ error: "Internal server error", instances: [], activeInstanceId: null }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
