@@ -6,12 +6,12 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.2.1
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.2.1');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.3.0
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.3.0');
 
 try {
 (function() {
-    const VERSION = "6.2.1";
+    const VERSION = "6.3.0";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
@@ -727,24 +727,46 @@ try {
     // =====================================================
     function setupBackgroundSync() {
         try {
-            setInterval(async function() {
-                if (!isConversationPage()) return;
-                
-                const currentContactId = getContactIdFromUrl();
-                
-                // Se contato mudou, busca a instância ativa
-                if (currentContactId && currentContactId !== state.currentContactId) {
-                    log.nav('Sync detectou mudança de contato: ' + currentContactId.slice(0,8));
-                    state.currentContactId = currentContactId;
-                    await fetchActiveInstance();
-                    return;
+            // FORÇA PRIMEIRO TICK IMEDIATAMENTE (não espera o intervalo)
+            log.info('🔄 Iniciando background sync...');
+            
+            const syncTick = async function() {
+                try {
+                    // Log de heartbeat para confirmar que o loop está rodando
+                    const locationId = state.currentLocationId || getLocationId();
+                    const contactId = state.currentContactId || getContactIdFromUrl();
+                    
+                    // Sempre loga o estado atual para debug
+                    log.compare(\`Tick - Location: \${locationId ? locationId.slice(0,8) : 'N/A'}, Contact: \${contactId ? contactId.slice(0,8) : 'N/A'}\`);
+                    
+                    if (!isConversationPage()) {
+                        log.compare('Não é página de conversa, aguardando...');
+                        return;
+                    }
+                    
+                    // Se contato mudou, busca a instância ativa
+                    if (contactId && contactId !== state.currentContactId) {
+                        log.nav('Sync detectou mudança de contato: ' + contactId.slice(0,8));
+                        state.currentContactId = contactId;
+                        await fetchActiveInstance();
+                        return;
+                    }
+                    
+                    // Verifica se a instância ativa no banco mudou (inbound message)
+                    if (locationId) {
+                        state.currentLocationId = locationId;
+                        await checkForInboundUpdates();
+                    }
+                } catch (e) {
+                    log.error('Erro no tick de sync:', e.message);
                 }
-                
-                // Verifica se a instância ativa no banco mudou (inbound message)
-                if (currentContactId && state.currentLocationId) {
-                    await checkForInboundUpdates();
-                }
-            }, CONFIG.sync_interval);
+            };
+            
+            // EXECUTA PRIMEIRO TICK IMEDIATAMENTE
+            setTimeout(syncTick, 500);
+            
+            // Continua executando a cada intervalo
+            setInterval(syncTick, CONFIG.sync_interval);
             
             log.success('Background sync configurado (a cada ' + (CONFIG.sync_interval/1000) + 's)');
         } catch (e) {
@@ -760,9 +782,16 @@ try {
             const locationId = state.currentLocationId;
             const contactId = state.currentContactId;
             
-            if (!locationId || !contactId) return;
+            // Permite verificar mesmo sem contactId (só precisa de locationId)
+            if (!locationId) {
+                log.compare('Sem locationId, aguardando...');
+                return;
+            }
             
-            const url = \`\${CONFIG.api_url}?locationId=\${locationId}&contactId=\${contactId}\`;
+            let url = \`\${CONFIG.api_url}?locationId=\${locationId}\`;
+            if (contactId) {
+                url += \`&contactId=\${contactId}\`;
+            }
             
             const res = await fetch(url, {
                 method: 'GET',
@@ -770,20 +799,26 @@ try {
                 cache: 'no-store'  // Garante que não usa cache do navegador
             });
             
-            if (!res.ok) return;
+            if (!res.ok) {
+                log.warn(\`Erro na API: HTTP \${res.status}\`);
+                return;
+            }
             
             const data = await res.json();
             const serverActiveId = data.activeInstanceId; // SEMPRE um UUID, nunca nome
             
-            if (!serverActiveId) return;
-            
             const select = document.getElementById('bridge-instance-selector');
             const currentDropdownValue = select ? select.value : null;
             
-            // LOG DE COMPARAÇÃO - Com nomes para facilitar debug
+            // LOG DE COMPARAÇÃO - Com nomes para facilitar debug (SEMPRE LOGA)
             const currentDropdownName = state.instances.find(function(i) { return i.id === currentDropdownValue; });
             const serverActiveName = state.instances.find(function(i) { return i.id === serverActiveId; });
-            log.compare(\`Dropdown(\${currentDropdownName ? currentDropdownName.name : 'N/A'}) vs Banco(\${serverActiveName ? serverActiveName.name : 'N/A'})\`);
+            log.compare(\`Comparando: Dropdown(\${currentDropdownName ? currentDropdownName.name : 'N/A'}) vs Banco(\${serverActiveName ? serverActiveName.name : 'N/A'})\`);
+            
+            if (!serverActiveId) {
+                log.compare('Sem preferência no banco para este contato');
+                return;
+            }
             
             // FORÇA ATUALIZAÇÃO se dropdown difere do banco, IGNORANDO lastKnownActiveId
             // Isso garante reatividade imediata quando mensagem inbound muda a preferência
@@ -797,7 +832,7 @@ try {
                 state.lastKnownActiveId = serverActiveId;
             }
         } catch (e) {
-            // Silencioso - não loga erros de sync check
+            log.error('Erro em checkForInboundUpdates:', e.message);
         }
     }
 
