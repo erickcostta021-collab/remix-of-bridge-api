@@ -51,92 +51,33 @@ Deno.serve(async (req) => {
       if (!isValidContactId(contactId)) {
         console.log("Invalid contactId rejected:", contactId);
         return new Response(
-          JSON.stringify({ activeInstanceId: null, debug: { rejected: true, reason: "invalid_contact_id", contactId } }),
+          JSON.stringify({ activeInstanceId: null }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       console.log("GET preference request:", { contactId, locationId });
 
-      // Strategy 1: Try to find preference directly by contactId
-      let preference = null;
-      let foundBy = "none";
-      
-      const { data: directPref } = await supabase
+      // Query directly by contact_id + location_id (unique key)
+      const { data: preference, error } = await supabase
         .from("contact_instance_preferences")
-        .select("instance_id, contact_id, updated_at")
+        .select("instance_id")
         .eq("contact_id", contactId)
         .eq("location_id", locationId)
         .maybeSingle();
 
-      if (directPref) {
-        console.log("Found preference by contactId:", directPref);
-        preference = directPref;
-        foundBy = "direct_match";
-      } else {
-        // Strategy 2: Use phone mapping to find preferences for the same phone number
-        // First, check if this contactId has a phone mapping
-        const { data: phoneMapping } = await supabase
-          .from("ghl_contact_phone_mapping")
-          .select("original_phone")
-          .eq("contact_id", contactId)
-          .eq("location_id", locationId)
-          .maybeSingle();
-
-        if (phoneMapping?.original_phone) {
-          // Find other contactIds with the same phone
-          const { data: relatedMappings } = await supabase
-            .from("ghl_contact_phone_mapping")
-            .select("contact_id")
-            .eq("original_phone", phoneMapping.original_phone)
-            .eq("location_id", locationId);
-
-          if (relatedMappings && relatedMappings.length > 0) {
-            const relatedContactIds = relatedMappings.map(m => m.contact_id);
-            
-            // Find preferences for any of these related contactIds
-            const { data: relatedPrefs } = await supabase
-              .from("contact_instance_preferences")
-              .select("instance_id, contact_id, updated_at")
-              .in("contact_id", relatedContactIds)
-              .eq("location_id", locationId)
-              .order("updated_at", { ascending: false })
-              .limit(1);
-
-            if (relatedPrefs && relatedPrefs.length > 0) {
-              console.log("Found preference via phone mapping:", relatedPrefs[0]);
-              preference = relatedPrefs[0];
-              foundBy = "phone_mapping";
-              
-              // Also save this preference for the current contactId for faster future lookups
-              await supabase
-                .from("contact_instance_preferences")
-                .upsert({
-                  contact_id: contactId,
-                  location_id: locationId,
-                  instance_id: relatedPrefs[0].instance_id,
-                  updated_at: new Date().toISOString(),
-                }, { onConflict: "contact_id,location_id" });
-            }
-          }
-        }
-
-        // Strategy 3 REMOVED: Do NOT use preferences from other contacts
-        // Each contact must have its own isolated preference
-        if (!preference) {
-          console.log("No preference found for contact:", contactId);
-        }
+      if (error) {
+        console.error("Error fetching preference:", error);
+        return new Response(
+          JSON.stringify({ activeInstanceId: null }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
+      console.log("Found preference:", { contactId, instanceId: preference?.instance_id || null });
+
       return new Response(
-        JSON.stringify({ 
-          activeInstanceId: preference?.instance_id || null,
-          debug: { 
-            foundBy,
-            contactId,
-            locationId 
-          }
-        }),
+        JSON.stringify({ activeInstanceId: preference?.instance_id || null }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -144,7 +85,7 @@ Deno.serve(async (req) => {
     // POST: Salvar preferência de instância para o contato
     if (req.method === "POST") {
       const body = await req.json();
-      const { instanceId, contactId, locationId, action } = body;
+      const { instanceId, contactId, locationId } = body;
 
       if (!instanceId || !contactId || !locationId) {
         return new Response(
@@ -153,18 +94,18 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Validate contactId before saving - CRITICAL to prevent cross-contact pollution
+      // Validate contactId before saving
       if (!isValidContactId(contactId)) {
         console.log("POST rejected - invalid contactId:", contactId);
         return new Response(
-          JSON.stringify({ success: false, error: "Invalid contactId - cannot save preference for placeholder values" }),
+          JSON.stringify({ success: false, error: "Invalid contactId" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      console.log(`POST save preference: contact=${contactId}, instance=${instanceId}, action=${action}`);
+      console.log("POST save preference:", { contactId, instanceId, locationId });
 
-      // Upsert da preferência (insert ou update)
+      // Upsert using contact_id + location_id as unique key
       const { error } = await supabase
         .from("contact_instance_preferences")
         .upsert(
@@ -185,7 +126,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log("Preference saved successfully");
+      console.log("Preference saved successfully:", { contactId, instanceId });
 
       return new Response(
         JSON.stringify({ success: true }),
