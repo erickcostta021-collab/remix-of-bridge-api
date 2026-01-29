@@ -48,10 +48,33 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     function getGHLContactId() {
         const url = new URL(window.location.href);
+        
+        // Try query params first
         const fromQuery = url.searchParams.get('contactId') || url.searchParams.get('contact_id');
-        if (fromQuery && fromQuery.length >= 10) return fromQuery;
-        const match = window.location.pathname.match(/(?:contacts\\/detail\\/|conversations\\/)([a-zA-Z0-9_-]{10,})/);
-        return match ? match[1] : null;
+        if (fromQuery && fromQuery.length >= 10 && !isInvalidId(fromQuery)) return fromQuery;
+        
+        // Try to extract from URL path
+        // Pattern 1: /contacts/detail/CONTACT_ID
+        // Pattern 2: /conversations/CONTACT_ID (NOT just "conversations")
+        const contactDetailMatch = window.location.pathname.match(/contacts\\/detail\\/([a-zA-Z0-9_-]{10,})/);
+        if (contactDetailMatch) return contactDetailMatch[1];
+        
+        // For conversations URL: /conversations/CONTACT_ID where CONTACT_ID follows the path
+        const conversationMatch = window.location.pathname.match(/conversations\\/([a-zA-Z0-9_-]{10,})/);
+        if (conversationMatch && !isInvalidId(conversationMatch[1])) return conversationMatch[1];
+        
+        return null;
+    }
+    
+    // Block known GHL placeholder/route values
+    function isInvalidId(value) {
+        if (!value) return true;
+        const v = value.trim().toLowerCase();
+        const blocked = ['conversations', 'contacts', 'detail', 'inbox', 'chat', 'settings', 'location'];
+        if (blocked.includes(v)) return true;
+        // Real IDs almost always have digits/underscores/hyphens
+        if (/^[a-zA-Z]+$/.test(value)) return true;
+        return false;
     }
 
     function getLocationId() {
