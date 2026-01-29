@@ -789,9 +789,10 @@ serve(async (req) => {
       }
     }
 
-    // Upsert contact_instance_preferences to track the last instance used by this contact
-    // This allows the Bridge Switcher to auto-select the correct instance in the GHL dropdown
-    if (contact.id && instance.id) {
+    // Upsert contact_instance_preferences to track the last instance used by this lead
+    // Uses lead_phone (the original WhatsApp JID) as primary key so it works across all GHL contacts
+    // for the same lead (since each instance may create a different GHL contact)
+    if (contact.id && instance.id && from) {
       try {
         await supabase
           .from("contact_instance_preferences")
@@ -799,12 +800,14 @@ serve(async (req) => {
             contact_id: contact.id,
             location_id: subaccount.location_id,
             instance_id: instance.id,
+            lead_phone: from, // The WhatsApp JID (e.g., 5521980014713@s.whatsapp.net)
             updated_at: new Date().toISOString(),
-          }, { onConflict: "contact_id,location_id" });
-        console.log("Updated contact instance preference:", { 
+          }, { onConflict: "lead_phone,location_id" });
+        console.log("Updated contact instance preference by lead_phone:", { 
           contactId: contact.id, 
           instanceId: instance.id,
-          locationId: subaccount.location_id 
+          locationId: subaccount.location_id,
+          leadPhone: from
         });
       } catch (e) {
         console.error("Failed to update contact instance preference:", e);

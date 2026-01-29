@@ -82,22 +82,52 @@ Deno.serve(async (req) => {
     let activeInstanceId: string | null = null;
     
     if (contactId && contactId.length >= 10) {
-      const { data: preference } = await supabase
-        .from("contact_instance_preferences")
-        .select("instance_id")
+      // Step 1: Get the lead's original phone from the contact mapping
+      const { data: phoneMapping } = await supabase
+        .from("ghl_contact_phone_mapping")
+        .select("original_phone")
         .eq("contact_id", contactId)
         .eq("location_id", locationId)
         .maybeSingle();
       
-      if (preference?.instance_id) {
-        // Verify the instance is still in our available list
-        const exists = formattedInstances.some(i => i.id === preference.instance_id);
-        if (exists) {
-          activeInstanceId = preference.instance_id;
-        }
-      }
+      console.log("Phone mapping lookup:", { contactId, originalPhone: phoneMapping?.original_phone });
       
-      console.log("Contact preference lookup:", { contactId, activeInstanceId });
+      if (phoneMapping?.original_phone) {
+        // Step 2: Look up preference by lead_phone (this works across all GHL contacts for the same lead)
+        const { data: preference } = await supabase
+          .from("contact_instance_preferences")
+          .select("instance_id")
+          .eq("lead_phone", phoneMapping.original_phone)
+          .eq("location_id", locationId)
+          .maybeSingle();
+        
+        if (preference?.instance_id) {
+          // Verify the instance is still in our available list
+          const exists = formattedInstances.some(i => i.id === preference.instance_id);
+          if (exists) {
+            activeInstanceId = preference.instance_id;
+          }
+        }
+        
+        console.log("Lead phone preference lookup:", { leadPhone: phoneMapping.original_phone, activeInstanceId });
+      } else {
+        // Fallback: Try old method with contact_id for backward compatibility
+        const { data: preference } = await supabase
+          .from("contact_instance_preferences")
+          .select("instance_id")
+          .eq("contact_id", contactId)
+          .eq("location_id", locationId)
+          .maybeSingle();
+        
+        if (preference?.instance_id) {
+          const exists = formattedInstances.some(i => i.id === preference.instance_id);
+          if (exists) {
+            activeInstanceId = preference.instance_id;
+          }
+        }
+        
+        console.log("Contact ID fallback preference lookup:", { contactId, activeInstanceId });
+      }
     }
 
     console.log(`Returning ${formattedInstances.length} instances for locationId: ${locationId}, activeInstanceId: ${activeInstanceId}`);

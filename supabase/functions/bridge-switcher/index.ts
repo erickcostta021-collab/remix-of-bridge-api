@@ -33,6 +33,17 @@ Deno.serve(async (req) => {
     return true;
   }
 
+  // Helper to get lead phone from contact mapping
+  async function getLeadPhone(contactId: string, locationId: string): Promise<string | null> {
+    const { data } = await supabase
+      .from("ghl_contact_phone_mapping")
+      .select("original_phone")
+      .eq("contact_id", contactId)
+      .eq("location_id", locationId)
+      .maybeSingle();
+    return data?.original_phone || null;
+  }
+
   try {
     // GET: Recuperar preferência atual do contato
     if (req.method === "GET") {
@@ -58,23 +69,47 @@ Deno.serve(async (req) => {
 
       console.log("GET preference request:", { contactId, locationId });
 
-      // Query directly by contact_id + location_id (unique key)
-      const { data: preference, error } = await supabase
-        .from("contact_instance_preferences")
-        .select("instance_id")
-        .eq("contact_id", contactId)
-        .eq("location_id", locationId)
-        .maybeSingle();
+      // Step 1: Get the lead's phone from contact mapping
+      const leadPhone = await getLeadPhone(contactId, locationId);
+      console.log("Lead phone lookup:", { contactId, leadPhone });
 
-      if (error) {
-        console.error("Error fetching preference:", error);
-        return new Response(
-          JSON.stringify({ activeInstanceId: null }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      let preference = null;
+
+      if (leadPhone) {
+        // Step 2: Query by lead_phone (works across all GHL contacts for the same lead)
+        const { data, error } = await supabase
+          .from("contact_instance_preferences")
+          .select("instance_id")
+          .eq("lead_phone", leadPhone)
+          .eq("location_id", locationId)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Error fetching preference by lead_phone:", error);
+        } else {
+          preference = data;
+        }
+        
+        console.log("Lead phone preference result:", { leadPhone, instanceId: preference?.instance_id });
       }
 
-      console.log("Found preference:", { contactId, instanceId: preference?.instance_id || null });
+      // Fallback to contact_id if no lead_phone match
+      if (!preference) {
+        const { data, error } = await supabase
+          .from("contact_instance_preferences")
+          .select("instance_id")
+          .eq("contact_id", contactId)
+          .eq("location_id", locationId)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Error fetching preference by contact_id:", error);
+        } else {
+          preference = data;
+        }
+        
+        console.log("Contact ID fallback result:", { contactId, instanceId: preference?.instance_id });
+      }
 
       return new Response(
         JSON.stringify({ activeInstanceId: preference?.instance_id || null }),
@@ -103,30 +138,72 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log("POST save preference:", { contactId, instanceId, locationId });
+      // Get lead phone for this contact
+      const leadPhone = await getLeadPhone(contactId, locationId);
+      console.log("POST save preference:", { contactId, instanceId, locationId, leadPhone });
 
-      // Upsert using contact_id + location_id as unique key
-      const { error } = await supabase
-        .from("contact_instance_preferences")
-        .upsert(
-          {
-            contact_id: contactId,
-            location_id: locationId,
-            instance_id: instanceId,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "contact_id,location_id" }
-        );
+      if (leadPhone) {
+        // Save by lead_phone (primary method - works across all GHL contacts)
+        const { error } = await supabase
+          .from("contact_instance_preferences")
+          .upsert(
+            {
+              contact_id: contactId,
+              location_id: locationId,
+              instance_id: instanceId,
+              lead_phone: leadPhone,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "lead_phone,location_id" }
+          );
 
-      if (error) {
-        console.error("Error saving preference:", error);
-        return new Response(
-          JSON.stringify({ success: false, error: error.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        if (error) {
+          console.error("Error saving preference by lead_phone:", error);
+          // Try fallback to contact_id
+          const { error: fallbackError } = await supabase
+            .from("contact_instance_preferences")
+            .upsert(
+              {
+                contact_id: contactId,
+                location_id: locationId,
+                instance_id: instanceId,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "contact_id,location_id" }
+            );
+
+          if (fallbackError) {
+            console.error("Fallback error saving preference:", fallbackError);
+            return new Response(
+              JSON.stringify({ success: false, error: fallbackError.message }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+      } else {
+        // Fallback: save by contact_id only
+        const { error } = await supabase
+          .from("contact_instance_preferences")
+          .upsert(
+            {
+              contact_id: contactId,
+              location_id: locationId,
+              instance_id: instanceId,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "contact_id,location_id" }
+          );
+
+        if (error) {
+          console.error("Error saving preference:", error);
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
-      console.log("Preference saved successfully:", { contactId, instanceId });
+      console.log("Preference saved successfully:", { contactId, instanceId, leadPhone });
 
       return new Response(
         JSON.stringify({ success: true }),
