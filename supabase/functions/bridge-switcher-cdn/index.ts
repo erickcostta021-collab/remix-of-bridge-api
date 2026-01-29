@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v5.2.0 - Phone-based lookup");
+    console.log("🚀 BRIDGE API: Switcher v6.0.0 - Multi-source extraction");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -47,78 +47,6 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     \`;
     document.head.appendChild(style);
 
-    // Try to extract phone number from the GHL interface
-    function getLeadPhoneFromUI() {
-        // Method 1: Look for phone in common contact/conversation elements
-        const phoneSelectors = [
-            // Very common community/custom CSS hooks
-            '.contact-phone',
-            '.contact-phone *',
-
-            // Contact detail page phone field
-            '.contact-phone-number',
-            '[data-testid="contact-phone"]',
-            '[data-testid="contact-phone"] *',
-
-            // Tel links
-            'a[href^="tel:"]',
-
-            // Conversation header phone display
-            '.conversation-header .phone-number',
-            '.conversation-header [class*="phone"]',
-            '.hl_conversations--header [class*="phone"]',
-        ];
-        
-        for (const selector of phoneSelectors) {
-            const element = document.querySelector(selector);
-            if (element) {
-                const text = element.textContent || element.getAttribute('href') || '';
-                const phone = extractPhoneNumber(text);
-                if (phone) {
-                    console.log("📱 Telefone detectado no GHL (selector):", phone);
-                    return phone;
-                }
-            }
-        }
-        
-        // Method 2: Header scan (some GHL themes put the phone only in the header/title)
-        const headerEl = document.querySelector(
-            '.conversation-header, .hl_conversations--header, header, [data-testid="conversation-header"]'
-        );
-        if (headerEl) {
-            const headerText = headerEl.textContent || '';
-            const phoneFromHeader = extractPhoneNumber(headerText);
-            if (phoneFromHeader) {
-                console.log("📱 Telefone detectado no GHL (header):", phoneFromHeader);
-                return phoneFromHeader;
-            }
-        }
-
-        // Method 3: Look for phone pattern in conversation sidebar/details
-        const conversationArea = document.querySelector('.conversation-details, .contact-sidebar, .hl_conversations--details');
-        if (conversationArea) {
-            const text = conversationArea.textContent || '';
-            const phone = extractPhoneNumber(text);
-            if (phone) {
-                console.log("📱 Telefone detectado no GHL (area):", phone);
-                return phone;
-            }
-        }
-        
-        // Method 4: Check data attributes
-        const contactElements = document.querySelectorAll('[data-phone], [data-contact-phone]');
-        for (const el of contactElements) {
-            const phone = el.getAttribute('data-phone') || el.getAttribute('data-contact-phone');
-            if (phone) {
-                console.log("📱 Telefone detectado no GHL (data-attr):", phone);
-                return phone;
-            }
-        }
-        
-        console.log("📱 Telefone NÃO detectado no GHL UI");
-        return null;
-    }
-    
     // Extract phone number from text - normalize to digits only
     function extractPhoneNumber(text) {
         if (!text) return null;
@@ -140,23 +68,42 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         return null;
     }
 
+    // =====================================================
+    // PRIORITY 1: Extract contactId from URL (most reliable)
+    // =====================================================
     function getGHLContactId() {
         const url = new URL(window.location.href);
+        const pathname = window.location.pathname;
         
-        // Try query params first
+        // Method 1A: Query params (highest priority)
         const fromQuery = url.searchParams.get('contactId') || url.searchParams.get('contact_id');
-        if (fromQuery && fromQuery.length >= 10 && !isInvalidId(fromQuery)) return fromQuery;
+        if (fromQuery && fromQuery.length >= 10 && !isInvalidId(fromQuery)) {
+            console.log("🆔 ContactId via query param:", fromQuery);
+            return fromQuery;
+        }
         
-        // Try to extract from URL path
-        // Pattern 1: /contacts/detail/CONTACT_ID
-        // Pattern 2: /conversations/CONTACT_ID (NOT just "conversations")
-        const contactDetailMatch = window.location.pathname.match(/contacts\\/detail\\/([a-zA-Z0-9_-]{10,})/);
-        if (contactDetailMatch) return contactDetailMatch[1];
+        // Method 1B: URL path - /conversations/CONTACT_ID
+        const conversationMatch = pathname.match(/\\/conversations\\/([a-zA-Z0-9]{10,})/);
+        if (conversationMatch && !isInvalidId(conversationMatch[1])) {
+            console.log("🆔 ContactId via /conversations/ path:", conversationMatch[1]);
+            return conversationMatch[1];
+        }
         
-        // For conversations URL: /conversations/CONTACT_ID where CONTACT_ID follows the path
-        const conversationMatch = window.location.pathname.match(/conversations\\/([a-zA-Z0-9_-]{10,})/);
-        if (conversationMatch && !isInvalidId(conversationMatch[1])) return conversationMatch[1];
+        // Method 1C: URL path - /contacts/detail/CONTACT_ID
+        const contactDetailMatch = pathname.match(/\\/contacts\\/detail\\/([a-zA-Z0-9_-]{10,})/);
+        if (contactDetailMatch) {
+            console.log("🆔 ContactId via /contacts/detail/ path:", contactDetailMatch[1]);
+            return contactDetailMatch[1];
+        }
         
+        // Method 1D: Any alphanumeric ID in path after common routes
+        const genericMatch = pathname.match(/(?:conversation|contact|chat|inbox)\\/([a-zA-Z0-9]{15,})/i);
+        if (genericMatch && !isInvalidId(genericMatch[1])) {
+            console.log("🆔 ContactId via generic path match:", genericMatch[1]);
+            return genericMatch[1];
+        }
+        
+        console.log("🆔 ContactId: não encontrado na URL");
         return null;
     }
     
@@ -164,11 +111,176 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     function isInvalidId(value) {
         if (!value) return true;
         const v = value.trim().toLowerCase();
-        const blocked = ['conversations', 'contacts', 'detail', 'inbox', 'chat', 'settings', 'location'];
+        const blocked = ['conversations', 'contacts', 'detail', 'inbox', 'chat', 'settings', 'location', 'undefined', 'null'];
         if (blocked.includes(v)) return true;
-        // Real IDs almost always have digits/underscores/hyphens
-        if (/^[a-zA-Z]+$/.test(value)) return true;
+        // Real IDs almost always have digits - pure alphabetic is suspicious for short strings
+        if (value.length < 15 && /^[a-zA-Z]+$/.test(value)) return true;
         return false;
+    }
+
+    // =====================================================
+    // PRIORITY 2: Try GHL internal API/global objects
+    // =====================================================
+    function getPhoneFromGHLApi() {
+        try {
+            // Method 2A: v2_contact global object (common in GHL)
+            if (window.v2_contact) {
+                const phone = window.v2_contact.phone || window.v2_contact.phoneNumber || window.v2_contact.primaryPhone;
+                if (phone) {
+                    const digits = phone.replace(/\\D/g, '');
+                    if (digits.length >= 10) {
+                        console.log("📱 Telefone via window.v2_contact:", digits);
+                        return digits;
+                    }
+                }
+            }
+            
+            // Method 2B: __GHL_DATA__ or similar globals
+            const ghlData = window.__GHL_DATA__ || window.__NEXT_DATA__?.props?.pageProps?.contact || window.contactData;
+            if (ghlData) {
+                const phone = ghlData.phone || ghlData.phoneNumber || ghlData.primaryPhone;
+                if (phone) {
+                    const digits = phone.replace(/\\D/g, '');
+                    if (digits.length >= 10) {
+                        console.log("📱 Telefone via GHL global data:", digits);
+                        return digits;
+                    }
+                }
+            }
+            
+            // Method 2C: React fiber state (advanced)
+            const reactRoot = document.getElementById('__next') || document.getElementById('root') || document.getElementById('app');
+            if (reactRoot && reactRoot._reactRootContainer) {
+                const fiber = reactRoot._reactRootContainer._internalRoot?.current;
+                if (fiber) {
+                    // Walk fiber tree looking for contact state
+                    const findPhone = (node, depth = 0) => {
+                        if (depth > 10 || !node) return null;
+                        const state = node.memoizedState || node.memoizedProps;
+                        if (state?.phone || state?.contact?.phone) {
+                            return (state.phone || state.contact.phone).replace(/\\D/g, '');
+                        }
+                        return findPhone(node.child, depth + 1) || findPhone(node.sibling, depth + 1);
+                    };
+                    const found = findPhone(fiber);
+                    if (found && found.length >= 10) {
+                        console.log("📱 Telefone via React fiber:", found);
+                        return found;
+                    }
+                }
+            }
+        } catch (e) {
+            console.log("📱 API interna não disponível:", e.message);
+        }
+        return null;
+    }
+
+    // =====================================================
+    // PRIORITY 3: Extract phone from DOM attributes/elements
+    // =====================================================
+    function getLeadPhoneFromUI() {
+        // Method 3A: Data attributes (most reliable DOM method)
+        const dataAttrSelectors = [
+            '[data-contact-phone]',
+            '[data-phone]',
+            '[data-lead-phone]',
+            '[data-customer-phone]'
+        ];
+        
+        for (const selector of dataAttrSelectors) {
+            const el = document.querySelector(selector);
+            if (el) {
+                const phone = el.getAttribute('data-contact-phone') || 
+                              el.getAttribute('data-phone') || 
+                              el.getAttribute('data-lead-phone') ||
+                              el.getAttribute('data-customer-phone');
+                if (phone) {
+                    const digits = phone.replace(/\\D/g, '');
+                    if (digits.length >= 10) {
+                        console.log("📱 Telefone via data-attribute:", digits);
+                        return digits;
+                    }
+                }
+            }
+        }
+        
+        // Method 3B: Tel links (very common)
+        const telLinks = document.querySelectorAll('a[href^="tel:"]');
+        for (const link of telLinks) {
+            const href = link.getAttribute('href');
+            const phone = extractPhoneNumber(href);
+            if (phone) {
+                console.log("📱 Telefone via tel: link:", phone);
+                return phone;
+            }
+        }
+        
+        // Method 3C: Common CSS class selectors
+        const phoneSelectors = [
+            '.contact-phone',
+            '.phone-number',
+            '.contact-phone-number',
+            '[data-testid="contact-phone"]',
+            '.conversation-header .phone',
+            '.hl_conversations--header [class*="phone"]',
+            '.contact-info .phone',
+            '.lead-phone',
+            '.customer-phone'
+        ];
+        
+        for (const selector of phoneSelectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+                const text = element.textContent || element.innerText || '';
+                const phone = extractPhoneNumber(text);
+                if (phone) {
+                    console.log("📱 Telefone via selector (" + selector + "):", phone);
+                    return phone;
+                }
+            }
+        }
+        
+        // Method 3D: Header scan
+        const headerEl = document.querySelector(
+            '.conversation-header, .hl_conversations--header, [data-testid="conversation-header"], .chat-header'
+        );
+        if (headerEl) {
+            const headerText = headerEl.textContent || '';
+            const phoneFromHeader = extractPhoneNumber(headerText);
+            if (phoneFromHeader) {
+                console.log("📱 Telefone via header text:", phoneFromHeader);
+                return phoneFromHeader;
+            }
+        }
+
+        // Method 3E: Sidebar/details area
+        const sidebarAreas = document.querySelectorAll('.conversation-details, .contact-sidebar, .hl_conversations--details, .contact-details, .lead-details');
+        for (const area of sidebarAreas) {
+            const text = area.textContent || '';
+            const phone = extractPhoneNumber(text);
+            if (phone) {
+                console.log("📱 Telefone via sidebar/details:", phone);
+                return phone;
+            }
+        }
+        
+        return null;
+    }
+    
+    // =====================================================
+    // MASTER FUNCTION: Try all methods in priority order
+    // =====================================================
+    function getLeadPhone() {
+        // Priority 2: GHL internal API (fast, reliable when available)
+        let phone = getPhoneFromGHLApi();
+        if (phone) return phone;
+        
+        // Priority 3: DOM scraping (fallback)
+        phone = getLeadPhoneFromUI();
+        if (phone) return phone;
+        
+        console.log("📱 Telefone NÃO detectado em nenhuma fonte");
+        return null;
     }
 
     function getLocationId() {
@@ -203,7 +315,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function loadInstances(select) {
         const locationId = getLocationId();
         const contactId = getGHLContactId();
-        const leadPhone = getLeadPhoneFromUI();
+        const leadPhone = getLeadPhone();
         
         if (!locationId) return;
 
@@ -252,7 +364,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function syncContext(select) {
         const contactId = getGHLContactId();
         const locationId = getLocationId();
-        const leadPhone = getLeadPhoneFromUI();
+        const leadPhone = getLeadPhone();
         
         // Log current state for debugging
         console.log("🔄 Sync check:", { contactId, locationId, lastContactId, leadPhone, currentValue: select.value });
@@ -341,7 +453,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function savePreference(instanceId) {
         const contactId = getGHLContactId();
         const locationId = getLocationId();
-        const leadPhone = getLeadPhoneFromUI();
+        const leadPhone = getLeadPhone();
         
         if (!instanceId || !locationId) {
             console.log("Cannot save preference - missing data:", { instanceId, locationId });
