@@ -130,19 +130,25 @@ Deno.serve(async (req) => {
       
       console.log("[get-instances] Searching preference by phone:", { normalizedPhone: normalizedPhone.slice(0, 10), last10: last10Digits });
       
-      // Try exact match first, then partial match
+      // Try exact match first, then partial match - ORDER BY updated_at DESC to get the latest
       const { data: preferences } = await supabase
         .from("contact_instance_preferences")
-        .select("instance_id, lead_phone")
+        .select("instance_id, lead_phone, updated_at")
         .eq("location_id", locationId)
-        .or(`lead_phone.eq.${resolvedPhone},lead_phone.like.%${normalizedPhone},lead_phone.like.%${last10Digits}%`);
+        .or(`lead_phone.eq.${resolvedPhone},lead_phone.like.%${normalizedPhone},lead_phone.like.%${last10Digits}%`)
+        .order("updated_at", { ascending: false })
+        .limit(1);
       
       if (preferences && preferences.length > 0) {
         const preference = preferences[0];
         const exists = formattedInstances.some(i => i.id === preference.instance_id);
         if (exists) {
           activeInstanceId = preference.instance_id;
-          console.log("[get-instances] ✅ Found preference by phone:", { activeInstanceId, leadPhone: preference.lead_phone?.slice(0, 15) });
+          console.log("[get-instances] ✅ Found preference by phone (latest):", { 
+            activeInstanceId, 
+            leadPhone: preference.lead_phone?.slice(0, 15),
+            updatedAt: preference.updated_at
+          });
         }
       }
     }
@@ -155,16 +161,18 @@ Deno.serve(async (req) => {
       
       const { data: preference } = await supabase
         .from("contact_instance_preferences")
-        .select("instance_id")
+        .select("instance_id, updated_at")
         .eq("contact_id", contactId)
         .eq("location_id", locationId)
-        .maybeSingle();
+        .order("updated_at", { ascending: false })
+        .limit(1);
       
-      if (preference?.instance_id) {
-        const exists = formattedInstances.some(i => i.id === preference.instance_id);
+      const pref = preference?.[0];
+      if (pref?.instance_id) {
+        const exists = formattedInstances.some(i => i.id === pref.instance_id);
         if (exists) {
-          activeInstanceId = preference.instance_id;
-          console.log("[get-instances] ✅ Found preference by contactId fallback:", activeInstanceId);
+          activeInstanceId = pref.instance_id;
+          console.log("[get-instances] ✅ Found preference by contactId fallback (latest):", activeInstanceId);
         }
       }
     }

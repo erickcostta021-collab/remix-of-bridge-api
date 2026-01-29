@@ -840,6 +840,8 @@ serve(async (req) => {
             locationId: subaccount.location_id.substring(0, 10),
             leadPhone: normalizedPhone
           });
+          // LOG DE CONFIRMAÇÃO FORÇADA
+          console.log(`[Inbound] 📌 Confirmado no banco: Contato ${normalizedPhone} agora é Instância ${instance.instance_name} (${instance.id})`);
         }
       } catch (e) {
         console.error("[Inbound] ❌ Erro ao atualizar:", e);
