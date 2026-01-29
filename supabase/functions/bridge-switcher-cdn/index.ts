@@ -6,12 +6,12 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.4.0
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.4.0');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.5.0
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.5.0');
 
 try {
 (function() {
-    const VERSION = "6.4.0";
+    const VERSION = "6.5.0";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
@@ -401,36 +401,57 @@ try {
     // =====================================================
     // SINCRONIZAÇÃO VISUAL COM TRAVA (evita múltiplas ordens simultâneas)
     // =====================================================
+    let syncDebounceTimer = null;
+    
     function requestDropdownSync(activeId, isExternalUpdate = false) {
         if (!activeId) return;
         
         const now = Date.now();
         
-        // PRIORIDADE: Mudanças externas (inbound) ignoram o lock
+        // CRÍTICO: Atualiza lastKnownActiveId IMEDIATAMENTE para evitar conflitos
+        // Isso garante que outros checks usem o novo valor durante o sync
+        state.lastKnownActiveId = activeId;
+        
+        // PRIORIDADE: Mudanças externas (inbound) ignoram o lock e cancelam syncs pendentes
+        if (isExternalUpdate) {
+            if (syncDebounceTimer) {
+                clearTimeout(syncDebounceTimer);
+                syncDebounceTimer = null;
+            }
+            state.syncLockUntil = 0; // Libera lock para update externo
+        }
+        
+        // Verifica lock (só para não-externos)
         if (now < state.syncLockUntil && !isExternalUpdate) {
-            log.info(\`🔒 Sync ignorado (lock ativo por mais \${state.syncLockUntil - now}ms), pendente: \${activeId.slice(0,8)}\`);
+            log.info(\`🔒 Sync ignorado (lock ativo), pendente: \${activeId.slice(0,8)}\`);
             state.pendingSyncId = activeId;
             return;
         }
         
-        // Ativa trava (mais curta agora - 100ms)
-        state.syncLockUntil = now + CONFIG.sync_lock_duration;
+        // Cancela sync anterior se houver (debounce)
+        if (syncDebounceTimer) {
+            clearTimeout(syncDebounceTimer);
+        }
+        
+        // Ativa trava estendida (500ms para cobrir todo o ciclo de sync)
+        state.syncLockUntil = now + 500;
         state.pendingSyncId = null;
         
         const instanceName = state.instances.find(function(i) { return i.id === activeId; });
         const nameStr = instanceName ? instanceName.name : activeId.slice(0,8);
         
         if (isExternalUpdate) {
-            log.info(\`📥 Atualização detectada via Webhook! Mudando para: \${nameStr}\`);
+            log.info(\`📥 Atualização via Webhook! Mudando para: \${nameStr}\`);
         } else {
-            log.info(\`🎯 Tentando definir dropdown para: \${nameStr}\`);
+            log.info(\`🎯 Definindo dropdown para: \${nameStr}\`);
         }
         
-        // Ativa flag de sincronização
+        // Ativa flag de sincronização ANTES do timeout
         state.isSyncingDropdown = true;
         
-        // Delay de 300ms para garantir que o GHL terminou de renderizar
-        setTimeout(function() {
+        // Delay com debounce para garantir que o GHL terminou de renderizar
+        syncDebounceTimer = setTimeout(function() {
+            syncDebounceTimer = null;
             executeDropdownSync(activeId, 0);
         }, 300);
     }
@@ -704,8 +725,10 @@ try {
                     }
                     
                     const select = container.querySelector('#bridge-instance-selector');
+                    // CRÍTICO: Só corrige se NÃO estamos em processo de sync E o valor é diferente
+                    // Também ignora se está dentro do período de lock
                     if (select && state.lastKnownActiveId && select.value !== state.lastKnownActiveId) {
-                        if (!state.isSyncingDropdown) {
+                        if (!state.isSyncingDropdown && now >= state.syncLockUntil) {
                             lastValueCheckTime = now;
                             log.info('Valor incorreto detectado após estabilização, corrigindo...');
                             requestDropdownSync(state.lastKnownActiveId);
@@ -925,14 +948,13 @@ try {
                 return;
             }
             
-            // FORÇA ATUALIZAÇÃO se dropdown difere do banco, IGNORANDO lastKnownActiveId
-            // Isso garante reatividade imediata quando mensagem inbound muda a preferência
-            if (serverActiveId !== currentDropdownValue) {
+            // FORÇA ATUALIZAÇÃO se dropdown difere do banco E não estamos em sync
+            // A flag isSyncingDropdown evita conflitos durante updates
+            if (serverActiveId !== currentDropdownValue && !state.isSyncingDropdown) {
                 log.info(\`📥 Diferença detectada! Atualizando dropdown...\`);
-                state.lastKnownActiveId = serverActiveId;
-                // Chama com flag de atualização externa para ignorar lock
+                // requestDropdownSync já atualiza lastKnownActiveId internamente
                 requestDropdownSync(serverActiveId, true);
-            } else if (serverActiveId !== state.lastKnownActiveId) {
+            } else if (serverActiveId !== state.lastKnownActiveId && !state.isSyncingDropdown) {
                 // Atualiza estado interno mesmo se dropdown já está correto
                 state.lastKnownActiveId = serverActiveId;
             }
