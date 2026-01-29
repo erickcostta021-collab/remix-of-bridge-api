@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `(function() {
-    console.log("🚀 BRIDGE API: Switcher v5.1.0 - Auto-sync on message");
+    console.log("🚀 BRIDGE API: Switcher v5.2.0 - Phone-based lookup");
 
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -19,6 +19,7 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
 
     let instanceData = [];
     let lastContactId = null;
+    let lastLeadPhone = null;
 
     const style = document.createElement('style');
     style.innerHTML = \`
@@ -45,6 +46,78 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
         }
     \`;
     document.head.appendChild(style);
+
+    // Try to extract phone number from the GHL interface
+    function getLeadPhoneFromUI() {
+        // Method 1: Look for phone in contact details panel
+        const phoneSelectors = [
+            // Contact detail page phone field
+            '.contact-phone-number',
+            '[data-testid="contact-phone"]',
+            'a[href^="tel:"]',
+            // Conversation header phone display
+            '.conversation-header .phone-number',
+            '[class*="phone"]',
+            // Generic phone pattern in visible text
+        ];
+        
+        for (const selector of phoneSelectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+                const text = element.textContent || element.getAttribute('href') || '';
+                const phone = extractPhoneNumber(text);
+                if (phone) {
+                    console.log("📱 Telefone detectado no GHL (selector):", phone);
+                    return phone;
+                }
+            }
+        }
+        
+        // Method 2: Look for phone pattern in conversation sidebar or header
+        const conversationArea = document.querySelector('.conversation-details, .contact-sidebar, .hl_conversations--details');
+        if (conversationArea) {
+            const text = conversationArea.textContent || '';
+            const phone = extractPhoneNumber(text);
+            if (phone) {
+                console.log("📱 Telefone detectado no GHL (area):", phone);
+                return phone;
+            }
+        }
+        
+        // Method 3: Check data attributes
+        const contactElements = document.querySelectorAll('[data-phone], [data-contact-phone]');
+        for (const el of contactElements) {
+            const phone = el.getAttribute('data-phone') || el.getAttribute('data-contact-phone');
+            if (phone) {
+                console.log("📱 Telefone detectado no GHL (data-attr):", phone);
+                return phone;
+            }
+        }
+        
+        console.log("📱 Telefone NÃO detectado no GHL UI");
+        return null;
+    }
+    
+    // Extract phone number from text - normalize to digits only
+    function extractPhoneNumber(text) {
+        if (!text) return null;
+        
+        // Remove common prefixes
+        text = text.replace(/^tel:/i, '');
+        
+        // Look for phone patterns (Brazilian format: +55 XX XXXXX-XXXX or similar)
+        const phoneRegex = /(?:\\+?\\d{1,3}[-.\\s]?)?\\(?\\d{2,3}\\)?[-.\\s]?\\d{4,5}[-.\\s]?\\d{4}/g;
+        const matches = text.match(phoneRegex);
+        
+        if (matches && matches.length > 0) {
+            // Get only digits
+            const digits = matches[0].replace(/\\D/g, '');
+            if (digits.length >= 10) {
+                return digits;
+            }
+        }
+        return null;
+    }
 
     function getGHLContactId() {
         const url = new URL(window.location.href);
@@ -109,11 +182,20 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function loadInstances(select) {
         const locationId = getLocationId();
         const contactId = getGHLContactId();
+        const leadPhone = getLeadPhoneFromUI();
         
         if (!locationId) return;
 
         try {
             let url = \`\${CONFIG.api_url}?locationId=\${locationId}\`;
+            
+            // Prioritize phone over contactId
+            if (leadPhone) {
+                url += \`&phone=\${encodeURIComponent(leadPhone)}\`;
+                console.log("📞 Buscando por telefone:", leadPhone);
+            }
+            
+            // Also send contactId as fallback
             if (contactId && contactId.length >= 10) {
                 url += \`&contactId=\${contactId}\`;
             }
@@ -132,11 +214,13 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
                 
                 renderOptions(select, activeId);
                 lastContactId = contactId;
+                lastLeadPhone = leadPhone;
                 
                 console.log("📍 Loaded instances:", { 
                     count: instanceData.length, 
                     activeId, 
-                    contactId 
+                    contactId,
+                    leadPhone
                 });
             }
         } catch (e) {
@@ -147,32 +231,44 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function syncContext(select) {
         const contactId = getGHLContactId();
         const locationId = getLocationId();
+        const leadPhone = getLeadPhoneFromUI();
         
         // Log current state for debugging
-        console.log("🔄 Sync check:", { contactId, locationId, lastContactId, currentValue: select.value });
+        console.log("🔄 Sync check:", { contactId, locationId, lastContactId, leadPhone, currentValue: select.value });
         
         if (!locationId) {
             console.log("⚠️ No locationId found, skipping sync");
             return;
         }
         
-        // CRITICAL: If contact changed, clear dropdown and reload
-        if (contactId !== lastContactId) {
-            console.log("📍 Contact changed, reloading...", { from: lastContactId, to: contactId });
+        // CRITICAL: If contact or phone changed, clear dropdown and reload
+        if (contactId !== lastContactId || leadPhone !== lastLeadPhone) {
+            console.log("📍 Context changed, reloading...", { 
+                fromContact: lastContactId, toContact: contactId,
+                fromPhone: lastLeadPhone, toPhone: leadPhone
+            });
             select.value = '';
             await loadInstances(select);
             return;
         }
 
-        // If no valid contactId, skip preference check
-        if (!contactId || isInvalidId(contactId)) {
-            console.log("⚠️ No valid contactId, skipping preference sync");
+        // If no valid contactId or phone, skip preference check
+        if ((!contactId || isInvalidId(contactId)) && !leadPhone) {
+            console.log("⚠️ No valid contactId or phone, skipping preference sync");
             return;
         }
 
         // Same contact - check for backend updates (e.g., message received on another instance)
         try {
-            const res = await fetch(\`\${CONFIG.save_url}?contactId=\${contactId}&locationId=\${locationId}\`);
+            let syncUrl = \`\${CONFIG.save_url}?locationId=\${locationId}\`;
+            if (leadPhone) {
+                syncUrl += \`&phone=\${encodeURIComponent(leadPhone)}\`;
+            }
+            if (contactId && !isInvalidId(contactId)) {
+                syncUrl += \`&contactId=\${contactId}\`;
+            }
+            
+            const res = await fetch(syncUrl);
             const data = await res.json();
             
             console.log("📡 Backend preference:", { activeInstanceId: data.activeInstanceId, currentValue: select.value });
@@ -224,19 +320,34 @@ const BRIDGE_SWITCHER_SCRIPT = `(function() {
     async function savePreference(instanceId) {
         const contactId = getGHLContactId();
         const locationId = getLocationId();
+        const leadPhone = getLeadPhoneFromUI();
         
-        if (!contactId || !instanceId || !locationId) {
-            console.log("Cannot save preference - missing data:", { contactId, instanceId, locationId });
+        if (!instanceId || !locationId) {
+            console.log("Cannot save preference - missing data:", { instanceId, locationId });
+            return;
+        }
+        
+        // Need at least contactId or phone
+        if ((!contactId || isInvalidId(contactId)) && !leadPhone) {
+            console.log("Cannot save preference - no valid contactId or phone:", { contactId, leadPhone });
             return;
         }
 
         try {
+            const payload = { instanceId, locationId };
+            if (contactId && !isInvalidId(contactId)) {
+                payload.contactId = contactId;
+            }
+            if (leadPhone) {
+                payload.phone = leadPhone;
+            }
+            
             await fetch(CONFIG.save_url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ instanceId, contactId, locationId })
+                body: JSON.stringify(payload)
             });
-            console.log("💾 Preference saved:", { contactId, instanceId });
+            console.log("💾 Preference saved:", payload);
         } catch (e) {
             console.error("Error saving preference:", e);
         }

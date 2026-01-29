@@ -16,6 +16,7 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const locationId = url.searchParams.get("locationId");
     const contactId = url.searchParams.get("contactId");
+    const phone = url.searchParams.get("phone"); // New: direct phone parameter
 
     if (!locationId) {
       return new Response(
@@ -23,6 +24,8 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log("Get instances request:", { locationId, contactId, phone });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -78,10 +81,34 @@ Deno.serve(async (req) => {
       profilePic: i.profile_pic_url,
     }));
 
-    // Check for active instance preference if contactId is provided
+    // Check for active instance preference
     let activeInstanceId: string | null = null;
     
-    if (contactId && contactId.length >= 10) {
+    // Priority 1: Direct phone parameter (most reliable - comes from GHL UI)
+    if (phone && phone.length >= 10) {
+      console.log("Looking up preference by direct phone:", phone);
+      
+      // Normalize the phone to match stored format
+      const normalizedPhone = phone.replace(/\D/g, '');
+      
+      const { data: preference } = await supabase
+        .from("contact_instance_preferences")
+        .select("instance_id")
+        .eq("location_id", locationId)
+        .or(`lead_phone.eq.${normalizedPhone},lead_phone.like.%${normalizedPhone.slice(-10)}`)
+        .maybeSingle();
+      
+      if (preference?.instance_id) {
+        const exists = formattedInstances.some(i => i.id === preference.instance_id);
+        if (exists) {
+          activeInstanceId = preference.instance_id;
+          console.log("Found preference by direct phone:", { phone: normalizedPhone, activeInstanceId });
+        }
+      }
+    }
+    
+    // Priority 2: ContactId -> Phone mapping (fallback)
+    if (!activeInstanceId && contactId && contactId.length >= 10) {
       // Step 1: Get the lead's original phone from the contact mapping
       const { data: phoneMapping } = await supabase
         .from("ghl_contact_phone_mapping")
