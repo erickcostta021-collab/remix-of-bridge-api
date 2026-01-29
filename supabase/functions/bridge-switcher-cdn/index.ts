@@ -6,19 +6,19 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.1
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.1');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.4
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.1.4');
 
 try {
 (function() {
-    const VERSION = "6.1.1";
+    const VERSION = "6.1.4";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
         save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
         reinject_delay: 400,
-        sync_interval: 5000,
+        sync_interval: 3000, // Reduzido para 3s para sincronização mais rápida
         theme: {
             primary: '#22c55e',
             border: '#d1d5db',
@@ -38,7 +38,7 @@ try {
         api: (msg, data) => console.log(\`\${LOG_PREFIX} 📡 \${msg}\`, data !== undefined ? data : '')
     };
 
-    log.info(\`Switcher v\${VERSION} - SPA-Aware Navigation\`);
+    log.info(\`Switcher v\${VERSION} - Master Sync\`);
 
     // =====================================================
     // STATE MANAGEMENT
@@ -49,7 +49,8 @@ try {
         currentLocationId: null,
         lastUrl: window.location.href,
         isInjected: false,
-        isSyncingDropdown: false // Flag para evitar loop ao sincronizar visualmente
+        isSyncingDropdown: false, // Flag para evitar loop ao sincronizar visualmente
+        lastKnownActiveId: null   // Última instância ativa conhecida do banco
     };
 
     // =====================================================
@@ -279,18 +280,20 @@ try {
                 state.instances = data.instances;
                 
                 const activeId = data.activeInstanceId || (data.instances[0] ? data.instances[0].id : null);
+                state.lastKnownActiveId = activeId; // Armazena para sincronização
+                
                 const activeName = state.instances.find(function(i) { return i.id === activeId; });
                 const activeNameStr = activeName ? activeName.name : 'N/A';
                 
                 log.success(\`\${data.instances.length} instâncias carregadas, ativa: \${activeNameStr}\`);
                 
-                updateDropdown(activeId);
+                syncDropdownVisual(activeId);
             } else {
                 log.warn('Nenhuma instância encontrada, mantendo dropdown com estado anterior');
                 // Mantém dropdown visível mesmo sem instâncias
                 if (state.instances.length === 0) {
                     state.instances = [{ id: 'none', name: 'Sem instâncias', phone: null }];
-                    updateDropdown('none');
+                    syncDropdownVisual('none');
                 }
             }
         } catch (e) {
@@ -298,7 +301,7 @@ try {
             // FALLBACK: Em caso de erro, mantém o dropdown com uma opção padrão
             if (state.instances.length === 0) {
                 state.instances = [{ id: 'error', name: 'Erro ao carregar', phone: null }];
-                updateDropdown('error');
+                syncDropdownVisual('error');
             }
         }
     }
@@ -331,20 +334,26 @@ try {
             const data = await res.json();
 
             if (data.activeInstanceId) {
+                state.lastKnownActiveId = data.activeInstanceId;
                 const activeName = state.instances.find(function(i) { return i.id === data.activeInstanceId; });
                 const activeNameStr = activeName ? activeName.name : 'Desconhecida';
                 log.success(\`Instância ativa recuperada: \${activeNameStr}\`);
-                updateDropdown(data.activeInstanceId);
+                syncDropdownVisual(data.activeInstanceId);
             } else {
                 log.info('Nenhuma preferência encontrada, usando primeira instância');
                 const firstInstance = state.instances[0];
-                updateDropdown(firstInstance ? firstInstance.id : null);
+                const fallbackId = firstInstance ? firstInstance.id : null;
+                state.lastKnownActiveId = fallbackId;
+                syncDropdownVisual(fallbackId);
             }
         } catch (e) {
             log.error('Erro ao buscar instância ativa:', e.message);
         }
     }
 
+    // =====================================================
+    // SALVAMENTO MANUAL (usuário clicou no dropdown)
+    // =====================================================
     async function savePreference(instanceId) {
         const locationId = state.currentLocationId;
         const contactId = state.currentContactId;
@@ -360,6 +369,8 @@ try {
         }
 
         try {
+            log.info(\`💾 Salvando preferência manual: \${instanceId.slice(0,8)}\`);
+            
             const payload = { instanceId: instanceId, locationId: locationId, contactId: contactId };
             
             const res = await fetch(CONFIG.save_url, {
@@ -372,6 +383,9 @@ try {
                 throw new Error(\`HTTP \${res.status}: \${res.statusText}\`);
             }
             
+            // Atualiza o estado local para evitar re-sincronização
+            state.lastKnownActiveId = instanceId;
+            
             const instanceObj = state.instances.find(function(i) { return i.id === instanceId; });
             const instanceName = instanceObj ? instanceObj.name : 'Desconhecida';
             log.success(\`Preferência salva: \${instanceName}\`);
@@ -382,13 +396,15 @@ try {
     }
 
     // =====================================================
-    // UI MANAGEMENT
+    // SINCRONIZAÇÃO VISUAL (sem salvar - para inbound)
     // =====================================================
-    function updateDropdown(activeId) {
+    function syncDropdownVisual(activeId) {
         try {
-            log.info(\`🎯 Tentando definir dropdown para: \${activeId}\`);
+            if (!activeId) return;
             
-            // Ativa flag para evitar que o change event salve preferência
+            log.info(\`🎯 Sincronizando dropdown visual para: \${activeId.slice(0,8)}\`);
+            
+            // Ativa flag ANTES de qualquer operação para evitar que o change event dispare
             state.isSyncingDropdown = true;
             
             // Delay de 300ms para garantir que o GHL terminou de renderizar
@@ -396,7 +412,7 @@ try {
                 setDropdownValueWithRetry(activeId, 0);
             }, 300);
         } catch (e) {
-            log.error('Erro ao atualizar dropdown:', e.message);
+            log.error('Erro ao sincronizar dropdown:', e.message);
             state.isSyncingDropdown = false;
         }
     }
@@ -437,7 +453,7 @@ try {
             });
 
             if (!optionExists) {
-                log.warn(\`Opção \${activeId} não existe no dropdown (tentativa \${attempt + 1}/\${MAX_ATTEMPTS})\`);
+                log.warn(\`Opção \${activeId.slice(0,8)} não existe no dropdown (tentativa \${attempt + 1}/\${MAX_ATTEMPTS})\`);
                 if (attempt < MAX_ATTEMPTS - 1) {
                     setTimeout(function() {
                         setDropdownValueWithRetry(activeId, attempt + 1);
@@ -453,14 +469,9 @@ try {
 
             // Verifica se o valor foi realmente definido
             if (select.value === activeId) {
-                log.success(\`✅ Dropdown sincronizado para: \${activeId}\`);
-                select.style.border = '';
+                log.success(\`✅ Dropdown sincronizado para: \${activeId.slice(0,8)}\`);
             } else {
-                log.warn(\`⚠️ Dropdown não sincronizou. Esperado: \${activeId}, Atual: \${select.value}\`);
-                select.style.border = '2px solid red';
-                setTimeout(function() {
-                    select.style.border = '';
-                }, 3000);
+                log.warn(\`⚠️ Dropdown não sincronizou. Esperado: \${activeId.slice(0,8)}, Atual: \${select.value.slice(0,8)}\`);
                 
                 if (attempt < MAX_ATTEMPTS - 1) {
                     setTimeout(function() {
@@ -470,7 +481,7 @@ try {
                 }
             }
             
-            // Desativa flag após sincronização bem sucedida
+            // Desativa flag após sincronização (sucesso ou falha final)
             state.isSyncingDropdown = false;
             
         } catch (e) {
@@ -500,7 +511,17 @@ try {
     }
 
     function hidePhoneNumbers(select) {
-        updateDropdown(select.value);
+        // Apenas repopula com nomes curtos, mantendo o valor atual
+        try {
+            if (!state.instances.length) return;
+            const currentValue = select.value;
+            
+            select.innerHTML = state.instances.map(function(i) {
+                return '<option value="' + i.id + '"' + (i.id === currentValue ? ' selected' : '') + '>' + i.name + '</option>';
+            }).join('');
+        } catch (e) {
+            log.error('Erro ao esconder telefones:', e.message);
+        }
     }
 
     function showNotification(instanceName) {
@@ -574,19 +595,22 @@ try {
             select.addEventListener('mousedown', function() { showPhoneNumbers(select); });
             select.addEventListener('blur', function() { hidePhoneNumbers(select); });
             select.addEventListener('change', function(e) {
-                // Ignora se estamos apenas sincronizando visualmente (evita loop)
+                // CRÍTICO: Ignora se estamos sincronizando visualmente (evita loop)
                 if (state.isSyncingDropdown) {
-                    log.info('Change ignorado (sincronização visual em progresso)');
+                    log.info('🔒 Change ignorado (sincronização visual em progresso)');
                     return;
                 }
+                
+                // Usuário clicou manualmente - SALVAR!
+                log.info(\`👆 Usuário selecionou manualmente: \${e.target.value.slice(0,8)}\`);
                 savePreference(e.target.value);
                 hidePhoneNumbers(select);
             });
 
             // Populate if we have data
             if (state.instances.length) {
-                const firstInstance = state.instances[0];
-                updateDropdown(firstInstance ? firstInstance.id : null);
+                const activeId = state.lastKnownActiveId || (state.instances[0] ? state.instances[0].id : null);
+                syncDropdownVisual(activeId);
             }
 
             state.isInjected = true;
@@ -641,7 +665,7 @@ try {
     }
 
     // =====================================================
-    // BACKGROUND SYNC
+    // BACKGROUND SYNC (detecta mudanças no banco via inbound)
     // =====================================================
     function setupBackgroundSync() {
         try {
@@ -650,17 +674,66 @@ try {
                 
                 const currentContactId = getContactIdFromUrl();
                 
-                // If contact changed without triggering our observers
+                // Se contato mudou, busca a instância ativa
                 if (currentContactId && currentContactId !== state.currentContactId) {
                     log.nav('Sync detectou mudança de contato: ' + currentContactId.slice(0,8));
                     state.currentContactId = currentContactId;
                     await fetchActiveInstance();
+                    return;
+                }
+                
+                // NOVO: Verifica se a instância ativa no banco mudou (inbound message)
+                if (currentContactId && state.currentLocationId) {
+                    await checkForInboundUpdates();
                 }
             }, CONFIG.sync_interval);
             
-            log.success('Background sync configurado');
+            log.success('Background sync configurado (a cada ' + (CONFIG.sync_interval/1000) + 's)');
         } catch (e) {
             log.error('Erro ao configurar background sync:', e.message);
+        }
+    }
+
+    // =====================================================
+    // VERIFICAÇÃO DE ATUALIZAÇÕES INBOUND
+    // =====================================================
+    async function checkForInboundUpdates() {
+        try {
+            const locationId = state.currentLocationId;
+            const contactId = state.currentContactId;
+            
+            if (!locationId || !contactId) return;
+            
+            const url = \`\${CONFIG.api_url}?locationId=\${locationId}&contactId=\${contactId}\`;
+            
+            const res = await fetch(url, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (!res.ok) return;
+            
+            const data = await res.json();
+            const serverActiveId = data.activeInstanceId;
+            
+            // Se não há activeId do servidor, não faz nada
+            if (!serverActiveId) return;
+            
+            // Compara com o valor atual do dropdown
+            const select = document.getElementById('bridge-instance-selector');
+            const currentDropdownValue = select ? select.value : null;
+            
+            // Se o servidor tem um valor diferente do dropdown E diferente do último conhecido
+            if (serverActiveId !== currentDropdownValue && serverActiveId !== state.lastKnownActiveId) {
+                const instanceName = state.instances.find(function(i) { return i.id === serverActiveId; });
+                log.info(\`📨 Inbound detectado! Atualizando para: \${instanceName ? instanceName.name : serverActiveId.slice(0,8)}\`);
+                
+                // Atualiza o estado e sincroniza visualmente (sem salvar)
+                state.lastKnownActiveId = serverActiveId;
+                syncDropdownVisual(serverActiveId);
+            }
+        } catch (e) {
+            // Silencioso - não loga erros de sync check
         }
     }
 
