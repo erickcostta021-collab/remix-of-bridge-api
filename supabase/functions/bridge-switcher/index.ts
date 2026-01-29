@@ -44,6 +44,45 @@ Deno.serve(async (req) => {
     return data?.original_phone || null;
   }
 
+  // Helper to write/update contactId -> phone mapping (avoid UPSERT without a unique constraint)
+  async function writeContactPhoneMapping(params: {
+    contactId: string;
+    locationId: string;
+    originalPhone: string;
+  }): Promise<void> {
+    const { contactId, locationId, originalPhone } = params;
+    const nowIso = new Date().toISOString();
+
+    // Try update first (most common)
+    const { data: updated, error: updateError } = await supabase
+      .from("ghl_contact_phone_mapping")
+      .update({ original_phone: originalPhone, updated_at: nowIso })
+      .eq("contact_id", contactId)
+      .eq("location_id", locationId)
+      .select("id");
+
+    if (updateError) {
+      console.error("Error updating phone mapping:", updateError);
+      return;
+    }
+
+    if (updated && updated.length > 0) return;
+
+    // No row updated -> insert
+    const { error: insertError } = await supabase
+      .from("ghl_contact_phone_mapping")
+      .insert({
+        contact_id: contactId,
+        location_id: locationId,
+        original_phone: originalPhone,
+        updated_at: nowIso,
+      });
+
+    if (insertError) {
+      console.error("Error inserting phone mapping:", insertError);
+    }
+  }
+
   try {
     // GET: Recuperar preferência atual do contato
     if (req.method === "GET") {
@@ -161,6 +200,24 @@ Deno.serve(async (req) => {
       }
 
       console.log("POST save preference:", { contactId, instanceId, locationId, phone });
+
+      // 1) Feed mapping table when phone is available in payload
+      // This makes future lookups (contactId -> lead_phone) reliable.
+      if (contactId && isValidContactId(contactId) && phone && phone.length >= 10) {
+        const normalizedPhone = String(phone).replace(/\D/g, "");
+        if (normalizedPhone.length >= 10) {
+          console.log("🧩 Saving contactId->phone mapping:", {
+            contactId,
+            locationId,
+            original_phone: normalizedPhone,
+          });
+          await writeContactPhoneMapping({
+            contactId,
+            locationId,
+            originalPhone: normalizedPhone,
+          });
+        }
+      }
 
       // Determine the lead phone to use
       let leadPhone: string | null = null;

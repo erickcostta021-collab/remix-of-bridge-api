@@ -26,6 +26,7 @@ Deno.serve(async (req) => {
     }
 
     console.log("Get instances request:", { locationId, contactId, phone });
+    console.log(`Query recebida: phone=${phone}, contactId=${contactId}`);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
