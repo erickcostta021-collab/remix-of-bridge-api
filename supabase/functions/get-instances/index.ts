@@ -116,7 +116,23 @@ Deno.serve(async (req) => {
         resolvedPhone = phoneMapping.original_phone;
         console.log("[get-instances] Found phone in mapping:", phoneMapping.original_phone.slice(0, 15));
       } else {
-        console.log("[get-instances] No phone mapping found for contactId");
+        console.log("[get-instances] No direct phone mapping found for contactId, trying contact_instance_preferences...");
+        
+        // FALLBACK: Try to find the phone from contact_instance_preferences using contact_id
+        const { data: prefWithPhone } = await supabase
+          .from("contact_instance_preferences")
+          .select("lead_phone")
+          .eq("contact_id", contactId)
+          .eq("location_id", locationId)
+          .not("lead_phone", "is", null)
+          .limit(1);
+        
+        if (prefWithPhone && prefWithPhone.length > 0 && prefWithPhone[0].lead_phone) {
+          resolvedPhone = prefWithPhone[0].lead_phone;
+          console.log("[get-instances] Found phone from preferences table:", resolvedPhone?.slice(0, 15));
+        } else {
+          console.log("[get-instances] No phone mapping found for contactId");
+        }
       }
     }
 
