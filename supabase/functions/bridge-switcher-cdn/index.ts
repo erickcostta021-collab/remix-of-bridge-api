@@ -6,12 +6,12 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.2.0
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.2.0');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.2.1
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.2.1');
 
 try {
 (function() {
-    const VERSION = "6.2.0";
+    const VERSION = "6.2.1";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
@@ -766,7 +766,8 @@ try {
             
             const res = await fetch(url, {
                 method: 'GET',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store'  // Garante que não usa cache do navegador
             });
             
             if (!res.ok) return;
@@ -779,8 +780,10 @@ try {
             const select = document.getElementById('bridge-instance-selector');
             const currentDropdownValue = select ? select.value : null;
             
-            // LOG DE COMPARAÇÃO - Sempre usa IDs
-            log.compare(\`Comparando: Dropdown(\${currentDropdownValue ? currentDropdownValue.slice(0,8) : 'null'}) vs Banco(\${serverActiveId.slice(0,8)})\`);
+            // LOG DE COMPARAÇÃO - Com nomes para facilitar debug
+            const currentDropdownName = state.instances.find(function(i) { return i.id === currentDropdownValue; });
+            const serverActiveName = state.instances.find(function(i) { return i.id === serverActiveId; });
+            log.compare(\`Dropdown(\${currentDropdownName ? currentDropdownName.name : 'N/A'}) vs Banco(\${serverActiveName ? serverActiveName.name : 'N/A'})\`);
             
             // FORÇA ATUALIZAÇÃO se dropdown difere do banco, IGNORANDO lastKnownActiveId
             // Isso garante reatividade imediata quando mensagem inbound muda a preferência
