@@ -771,49 +771,78 @@ serve(async (req) => {
       token
     );
 
-    // Save the original WhatsApp JID for all contacts (groups and individuals)
+    // Save the normalized phone for all contacts (groups and individuals)
     // This allows bridge-switcher to find preferences when GHL creates new contactIds for the same phone
     if (contact.id && from) {
       try {
+        // Normalize phone: remove @s.whatsapp.net, @g.us, and any non-digit characters
+        const normalizedPhoneForMapping = from.split("@")[0].replace(/\D/g, "");
+        
         await supabase
           .from("ghl_contact_phone_mapping")
           .upsert({
             contact_id: contact.id,
             location_id: subaccount.location_id,
-            original_phone: from, // Full WhatsApp JID
+            original_phone: normalizedPhoneForMapping, // Normalized phone (digits only)
           }, { onConflict: "contact_id,location_id" });
-        console.log("Saved phone mapping:", { contactId: contact.id, originalPhone: from, isGroup });
+        console.log("[Inbound] Mapeamento de telefone salvo:", { contactId: contact.id.substring(0, 10), phone: normalizedPhoneForMapping, isGroup });
       } catch (e) {
-        console.error("Failed to save phone mapping:", e);
+        console.error("[Inbound] Falha ao salvar mapeamento:", e);
         // Don't fail the message processing
       }
     }
 
     // Upsert contact_instance_preferences to track the last instance used by this lead
-    // Uses lead_phone (the original WhatsApp JID) as primary key so it works across all GHL contacts
+    // Uses lead_phone (normalized phone number) as primary key so it works across all GHL contacts
     // for the same lead (since each instance may create a different GHL contact)
     if (contact.id && instance.id && from) {
       try {
-        console.log("[Webhook Inbound] 🔄 Atualizando contato", contact.id.substring(0, 10), "para a instância", instance.id.substring(0, 10), `(${instance.instance_name})`);
+        // Normalize phone: remove @s.whatsapp.net, @g.us, and any non-digit characters
+        const normalizedPhone = from.split("@")[0].replace(/\D/g, "");
         
-        await supabase
+        console.log("[Inbound] Mensagem recebida da instância:", instance.id, `(${instance.instance_name})`);
+        console.log("[Inbound] Tentando atualizar preferência para o contato:", normalizedPhone);
+        
+        const { error: prefError } = await supabase
           .from("contact_instance_preferences")
           .upsert({
             contact_id: contact.id,
             location_id: subaccount.location_id,
             instance_id: instance.id,
-            lead_phone: from, // The WhatsApp JID (e.g., 5521980014713@s.whatsapp.net)
+            lead_phone: normalizedPhone, // Normalized phone (digits only)
             updated_at: new Date().toISOString(),
           }, { onConflict: "lead_phone,location_id" });
-        console.log("[Webhook Inbound] ✅ Preferência atualizada com sucesso:", { 
-          contactId: contact.id.substring(0, 10), 
-          instanceId: instance.id.substring(0, 10),
-          instanceName: instance.instance_name,
-          locationId: subaccount.location_id.substring(0, 10),
-          leadPhone: from.substring(0, 15)
-        });
+        
+        if (prefError) {
+          console.error("[Inbound] ❌ Erro ao atualizar banco:", prefError.message, prefError.code);
+          
+          // If lead_phone conflict fails, try with contact_id conflict as fallback
+          const { error: fallbackError } = await supabase
+            .from("contact_instance_preferences")
+            .upsert({
+              contact_id: contact.id,
+              location_id: subaccount.location_id,
+              instance_id: instance.id,
+              lead_phone: normalizedPhone,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "contact_id,location_id" });
+          
+          if (fallbackError) {
+            console.error("[Inbound] ❌ Erro fallback ao atualizar:", fallbackError.message);
+          } else {
+            console.log("[Inbound] ✅ Sucesso ao atualizar banco (via fallback contact_id)");
+          }
+        } else {
+          console.log("[Inbound] ✅ Sucesso ao atualizar banco:", { 
+            contactId: contact.id.substring(0, 10), 
+            instanceId: instance.id.substring(0, 10),
+            instanceName: instance.instance_name,
+            locationId: subaccount.location_id.substring(0, 10),
+            leadPhone: normalizedPhone
+          });
+        }
       } catch (e) {
-        console.error("[Webhook Inbound] ❌ Falha ao atualizar preferência:", e);
+        console.error("[Inbound] ❌ Erro ao atualizar:", e);
         // Don't fail the message processing
       }
     }
