@@ -6,21 +6,22 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.3.0
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.3.0');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.4.0
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.4.0');
 
 try {
 (function() {
-    const VERSION = "6.3.0";
+    const VERSION = "6.4.0";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
         save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
         reinject_interval: 200,    // Intervalo para verificar/reinjetar dropdown
-        sync_interval: 2000,       // Sync background mais frequente (era 3000ms)
+        sync_interval: 1500,       // Sync background mais frequente (era 2000ms)
         sync_lock_duration: 100,   // Trava de sincronização
         value_check_delay: 500,    // Delay para validar valor após DOM estabilizar
+        message_debounce: 800,     // Debounce para detectar novas mensagens
         theme: {
             primary: '#22c55e',
             border: '#d1d5db',
@@ -736,11 +737,7 @@ try {
                     const locationId = state.currentLocationId || getLocationId();
                     const contactId = state.currentContactId || getContactIdFromUrl();
                     
-                    // Sempre loga o estado atual para debug
-                    log.compare(\`Tick - Location: \${locationId ? locationId.slice(0,8) : 'N/A'}, Contact: \${contactId ? contactId.slice(0,8) : 'N/A'}\`);
-                    
                     if (!isConversationPage()) {
-                        log.compare('Não é página de conversa, aguardando...');
                         return;
                     }
                     
@@ -771,6 +768,114 @@ try {
             log.success('Background sync configurado (a cada ' + (CONFIG.sync_interval/1000) + 's)');
         } catch (e) {
             log.error('Erro ao configurar background sync:', e.message);
+        }
+    }
+
+    // =====================================================
+    // MESSAGE LISTENER - Detecta novas mensagens na UI
+    // =====================================================
+    function setupMessageListener() {
+        try {
+            let messageDebounceTimer = null;
+            
+            // Observer para detectar novas mensagens na lista de conversa
+            const messageObserver = new MutationObserver(function(mutations) {
+                // Verifica se houve adição de novos elementos de mensagem
+                let hasNewMessage = false;
+                
+                for (const mutation of mutations) {
+                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                        for (const node of mutation.addedNodes) {
+                            if (node.nodeType === 1) { // Element node
+                                // Detecta padrões comuns de mensagens no GHL
+                                const isMessage = node.classList && (
+                                    node.classList.contains('message') ||
+                                    node.classList.contains('conversation-message') ||
+                                    node.classList.contains('hl_conversations--message') ||
+                                    node.querySelector && node.querySelector('[data-message-id]')
+                                );
+                                
+                                // Também detecta containers de mensagens
+                                const isMessageContainer = node.querySelector && (
+                                    node.querySelector('.message') ||
+                                    node.querySelector('[data-message-id]')
+                                );
+                                
+                                if (isMessage || isMessageContainer) {
+                                    hasNewMessage = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (hasNewMessage) break;
+                }
+                
+                if (hasNewMessage) {
+                    // Debounce para evitar múltiplas chamadas
+                    if (messageDebounceTimer) {
+                        clearTimeout(messageDebounceTimer);
+                    }
+                    
+                    messageDebounceTimer = setTimeout(async function() {
+                        log.info('📩 Nova mensagem detectada na UI! Verificando preferência...');
+                        await checkForInboundUpdates();
+                    }, CONFIG.message_debounce);
+                }
+            });
+            
+            // Função para encontrar e observar o container de mensagens
+            function observeMessageContainer() {
+                // Seletores comuns do container de mensagens no GHL
+                const containerSelectors = [
+                    '.conversation-messages',
+                    '.messages-container',
+                    '.hl_conversations--messages',
+                    '[data-testid="conversation-messages"]',
+                    '.conversation-view',
+                    '#conversation-messages'
+                ];
+                
+                for (const selector of containerSelectors) {
+                    const container = document.querySelector(selector);
+                    if (container) {
+                        messageObserver.observe(container, { 
+                            childList: true, 
+                            subtree: true 
+                        });
+                        log.success('Message listener ativo em: ' + selector);
+                        return true;
+                    }
+                }
+                
+                // Fallback: observa o body inteiro (menos eficiente, mas funciona)
+                const conversationArea = document.querySelector('.conversation-wrapper') || 
+                                         document.querySelector('.hl_conversations') ||
+                                         document.querySelector('main');
+                if (conversationArea) {
+                    messageObserver.observe(conversationArea, { 
+                        childList: true, 
+                        subtree: true 
+                    });
+                    log.info('Message listener ativo em fallback container');
+                    return true;
+                }
+                
+                return false;
+            }
+            
+            // Tenta observar imediatamente e depois a cada 2s (caso DOM mude)
+            if (!observeMessageContainer()) {
+                const retryInterval = setInterval(function() {
+                    if (observeMessageContainer()) {
+                        clearInterval(retryInterval);
+                    }
+                }, 2000);
+            }
+            
+            log.success('Sistema de detecção de mensagens configurado');
+        } catch (e) {
+            log.error('Erro ao configurar message listener:', e.message);
         }
     }
 
@@ -864,6 +969,7 @@ try {
             setupNavigationObserver();
             setupPersistentInjection();
             setupBackgroundSync();
+            setupMessageListener();  // NOVO: Detecta mensagens na UI
 
             // Initial load
             if (state.currentLocationId) {
