@@ -48,7 +48,8 @@ try {
         currentContactId: null,
         currentLocationId: null,
         lastUrl: window.location.href,
-        isInjected: false
+        isInjected: false,
+        isSyncingDropdown: false // Flag para evitar loop ao sincronizar visualmente
     };
 
     // =====================================================
@@ -387,12 +388,16 @@ try {
         try {
             log.info(\`🎯 Tentando definir dropdown para: \${activeId}\`);
             
+            // Ativa flag para evitar que o change event salve preferência
+            state.isSyncingDropdown = true;
+            
             // Delay de 300ms para garantir que o GHL terminou de renderizar
             setTimeout(function() {
                 setDropdownValueWithRetry(activeId, 0);
             }, 300);
         } catch (e) {
             log.error('Erro ao atualizar dropdown:', e.message);
+            state.isSyncingDropdown = false;
         }
     }
 
@@ -409,12 +414,15 @@ try {
                     setTimeout(function() {
                         setDropdownValueWithRetry(activeId, attempt + 1);
                     }, RETRY_DELAY);
+                } else {
+                    state.isSyncingDropdown = false;
                 }
                 return;
             }
 
             if (!state.instances.length) {
                 log.warn('Sem instâncias para popular dropdown');
+                state.isSyncingDropdown = false;
                 return;
             }
 
@@ -434,24 +442,21 @@ try {
                     setTimeout(function() {
                         setDropdownValueWithRetry(activeId, attempt + 1);
                     }, RETRY_DELAY);
+                } else {
+                    state.isSyncingDropdown = false;
                 }
                 return;
             }
 
-            // Define o valor
+            // Define o valor diretamente (sem dispatchEvent para evitar loop)
             select.value = activeId;
-            
-            // Força o navegador a reconhecer a mudança
-            select.dispatchEvent(new Event('change', { bubbles: true }));
 
             // Verifica se o valor foi realmente definido
             if (select.value === activeId) {
                 log.success(\`✅ Dropdown sincronizado para: \${activeId}\`);
-                // Remove borda de debug se existir
                 select.style.border = '';
             } else {
-                log.warn(\`⚠️ Dropdown não sincronizou corretamente. Esperado: \${activeId}, Atual: \${select.value}\`);
-                // Adiciona borda vermelha temporária para debug visual
+                log.warn(\`⚠️ Dropdown não sincronizou. Esperado: \${activeId}, Atual: \${select.value}\`);
                 select.style.border = '2px solid red';
                 setTimeout(function() {
                     select.style.border = '';
@@ -461,14 +466,21 @@ try {
                     setTimeout(function() {
                         setDropdownValueWithRetry(activeId, attempt + 1);
                     }, RETRY_DELAY);
+                    return;
                 }
             }
+            
+            // Desativa flag após sincronização bem sucedida
+            state.isSyncingDropdown = false;
+            
         } catch (e) {
             log.error(\`Erro ao definir valor do dropdown (tentativa \${attempt + 1}): \${e.message}\`);
             if (attempt < MAX_ATTEMPTS - 1) {
                 setTimeout(function() {
                     setDropdownValueWithRetry(activeId, attempt + 1);
                 }, RETRY_DELAY);
+            } else {
+                state.isSyncingDropdown = false;
             }
         }
     }
@@ -562,6 +574,11 @@ try {
             select.addEventListener('mousedown', function() { showPhoneNumbers(select); });
             select.addEventListener('blur', function() { hidePhoneNumbers(select); });
             select.addEventListener('change', function(e) {
+                // Ignora se estamos apenas sincronizando visualmente (evita loop)
+                if (state.isSyncingDropdown) {
+                    log.info('Change ignorado (sincronização visual em progresso)');
+                    return;
+                }
                 savePreference(e.target.value);
                 hidePhoneNumbers(select);
             });
