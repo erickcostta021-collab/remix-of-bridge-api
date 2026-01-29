@@ -6,12 +6,12 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.5.0
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.5.0');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.6.0
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.6.0');
 
 try {
 (function() {
-    const VERSION = "6.5.0";
+const VERSION = "6.6.0";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
@@ -28,6 +28,60 @@ try {
             text: '#374151'
         }
     };
+
+    // =====================================================
+    // PHONE EXTRACTION FROM GHL UI
+    // =====================================================
+    function extractPhoneFromGHL() {
+        try {
+            // Multiple selectors to find phone in GHL UI
+            const phoneSelectors = [
+                // Contact card/header phone
+                '[data-testid="contact-phone"]',
+                '.contact-phone',
+                '.phone-number',
+                // Detail panel
+                '.contact-details .phone',
+                '[data-field="phone"]',
+                // Conversation header
+                '.conversation-header .phone',
+                // Fallback: any element with phone pattern
+                'a[href^="tel:"]'
+            ];
+            
+            for (const selector of phoneSelectors) {
+                const el = document.querySelector(selector);
+                if (el) {
+                    const text = el.textContent || el.getAttribute('href') || '';
+                    const phoneMatch = text.match(/[\\d+()\\s-]{10,}/);
+                    if (phoneMatch) {
+                        const phone = phoneMatch[0].replace(/\\D/g, '');
+                        if (phone.length >= 10) {
+                            return phone;
+                        }
+                    }
+                }
+            }
+            
+            // Alternative: Search in page body for phone patterns near contact name
+            const bodyText = document.body.innerText;
+            const phonePatterns = bodyText.match(/\\+?\\d{1,3}[\\s.-]?\\(?\\d{2,3}\\)?[\\s.-]?\\d{4,5}[\\s.-]?\\d{4}/g);
+            if (phonePatterns && phonePatterns.length > 0) {
+                // Return first valid phone found
+                for (const pattern of phonePatterns) {
+                    const phone = pattern.replace(/\\D/g, '');
+                    if (phone.length >= 10 && phone.length <= 15) {
+                        return phone;
+                    }
+                }
+            }
+            
+            return null;
+        } catch (e) {
+            log.error('Erro ao extrair telefone:', e.message);
+            return null;
+        }
+    }
 
     // =====================================================
     // LOGGING PROFISSIONAL
@@ -251,6 +305,7 @@ try {
     async function loadInstances() {
         const locationId = state.currentLocationId || getLocationId();
         const contactId = state.currentContactId || getContactIdFromUrl();
+        const phone = extractPhoneFromGHL();
 
         if (!locationId) {
             log.warn('Sem locationId, abortando loadInstances');
@@ -265,8 +320,11 @@ try {
             if (contactId) {
                 url += \`&contactId=\${contactId}\`;
             }
+            if (phone) {
+                url += \`&phone=\${phone}\`;
+            }
 
-            log.api('Carregando instâncias...', { locationId: locationId.slice(0,8), contactId: contactId ? contactId.slice(0,8) : null });
+            log.api('Carregando instâncias...', { locationId: locationId.slice(0,8), contactId: contactId ? contactId.slice(0,8) : null, phone: phone ? phone.slice(-4) : null });
 
             const res = await fetch(url, {
                 method: 'GET',
@@ -312,6 +370,7 @@ try {
     async function fetchActiveInstance() {
         const locationId = state.currentLocationId;
         const contactId = state.currentContactId;
+        const phone = extractPhoneFromGHL();
 
         if (!locationId || !contactId) {
             log.warn('Sem locationId ou contactId para buscar instância ativa');
@@ -319,9 +378,12 @@ try {
         }
 
         try {
-            const url = \`\${CONFIG.api_url}?locationId=\${locationId}&contactId=\${contactId}\`;
+            let url = \`\${CONFIG.api_url}?locationId=\${locationId}&contactId=\${contactId}\`;
+            if (phone) {
+                url += \`&phone=\${phone}\`;
+            }
             
-            log.api('Buscando instância ativa...', { contactId: contactId.slice(0,8) });
+            log.api('Buscando instância ativa...', { contactId: contactId.slice(0,8), phone: phone ? phone.slice(-4) : null });
 
             const res = await fetch(url, {
                 method: 'GET',
@@ -909,6 +971,7 @@ try {
         try {
             const locationId = state.currentLocationId;
             const contactId = state.currentContactId;
+            const phone = extractPhoneFromGHL();
             
             // Permite verificar mesmo sem contactId (só precisa de locationId)
             if (!locationId) {
@@ -920,6 +983,11 @@ try {
             if (contactId) {
                 url += \`&contactId=\${contactId}\`;
             }
+            if (phone) {
+                url += \`&phone=\${phone}\`;
+            }
+            
+            log.compare('Verificando banco...', { phone: phone ? phone.slice(-4) : null });
             
             const res = await fetch(url, {
                 method: 'GET',
