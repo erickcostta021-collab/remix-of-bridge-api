@@ -6,22 +6,22 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.7.0
-console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.7.0');
+// 🚀 BRIDGE LOADER: Script carregado com sucesso v6.6.0
+console.log('🚀 BRIDGE LOADER: Script carregado com sucesso v6.6.0');
 
 try {
 (function() {
-const VERSION = "6.7.0";
+const VERSION = "6.6.0";
     const LOG_PREFIX = "[Bridge]";
     
     const CONFIG = {
         api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
         save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
         reinject_interval: 200,    // Intervalo para verificar/reinjetar dropdown
-        sync_interval: 2500,       // Sync background (2.5s para detectar inbound)
+        sync_interval: 1500,       // Sync background mais frequente (era 2000ms)
         sync_lock_duration: 100,   // Trava de sincronização
         value_check_delay: 500,    // Delay para validar valor após DOM estabilizar
-        message_debounce: 500,     // Debounce para detectar novas mensagens (mais rápido)
+        message_debounce: 800,     // Debounce para detectar novas mensagens
         theme: {
             primary: '#22c55e',
             border: '#d1d5db',
@@ -30,15 +30,13 @@ const VERSION = "6.7.0";
     };
 
     // =====================================================
-    // PHONE EXTRACTION FROM GHL UI (Enhanced for v6.7.0)
+    // PHONE EXTRACTION FROM GHL UI
     // =====================================================
-    let lastExtractedPhone = null;
-    
     function extractPhoneFromGHL() {
         try {
             // Multiple selectors to find phone in GHL UI
             const phoneSelectors = [
-                // Contact card/header phone - Most common patterns
+                // Contact card/header phone
                 '[data-testid="contact-phone"]',
                 '.contact-phone',
                 '.phone-number',
@@ -47,50 +45,41 @@ const VERSION = "6.7.0";
                 '[data-field="phone"]',
                 // Conversation header
                 '.conversation-header .phone',
-                // Contact info sections
-                '.contact-info .phone',
-                '.contact-details-phone',
-                '[class*="phone"]',
-                // Tel links
+                // Fallback: any element with phone pattern
                 'a[href^="tel:"]'
             ];
             
             for (const selector of phoneSelectors) {
-                const elements = document.querySelectorAll(selector);
-                for (const el of elements) {
+                const el = document.querySelector(selector);
+                if (el) {
                     const text = el.textContent || el.getAttribute('href') || '';
                     const phoneMatch = text.match(/[\\d+()\\s-]{10,}/);
                     if (phoneMatch) {
                         const phone = phoneMatch[0].replace(/\\D/g, '');
-                        if (phone.length >= 10 && phone.length <= 15) {
-                            lastExtractedPhone = phone;
+                        if (phone.length >= 10) {
                             return phone;
                         }
                     }
                 }
             }
             
-            // Enhanced: Look for phone patterns in contact detail panels
-            const detailPanels = document.querySelectorAll('.contact-details, .contact-info, [class*="contact-detail"]');
-            for (const panel of detailPanels) {
-                const text = panel.innerText || '';
-                const phonePatterns = text.match(/\\+?\\d{1,3}[\\s.-]?\\(?\\d{2,3}\\)?[\\s.-]?\\d{4,5}[\\s.-]?\\d{4}/g);
-                if (phonePatterns) {
-                    for (const pattern of phonePatterns) {
-                        const phone = pattern.replace(/\\D/g, '');
-                        if (phone.length >= 10 && phone.length <= 15) {
-                            lastExtractedPhone = phone;
-                            return phone;
-                        }
+            // Alternative: Search in page body for phone patterns near contact name
+            const bodyText = document.body.innerText;
+            const phonePatterns = bodyText.match(/\\+?\\d{1,3}[\\s.-]?\\(?\\d{2,3}\\)?[\\s.-]?\\d{4,5}[\\s.-]?\\d{4}/g);
+            if (phonePatterns && phonePatterns.length > 0) {
+                // Return first valid phone found
+                for (const pattern of phonePatterns) {
+                    const phone = pattern.replace(/\\D/g, '');
+                    if (phone.length >= 10 && phone.length <= 15) {
+                        return phone;
                     }
                 }
             }
             
-            // Return cached phone if available
-            return lastExtractedPhone;
+            return null;
         } catch (e) {
             log.error('Erro ao extrair telefone:', e.message);
-            return lastExtractedPhone;
+            return null;
         }
     }
 
@@ -107,7 +96,7 @@ const VERSION = "6.7.0";
         compare: (msg, data) => console.log(\`\${LOG_PREFIX} 🔍 \${msg}\`, data !== undefined ? data : '')
     };
 
-    log.info(\`Switcher v\${VERSION} - Inbound Auto-Sync\`);
+    log.info(\`Switcher v\${VERSION} - Inbound Reactivity\`);
 
     // =====================================================
     // STATE MANAGEMENT
@@ -915,7 +904,7 @@ const VERSION = "6.7.0";
                     
                     messageDebounceTimer = setTimeout(async function() {
                         log.info('📩 Nova mensagem detectada na UI! Verificando preferência...');
-                        await checkForInboundUpdates(true); // forceCheck = true
+                        await checkForInboundUpdates();
                     }, CONFIG.message_debounce);
                 }
             });
@@ -976,48 +965,29 @@ const VERSION = "6.7.0";
     }
 
     // =====================================================
-    // VERIFICAÇÃO DE ATUALIZAÇÕES INBOUND (REATIVIDADE v6.7.0)
+    // VERIFICAÇÃO DE ATUALIZAÇÕES INBOUND (REATIVIDADE)
     // =====================================================
-    let lastSyncCheck = 0;
-    const MIN_SYNC_INTERVAL = 1000; // Mínimo 1s entre checks para evitar spam
-    
-    async function checkForInboundUpdates(forceCheck = false) {
+    async function checkForInboundUpdates() {
         try {
-            const now = Date.now();
-            
-            // Throttle: evita checks muito frequentes (exceto se forçado)
-            if (!forceCheck && now - lastSyncCheck < MIN_SYNC_INTERVAL) {
-                return;
-            }
-            lastSyncCheck = now;
-            
             const locationId = state.currentLocationId;
             const contactId = state.currentContactId;
             const phone = extractPhoneFromGHL();
             
-            // Precisa de locationId para buscar
+            // Permite verificar mesmo sem contactId (só precisa de locationId)
             if (!locationId) {
+                log.compare('Sem locationId, aguardando...');
                 return;
             }
             
-            // IMPORTANTE: Prioriza phone sobre contactId para busca
-            // O phone é o identificador universal do lead
             let url = \`\${CONFIG.api_url}?locationId=\${locationId}\`;
-            
-            // Adiciona phone PRIMEIRO (prioridade máxima)
+            if (contactId) {
+                url += \`&contactId=\${contactId}\`;
+            }
             if (phone) {
                 url += \`&phone=\${phone}\`;
             }
             
-            // Adiciona contactId como fallback
-            if (contactId) {
-                url += \`&contactId=\${contactId}\`;
-            }
-            
-            // Log compacto para não poluir console
-            if (forceCheck) {
-                log.compare('🔄 Sync forçado...', { phone: phone ? '...' + phone.slice(-4) : null });
-            }
+            log.compare('Verificando banco...', { phone: phone ? phone.slice(-4) : null });
             
             const res = await fetch(url, {
                 method: 'GET',
@@ -1031,30 +1001,29 @@ const VERSION = "6.7.0";
             }
             
             const data = await res.json();
-            const serverActiveId = data.activeInstanceId;
-            
-            if (!serverActiveId) {
-                return;
-            }
+            const serverActiveId = data.activeInstanceId; // SEMPRE um UUID, nunca nome
             
             const select = document.getElementById('bridge-instance-selector');
             const currentDropdownValue = select ? select.value : null;
             
-            // COMPARA: dropdown vs banco
-            const isDifferent = serverActiveId !== currentDropdownValue;
-            const isNewValue = serverActiveId !== state.lastKnownActiveId;
+            // LOG DE COMPARAÇÃO - Com nomes para facilitar debug (SEMPRE LOGA)
+            const currentDropdownName = state.instances.find(function(i) { return i.id === currentDropdownValue; });
+            const serverActiveName = state.instances.find(function(i) { return i.id === serverActiveId; });
+            log.compare(\`Comparando: Dropdown(\${currentDropdownName ? currentDropdownName.name : 'N/A'}) vs Banco(\${serverActiveName ? serverActiveName.name : 'N/A'})\`);
             
-            if (isDifferent && !state.isSyncingDropdown) {
-                // DIFERENÇA DETECTADA - Atualizar dropdown!
-                const serverName = state.instances.find(function(i) { return i.id === serverActiveId; });
-                const currentName = state.instances.find(function(i) { return i.id === currentDropdownValue; });
-                
-                log.info(\`📥 Inbound detectado! \${currentName ? currentName.name : 'N/A'} → \${serverName ? serverName.name : 'N/A'}\`);
-                
-                // Atualiza dropdown com prioridade de update externo
+            if (!serverActiveId) {
+                log.compare('Sem preferência no banco para este contato');
+                return;
+            }
+            
+            // FORÇA ATUALIZAÇÃO se dropdown difere do banco E não estamos em sync
+            // A flag isSyncingDropdown evita conflitos durante updates
+            if (serverActiveId !== currentDropdownValue && !state.isSyncingDropdown) {
+                log.info(\`📥 Diferença detectada! Atualizando dropdown...\`);
+                // requestDropdownSync já atualiza lastKnownActiveId internamente
                 requestDropdownSync(serverActiveId, true);
-            } else if (isNewValue && !state.isSyncingDropdown) {
-                // Atualiza estado interno mesmo se dropdown já correto
+            } else if (serverActiveId !== state.lastKnownActiveId && !state.isSyncingDropdown) {
+                // Atualiza estado interno mesmo se dropdown já está correto
                 state.lastKnownActiveId = serverActiveId;
             }
         } catch (e) {
