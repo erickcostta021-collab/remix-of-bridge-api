@@ -276,11 +276,35 @@ Deno.serve(async (req) => {
           }
         } else {
           // Step 2b: INSERT new record
-          console.log("Inserting new preference for phone:", leadPhone.slice(0, 15));
+          // First, try to get the real contact_id from phone mapping if we don't have one
+          let realContactId = contactId;
+          
+          if (!realContactId || !isValidContactId(realContactId)) {
+            // Look up real contact_id from phone mapping table
+            const { data: mappingData } = await supabase
+              .from("ghl_contact_phone_mapping")
+              .select("contact_id")
+              .eq("location_id", locationId)
+              .or(`original_phone.eq.${leadPhone},original_phone.like.%${leadPhone.slice(-10)}`)
+              .limit(1);
+            
+            if (mappingData && mappingData.length > 0) {
+              realContactId = mappingData[0].contact_id;
+              console.log("Found real contact_id from phone mapping:", realContactId);
+            }
+          }
+          
+          // Use real contact_id if found, otherwise fall back to phone-based ID
+          const finalContactId = realContactId && isValidContactId(realContactId) 
+            ? realContactId 
+            : `phone_${leadPhone}`;
+          
+          console.log("Inserting new preference for phone:", leadPhone.slice(0, 15), "with contact_id:", finalContactId.slice(0, 20));
+          
           const { error: insertError } = await supabase
             .from("contact_instance_preferences")
             .insert({
-              contact_id: contactId || `phone_${leadPhone}`,
+              contact_id: finalContactId,
               location_id: locationId,
               instance_id: instanceId,
               lead_phone: leadPhone,
