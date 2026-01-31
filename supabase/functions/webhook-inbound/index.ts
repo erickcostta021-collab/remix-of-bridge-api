@@ -163,6 +163,79 @@ async function addTagToContact(contactId: string, tag: string, token: string): P
   }
 }
 
+// Helper to get the PRIMARY contact_id from GHL for a phone number
+// This searches ALL contacts with this phone and returns the first one (oldest/primary)
+async function getPrimaryContactId(
+  phone: string,
+  locationId: string,
+  token: string
+): Promise<string | null> {
+  try {
+    // Clean phone number - remove all non-digits
+    const cleanPhone = phone.replace(/\D/g, "");
+    
+    // Try with full phone first
+    let searchResponse = await fetch(
+      `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${cleanPhone}`,
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Version": "2021-07-28",
+          "Accept": "application/json",
+        },
+      }
+    );
+
+    if (searchResponse.ok) {
+      const searchData = await searchResponse.json();
+      if (searchData.contacts && searchData.contacts.length > 0) {
+        // Return the FIRST contact found (oldest/primary)
+        const primaryId = searchData.contacts[0].id;
+        console.log("[getPrimaryContactId] Found primary contact:", { 
+          phone: cleanPhone, 
+          primaryId,
+          totalContacts: searchData.contacts.length 
+        });
+        return primaryId;
+      }
+    }
+
+    // Try with last 10 digits as fallback
+    if (cleanPhone.length > 10) {
+      const last10 = cleanPhone.slice(-10);
+      searchResponse = await fetch(
+        `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${last10}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Version": "2021-07-28",
+            "Accept": "application/json",
+          },
+        }
+      );
+
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        if (searchData.contacts && searchData.contacts.length > 0) {
+          const primaryId = searchData.contacts[0].id;
+          console.log("[getPrimaryContactId] Found primary contact (last10):", { 
+            phone: last10, 
+            primaryId,
+            totalContacts: searchData.contacts.length 
+          });
+          return primaryId;
+        }
+      }
+    }
+
+    console.log("[getPrimaryContactId] No existing contact found for phone:", cleanPhone);
+    return null;
+  } catch (e) {
+    console.error("[getPrimaryContactId] Error searching for contact:", e);
+    return null;
+  }
+}
+
 // Helper to search/create contact in GHL
 async function findOrCreateContact(
   phone: string,
@@ -793,105 +866,111 @@ serve(async (req) => {
     }
 
     // Upsert contact_instance_preferences to track the last instance used by this lead
-    // Uses lead_phone (normalized phone number) as primary key so it works across all GHL contacts
-    // for the same lead (since each instance may create a different GHL contact)
+    // NOVA LÓGICA: Buscar o contact_id PRIMÁRIO (real) do GHL usando o telefone
+    // Isso evita duplicidade quando diferentes instâncias criam contatos com IDs diferentes
     if (contact.id && instance.id && from) {
       try {
         // LIMPEZA TOTAL DO TELEFONE: remove @s.whatsapp.net, @g.us, e TODOS caracteres não-numéricos
         const rawPhone = from.split("@")[0].replace(/\D/g, "");
         
         // Remover prefixo 55 (Brasil) se existir para normalização consistente
-        // Mantém apenas o número "core" para matching agressivo
         const normalizedPhone = rawPhone.startsWith("55") ? rawPhone.slice(2) : rawPhone;
         
         // Extrair últimos 8 dígitos para matching sem o nono dígito (problema clássico BR)
         const last8Digits = normalizedPhone.slice(-8);
         
-        // === LOGS DE DEBUG DETALHADOS ===
-        console.log("=== [INBOUND] ATUALIZANDO PREFERÊNCIA DE INSTÂNCIA ===");
+        // === BUSCAR O CONTACT_ID PRIMÁRIO DO GHL ===
+        // Isso garante que sempre usamos o ID "oficial" da URL do GHL
+        console.log("=== [INBOUND] BUSCANDO CONTACT_ID PRIMÁRIO DO GHL ===");
+        console.log("[Inbound] 📞 Telefone do lead:", rawPhone);
+        
+        const primaryContactId = await getPrimaryContactId(rawPhone, subaccount.location_id, token);
+        
+        // Usar o ID primário se encontrado, senão usar o ID retornado por findOrCreateContact
+        const contactIdToUse = primaryContactId || contact.id;
+        
+        console.log("[Inbound] 📞 Contact ID a ser usado:", { 
+          primaryFromGHL: primaryContactId,
+          fromFindOrCreate: contact.id,
+          final: contactIdToUse
+        });
         console.log("[Inbound] 📞 Instância que processou:", { id: instance.id, name: instance.instance_name });
-        console.log("[Inbound] 📞 Contato GHL:", { contactId: contact.id, phone: phoneNumber });
-        console.log("[Inbound] 📞 Telefone original (from):", from);
-        console.log("[Inbound] 📞 Telefone processado:", { raw: rawPhone, normalized: normalizedPhone, last8: last8Digits });
         console.log("[Inbound] 📞 Location ID:", subaccount.location_id);
         
-        // PRIORIDADE 1: Buscar por contact_id exato (chave primária infalível do GHL)
-        const contactIdStr = contact.id;
-        console.log("[Inbound] 🔍 Buscando registro existente por contact_id:", contactIdStr);
+        // === ESTRATÉGIA DE UPSERT INTELIGENTE ===
+        // PRIORIDADE 1: Buscar registro existente por telefone (mais confiável)
+        console.log("[Inbound] 🔍 Buscando registro existente por telefone:", last8Digits);
         
-        const { data: existingByContactId, error: findByContactError } = await supabase
+        const { data: existingByPhone } = await supabase
           .from("contact_instance_preferences")
-          .select("id, lead_phone")
-          .eq("contact_id", contactIdStr)
+          .select("id, contact_id, lead_phone")
           .eq("location_id", subaccount.location_id)
+          .like("lead_phone", `%${last8Digits}`)
           .limit(1);
         
-        if (existingByContactId && existingByContactId.length > 0) {
-          // Encontrado por contact_id - atualizar diretamente
-          console.log("[Inbound] ✅ Encontrado registro existente por contact_id:", existingByContactId[0].id);
-          console.log("[Inbound] 📊 Lead phone atual no registro:", existingByContactId[0].lead_phone || "NULL");
-          console.log("[Inbound] 📊 Novo lead phone a ser salvo:", normalizedPhone);
+        if (existingByPhone && existingByPhone.length > 0) {
+          // ENCONTRADO POR TELEFONE - Atualizar o registro existente
+          // Também atualiza o contact_id para o ID primário/real
+          console.log("[Inbound] ✅ Encontrado registro existente por telefone:", { 
+            id: existingByPhone[0].id, 
+            oldContactId: existingByPhone[0].contact_id,
+            newContactId: contactIdToUse,
+            storedPhone: existingByPhone[0].lead_phone
+          });
           
-          const { data: updateResult, error: updateError } = await supabase
+          const { error: updateError } = await supabase
             .from("contact_instance_preferences")
             .update({
+              contact_id: contactIdToUse, // Usa o ID primário real
               instance_id: instance.id,
               lead_phone: normalizedPhone,
               updated_at: new Date().toISOString(),
             })
-            .eq("id", existingByContactId[0].id)
-            .select("id, lead_phone, instance_id");
+            .eq("id", existingByPhone[0].id);
           
           if (updateError) {
-            console.error("[Inbound] ❌ Erro ao atualizar por contact_id:", updateError.message);
-            console.error("[Inbound] ❌ Detalhes do erro:", JSON.stringify(updateError));
+            console.error("[Inbound] ❌ Erro ao atualizar por telefone:", updateError.message);
           } else {
-            console.log(`[Inbound] 📌 Atualizado por contact_id: ${normalizedPhone} → Instância ${instance.instance_name}`);
-            console.log("[Inbound] 📊 Resultado do update:", JSON.stringify(updateResult));
+            console.log(`[Inbound] 📌 Atualizado por telefone: ${normalizedPhone} → Instância ${instance.instance_name}`);
+            console.log(`[Inbound] 📌 Contact ID atualizado: ${existingByPhone[0].contact_id} → ${contactIdToUse}`);
           }
         } else {
-          // PRIORIDADE 2: Buscar por telefone com LIKE nos últimos 8 dígitos (ignora nono dígito)
-          console.log("[Inbound] 🔍 Não encontrou por contact_id, buscando por telefone (últimos 8 dígitos):", last8Digits);
+          // PRIORIDADE 2: Buscar por contact_id primário
+          console.log("[Inbound] 🔍 Não encontrou por telefone, buscando por contact_id:", contactIdToUse);
           
-          const { data: existingByPhone, error: findByPhoneError } = await supabase
+          const { data: existingByContactId } = await supabase
             .from("contact_instance_preferences")
-            .select("id, contact_id, lead_phone")
+            .select("id, lead_phone")
+            .eq("contact_id", contactIdToUse)
             .eq("location_id", subaccount.location_id)
-            .like("lead_phone", `%${last8Digits}`)
             .limit(1);
           
-          if (existingByPhone && existingByPhone.length > 0) {
-            // Encontrado por telefone - atualizar
-            console.log("[Inbound] ✅ Encontrado registro existente por telefone:", { 
-              id: existingByPhone[0].id, 
-              storedPhone: existingByPhone[0].lead_phone,
-              matchedWith: last8Digits 
-            });
+          if (existingByContactId && existingByContactId.length > 0) {
+            // Encontrado por contact_id - atualizar
+            console.log("[Inbound] ✅ Encontrado registro existente por contact_id:", existingByContactId[0].id);
             
             const { error: updateError } = await supabase
               .from("contact_instance_preferences")
               .update({
-                contact_id: contactIdStr, // Atualiza também o contact_id mais recente
                 instance_id: instance.id,
-                lead_phone: normalizedPhone, // Atualiza com formato mais recente
+                lead_phone: normalizedPhone,
                 updated_at: new Date().toISOString(),
               })
-              .eq("id", existingByPhone[0].id);
+              .eq("id", existingByContactId[0].id);
             
             if (updateError) {
-              console.error("[Inbound] ❌ Erro ao atualizar por telefone:", updateError.message);
+              console.error("[Inbound] ❌ Erro ao atualizar por contact_id:", updateError.message);
             } else {
-              console.log(`[Inbound] 📌 Atualizado por telefone: ${normalizedPhone} → Instância ${instance.instance_name}`);
+              console.log(`[Inbound] 📌 Atualizado por contact_id: ${normalizedPhone} → Instância ${instance.instance_name}`);
             }
           } else {
-            // PRIORIDADE 3: Não encontrado - inserir novo registro
-            console.log("[Inbound] ❌ Contato não localizado no banco para o telefone:", normalizedPhone);
-            console.log("[Inbound] 🆕 Inserindo novo registro de preferência...");
+            // PRIORIDADE 3: Não encontrado - inserir novo registro com o ID primário
+            console.log("[Inbound] 🆕 Inserindo novo registro com contact_id primário:", contactIdToUse);
             
             const { error: insertError } = await supabase
               .from("contact_instance_preferences")
               .insert({
-                contact_id: contactIdStr,
+                contact_id: contactIdToUse, // USA O ID PRIMÁRIO REAL
                 location_id: subaccount.location_id,
                 instance_id: instance.id,
                 lead_phone: normalizedPhone,
@@ -905,7 +984,7 @@ serve(async (req) => {
                 const { error: upsertError } = await supabase
                   .from("contact_instance_preferences")
                   .upsert({
-                    contact_id: contactIdStr,
+                    contact_id: contactIdToUse,
                     location_id: subaccount.location_id,
                     instance_id: instance.id,
                     lead_phone: normalizedPhone,
@@ -923,6 +1002,32 @@ serve(async (req) => {
             } else {
               console.log(`[Inbound] 📌 Novo registro criado: ${normalizedPhone} → Instância ${instance.instance_name}`);
             }
+          }
+        }
+        
+        // === LIMPEZA DE DUPLICADOS ===
+        // Se existirem múltiplos registros para o mesmo telefone, deletar os extras
+        const { data: allRecordsForPhone } = await supabase
+          .from("contact_instance_preferences")
+          .select("id, contact_id, created_at")
+          .eq("location_id", subaccount.location_id)
+          .like("lead_phone", `%${last8Digits}`)
+          .order("created_at", { ascending: true });
+        
+        if (allRecordsForPhone && allRecordsForPhone.length > 1) {
+          console.log("[Inbound] 🧹 Encontrados múltiplos registros para o mesmo telefone:", allRecordsForPhone.length);
+          // Manter apenas o primeiro (mais antigo) e deletar os outros
+          const toDelete = allRecordsForPhone.slice(1).map(r => r.id);
+          
+          const { error: deleteError } = await supabase
+            .from("contact_instance_preferences")
+            .delete()
+            .in("id", toDelete);
+          
+          if (deleteError) {
+            console.error("[Inbound] ❌ Erro ao limpar duplicados:", deleteError.message);
+          } else {
+            console.log("[Inbound] 🧹 Duplicados removidos:", toDelete.length);
           }
         }
         
