@@ -171,96 +171,64 @@ async function getPrimaryContactId(
   token: string
 ): Promise<string | null> {
   try {
-    // Normalização agressiva (digits only)
-    const digits = phone.replace(/\D/g, "");
-    const no55 = digits.startsWith("55") ? digits.slice(2) : digits;
-
-    // Monta candidatos (GHL varia bastante o matching do query)
-    const candidatesRaw = [
-      digits,
-      `+${digits}`,
-      no55,
-      `+${no55}`,
-      no55.length >= 11 ? no55.slice(-11) : null,
-      no55.length >= 10 ? no55.slice(-10) : null,
-      digits.length >= 11 ? digits.slice(-11) : null,
-      digits.length >= 10 ? digits.slice(-10) : null,
-    ].filter(Boolean) as string[];
-
-    const seen = new Set<string>();
-    const candidates = candidatesRaw.filter((c) => {
-      const key = c.trim();
-      if (!key) return false;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    for (const q of candidates) {
-      const url = `https://services.leadconnectorhq.com/contacts/?locationId=${encodeURIComponent(
-        locationId
-      )}&query=${encodeURIComponent(q)}`;
-
-      const searchResponse = await fetch(url, {
+    // Clean phone number - remove all non-digits
+    const cleanPhone = phone.replace(/\D/g, "");
+    
+    // Try with full phone first
+    let searchResponse = await fetch(
+      `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${cleanPhone}`,
+      {
         headers: {
-          Authorization: `Bearer ${token}`,
-          Version: "2021-07-28",
-          Accept: "application/json",
+          "Authorization": `Bearer ${token}`,
+          "Version": "2021-07-28",
+          "Accept": "application/json",
         },
-      });
-
-      // Sempre logar status quando não achou, pra facilitar debug
-      const text = await searchResponse.text();
-      if (!searchResponse.ok) {
-        console.log("[getPrimaryContactId] Search failed:", {
-          q,
-          status: searchResponse.status,
-          body: text.substring(0, 300),
-        });
-        continue;
       }
+    );
 
-      let searchData: any = null;
-      try {
-        searchData = JSON.parse(text);
-      } catch {
-        console.log("[getPrimaryContactId] Non-JSON response:", {
-          q,
-          body: text.substring(0, 300),
-        });
-        continue;
-      }
-
-      const contacts = Array.isArray(searchData?.contacts) ? searchData.contacts : [];
-      if (contacts.length === 0) {
-        console.log("[getPrimaryContactId] No contacts for query:", { q });
-        continue;
-      }
-
-      // Preferir o contato mais antigo, quando houver campo de data.
-      // Campos comuns: dateAdded, createdAt, created_at
-      const sorted = [...contacts].sort((a, b) => {
-        const da = Date.parse(a?.dateAdded || a?.createdAt || a?.created_at || "") || 0;
-        const db = Date.parse(b?.dateAdded || b?.createdAt || b?.created_at || "") || 0;
-        return da - db;
-      });
-
-      const primaryId = sorted[0]?.id || null;
-      if (primaryId) {
-        console.log("[getPrimaryContactId] Found primary contact:", {
-          input: digits,
-          q,
+    if (searchResponse.ok) {
+      const searchData = await searchResponse.json();
+      if (searchData.contacts && searchData.contacts.length > 0) {
+        // Return the FIRST contact found (oldest/primary)
+        const primaryId = searchData.contacts[0].id;
+        console.log("[getPrimaryContactId] Found primary contact:", { 
+          phone: cleanPhone, 
           primaryId,
-          totalContacts: contacts.length,
+          totalContacts: searchData.contacts.length 
         });
         return primaryId;
       }
     }
 
-    console.log("[getPrimaryContactId] No existing contact found:", {
-      input: digits,
-      candidates,
-    });
+    // Try with last 10 digits as fallback
+    if (cleanPhone.length > 10) {
+      const last10 = cleanPhone.slice(-10);
+      searchResponse = await fetch(
+        `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${last10}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Version": "2021-07-28",
+            "Accept": "application/json",
+          },
+        }
+      );
+
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        if (searchData.contacts && searchData.contacts.length > 0) {
+          const primaryId = searchData.contacts[0].id;
+          console.log("[getPrimaryContactId] Found primary contact (last10):", { 
+            phone: last10, 
+            primaryId,
+            totalContacts: searchData.contacts.length 
+          });
+          return primaryId;
+        }
+      }
+    }
+
+    console.log("[getPrimaryContactId] No existing contact found for phone:", cleanPhone);
     return null;
   } catch (e) {
     console.error("[getPrimaryContactId] Error searching for contact:", e);
