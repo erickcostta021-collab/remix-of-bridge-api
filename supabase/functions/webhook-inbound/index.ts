@@ -684,8 +684,10 @@ serve(async (req) => {
     
     // Use group name for contact creation with 👥 emoji prefix for groups
     const pushName = isGroupChat ? `👥 ${groupName || "Grupo"}` : individualName;
-    // Store member name for group message formatting
+    // Store member name and phone for group message formatting
     const memberName = isGroupChat ? (senderName || "") : "";
+    // Extract member phone from sender field (JID format: 5521980014713@s.whatsapp.net)
+    const memberPhone = isGroupChat ? (messageData.sender || "").split("@")[0].replace(/\D/g, "") : "";
     
     // Detect media vs text message - including stickers
     const contentRaw = messageData.content;
@@ -1167,11 +1169,14 @@ serve(async (req) => {
       // For group messages, format with member identification prefix with line break for clear reading
       let formattedMessage = textMessage;
       let formattedCaption = textMessage || undefined;
+      // Format group messages with member phone and name: (5521980014713)-👤[ Érick ]:
       if (isGroupChat && memberName && textMessage) {
-        formattedMessage = `👤[ ${memberName} ]:\n${textMessage}`;
+        const memberPrefix = memberPhone ? `(${memberPhone})-` : "";
+        formattedMessage = `${memberPrefix}👤[ ${memberName} ]:\n${textMessage}`;
       }
       if (isGroupChat && memberName && formattedCaption) {
-        formattedCaption = `👤[ ${memberName} ]:\n${formattedCaption}`;
+        const memberPrefix = memberPhone ? `(${memberPhone})-` : "";
+        formattedCaption = `${memberPrefix}👤[ ${memberName} ]:\n${formattedCaption}`;
       }
       
       if (isMediaMessage && publicMediaUrl) {
