@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: Telefone como ID + Visualização de Números v6.8.1
-console.log('🚀 BRIDGE LOADER: Script carregado v6.8.1');
+// 🚀 BRIDGE LOADER: v6.8.3 - Carregamento Robusto
+console.log('🚀 BRIDGE LOADER: v6.8.3 Iniciado');
 
 try {
     (function() {
@@ -21,115 +21,135 @@ try {
         let state = {
             instances: [],
             lastKnownActiveId: null,
-            isSyncing: false
+            isSyncing: false,
+            lastPhoneFound: null,
+            locationId: null
+        };
+
+        const log = {
+            info: (msg, data) => console.log(\`\${LOG_PREFIX} ℹ️ \${msg}\`, data || ''),
+            success: (msg, data) => console.log(\`\${LOG_PREFIX} ✅ \${msg}\`, data || ''),
+            warn: (msg, data) => console.warn(\`\${LOG_PREFIX} ⚠️ \${msg}\`, data || ''),
+            error: (msg, data) => console.error(\`\${LOG_PREFIX} ❌ \${msg}\`, data || '')
         };
 
         function extractPhoneFromGHL() {
-            const phoneSelectors = ['[data-testid="contact-phone"]', '.contact-phone', '.phone-number', '.contact-details .phone', 'a[href^="tel:"]'];
-            for (const selector of phoneSelectors) {
-                const el = document.querySelector(selector);
+            const selectors = ['[data-testid="contact-phone"]', '.contact-phone', '.phone-number', '.contact-details .phone', 'a[href^="tel:"]'];
+            for (const s of selectors) {
+                const el = document.querySelector(s);
                 if (el) {
-                    const text = el.textContent || el.getAttribute('href') || '';
-                    const phone = text.replace(/\\D/g, '');
+                    const phone = (el.textContent || el.getAttribute('href') || '').replace(/\\D/g, '');
                     if (phone.length >= 10) return phone;
                 }
             }
             return null;
         }
 
-        const log = {
-            info: (msg, data) => console.log(\`\${LOG_PREFIX} ℹ️ \${msg}\`, data || ''),
-            success: (msg, data) => console.log(\`\${LOG_PREFIX} ✅ \${msg}\`, data || ''),
-            error: (msg, data) => console.error(\`\${LOG_PREFIX} ❌ \${msg}\`, data || '')
-        };
-
-        // =====================================================
-        // VISUAL: MOSTRAR/ESCONDER TELEFONES NO DROPDOWN
-        // =====================================================
         function renderOptions(select, showPhones = false) {
-            const currentValue = select.value;
+            if (state.instances.length === 0) {
+                select.innerHTML = '<option>Carregando...</option>';
+                return;
+            }
+            const currentValue = select.value || state.lastKnownActiveId;
             select.innerHTML = state.instances.map(i => {
                 const label = (showPhones && i.phone) ? \`\${i.name} (\${i.phone})\` : i.name;
                 return \`<option value="\${i.id}" \${i.id === currentValue ? 'selected' : ''}>\${label}</option>\`;
             }).join('');
         }
 
-        async function savePreference(instanceId) {
-            const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-            const phone = extractPhoneFromGHL();
-            if (!instanceId || !locationId || !phone) return;
-
+        async function loadInitialData() {
+            const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+            if (!locId) return;
+            state.locationId = locId;
             try {
-                const payload = { instanceId, locationId, phone };
-                log.info(\`📡 Salvando para o telefone: \${phone}\`);
-                
-                await fetch(CONFIG.save_url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                
-                state.lastKnownActiveId = instanceId;
-                log.success('Salvo!');
-            } catch (e) { log.error('Erro ao salvar'); }
+                log.info('Buscando lista de instâncias...');
+                const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locId}\`);
+                const data = await res.json();
+                if (data.instances) {
+                    state.instances = data.instances;
+                    log.success(\`\${data.instances.length} instâncias encontradas\`);
+                    const select = document.getElementById('bridge-instance-selector');
+                    if (select) renderOptions(select, false);
+                }
+            } catch (e) { log.error('Erro ao carregar instâncias'); }
         }
 
-        async function fetchSync() {
-            const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+        async function syncActiveContact() {
             const phone = extractPhoneFromGHL();
-            if (!locationId || !phone || state.isSyncing) return;
+            if (!state.locationId || !phone || state.isSyncing) return;
+            if (phone === state.lastPhoneFound) return;
 
             try {
-                const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locationId}&phone=\${phone}\`);
+                state.lastPhoneFound = phone;
+                log.info(\`Sincronizando contato: \${phone}\`);
+                const res = await fetch(\`\${CONFIG.api_url}?locationId=\${state.locationId}&phone=\${phone}\`);
                 const data = await res.json();
                 
-                if (data.instances) state.instances = data.instances;
-                
-                if (data.activeInstanceId && data.activeInstanceId !== state.lastKnownActiveId) {
+                if (data.activeInstanceId) {
                     state.lastKnownActiveId = data.activeInstanceId;
                     const select = document.getElementById('bridge-instance-selector');
                     if (select) {
                         state.isSyncing = true;
                         select.value = data.activeInstanceId;
-                        renderOptions(select, false);
-                        setTimeout(() => { state.isSyncing = false; }, 500);
+                        state.isSyncing = false;
                     }
                 }
             } catch (e) {}
         }
 
+        async function savePreference(instanceId) {
+            const phone = extractPhoneFromGHL();
+            if (!instanceId || !state.locationId || !phone) {
+                log.warn('Não salvou: telefone não encontrado na tela');
+                return;
+            }
+            try {
+                await fetch(CONFIG.save_url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ instanceId, locationId: state.locationId, phone })
+                });
+                state.lastKnownActiveId = instanceId;
+                log.success('Salvo com sucesso');
+            } catch (e) { log.error('Erro ao salvar'); }
+        }
+
         function injectDropdown() {
             if (document.getElementById('bridge-api-container')) return;
-            const actionBar = document.querySelector('.msg-composer-actions') || document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
-            if (!actionBar) return;
+            // Seletores expandidos para GHL V2
+            const actionBar = document.querySelector('.msg-composer-actions') || 
+                              document.querySelector('.flex.flex-row.gap-2.items-center.pl-2') ||
+                              document.querySelector('.ghl-footer') ||
+                              document.getElementById('message-input-container');
+            if (!actionBar) {
+                // Log silencioso para não poluir, mas útil para debug
+                return; 
+            }
 
+            log.info('Injetando dropdown na barra de ações');
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
-            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #fff; border: 1px solid #d1d5db; border-radius: 20px;';
+            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #fff; border: 1px solid #d1d5db; border-radius: 20px; z-index: 10;';
             container.innerHTML = \`<div style="width:8px; height:8px; background:#22c55e; border-radius:50%; margin-right:6px;"></div><select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:700; cursor:pointer; max-width:150px;"></select>\`;
             
             actionBar.appendChild(container);
             const select = container.querySelector('select');
-
-            // EVENTOS PARA MOSTRAR TELEFONES
             select.addEventListener('mousedown', () => renderOptions(select, true));
             select.addEventListener('blur', () => renderOptions(select, false));
-            select.addEventListener('change', (e) => {
-                savePreference(e.target.value);
-                renderOptions(select, false);
-            });
-
-            fetchSync();
+            select.addEventListener('change', (e) => savePreference(e.target.value));
+            renderOptions(select, false);
+            if (state.instances.length === 0) loadInitialData();
         }
 
+        // Loop principal
         setInterval(() => {
-            if (window.location.pathname.includes('/conversations/')) {
+            if (window.location.pathname.includes('/conversations')) {
                 injectDropdown();
-                fetchSync();
+                syncActiveContact();
             }
         }, CONFIG.sync_interval);
     })();
-} catch (e) { console.error('Erro Bridge:', e); }
+} catch (e) { console.error('Erro Crítico Bridge:', e); }
 `;
 
 Deno.serve(async (req) => {
