@@ -1,14 +1,13 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS", // Adicionei POST aqui
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Credentials": "true",
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.8.3 - Carregamento Robusto
-console.log('🚀 BRIDGE LOADER: v6.8.3 Iniciado');
+// 🚀 BRIDGE LOADER: Telefone como ID + Visualização de Números v6.8.1
+console.log('🚀 BRIDGE LOADER: Script carregado v6.8.1');
 
 try {
     (function() {
@@ -22,136 +21,127 @@ try {
         let state = {
             instances: [],
             lastKnownActiveId: null,
-            isSyncing: false,
-            lastPhoneFound: null,
-            locationId: null
-        };
-
-        const log = {
-            info: (msg, data) => console.log(LOG_PREFIX + ' ℹ️ ' + msg, data || ''),
-            success: (msg, data) => console.log(LOG_PREFIX + ' ✅ ' + msg, data || ''),
-            warn: (msg, data) => console.warn(LOG_PREFIX + ' ⚠️ ' + msg, data || ''),
-            error: (msg, data) => console.error(LOG_PREFIX + ' ❌ ' + msg, data || '')
+            isSyncing: false
         };
 
         function extractPhoneFromGHL() {
-            const selectors = ['[data-testid="contact-phone"]', '.contact-phone', '.phone-number', '.contact-details .phone', 'a[href^="tel:"]'];
-            for (const s of selectors) {
-                const el = document.querySelector(s);
+            const phoneSelectors = ['[data-testid="contact-phone"]', '.contact-phone', '.phone-number', '.contact-details .phone', 'a[href^="tel:"]'];
+            for (const selector of phoneSelectors) {
+                const el = document.querySelector(selector);
                 if (el) {
-                    const phone = (el.textContent || el.getAttribute('href') || '').replace(/\\D/g, '');
+                    const text = el.textContent || el.getAttribute('href') || '';
+                    const phone = text.replace(/\\D/g, '');
                     if (phone.length >= 10) return phone;
                 }
             }
             return null;
         }
 
+        const log = {
+            info: (msg, data) => console.log(\`\${LOG_PREFIX} ℹ️ \${msg}\`, data || ''),
+            success: (msg, data) => console.log(\`\${LOG_PREFIX} ✅ \${msg}\`, data || ''),
+            error: (msg, data) => console.error(\`\${LOG_PREFIX} ❌ \${msg}\`, data || '')
+        };
+
+        // =====================================================
+        // VISUAL: MOSTRAR/ESCONDER TELEFONES NO DROPDOWN
+        // =====================================================
         function renderOptions(select, showPhones = false) {
-            if (state.instances.length === 0) {
-                select.innerHTML = '<option>Carregando...</option>';
-                return;
-            }
-            const currentValue = select.value || state.lastKnownActiveId;
+            const currentValue = select.value;
             select.innerHTML = state.instances.map(i => {
-                const label = (showPhones && i.phone) ? i.name + ' (' + i.phone + ')' : i.name;
-                return '<option value="' + i.id + '"' + (i.id === currentValue ? ' selected' : '') + '>' + label + '</option>';
+                const label = (showPhones && i.phone) ? \`\${i.name} (\${i.phone})\` : i.name;
+                return \`<option value="\${i.id}" \${i.id === currentValue ? 'selected' : ''}>\${label}</option>\`;
             }).join('');
         }
 
-        async function loadInitialData() {
-            const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-            if (!locId) return;
-            state.locationId = locId;
+        async function savePreference(instanceId) {
+            const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+            const phone = extractPhoneFromGHL();
+            if (!instanceId || !locationId || !phone) return;
 
             try {
-                log.info('Buscando lista de instâncias...');
-                const res = await fetch(CONFIG.api_url + '?locationId=' + locId);
-                const data = await res.json();
-                if (data.instances) {
-                    state.instances = data.instances;
-                    log.success(data.instances.length + ' instâncias encontradas');
-                    const select = document.getElementById('bridge-instance-selector');
-                    if (select) renderOptions(select, false);
-                }
-            } catch (e) { log.error('Erro ao carregar instâncias'); }
+                const payload = { instanceId, locationId, phone };
+                log.info(\`📡 Salvando para o telefone: \${phone}\`);
+                
+                await fetch(CONFIG.save_url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                state.lastKnownActiveId = instanceId;
+                log.success('Salvo!');
+            } catch (e) { log.error('Erro ao salvar'); }
         }
 
-        async function syncActiveContact() {
+        async function fetchSync() {
+            const locationId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
             const phone = extractPhoneFromGHL();
-            if (!state.locationId || !phone || state.isSyncing) return;
-            if (phone === state.lastPhoneFound) return;
+            if (!locationId || !phone || state.isSyncing) return;
 
             try {
-                state.lastPhoneFound = phone;
-                log.info('Sincronizando contato: ' + phone);
-                const res = await fetch(CONFIG.api_url + '?locationId=' + state.locationId + '&phone=' + phone);
+                const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locationId}&phone=\${phone}\`);
                 const data = await res.json();
                 
-                if (data.activeInstanceId) {
+                if (data.instances) state.instances = data.instances;
+                
+                if (data.activeInstanceId && data.activeInstanceId !== state.lastKnownActiveId) {
                     state.lastKnownActiveId = data.activeInstanceId;
                     const select = document.getElementById('bridge-instance-selector');
                     if (select) {
                         state.isSyncing = true;
                         select.value = data.activeInstanceId;
-                        state.isSyncing = false;
+                        renderOptions(select, false);
+                        setTimeout(() => { state.isSyncing = false; }, 500);
                     }
                 }
             } catch (e) {}
         }
 
-        async function savePreference(instanceId) {
-            const phone = extractPhoneFromGHL();
-            if (!instanceId || !state.locationId || !phone) {
-                log.warn('Não salvou: telefone não encontrado na tela');
-                return;
-            }
-
-            try {
-                await fetch(CONFIG.save_url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ instanceId, locationId: state.locationId, phone })
-                });
-                state.lastKnownActiveId = instanceId;
-                log.success('Salvo com sucesso');
-            } catch (e) { log.error('Erro ao salvar'); }
-        }
-
         function injectDropdown() {
             if (document.getElementById('bridge-api-container')) return;
+            const actionBar = document.querySelector('.msg-composer-actions') || document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
+            if (!actionBar) return;
 
-            const actionBar = document.querySelector('.msg-composer-actions') || 
-                              document.querySelector('.flex.flex-row.gap-2.items-center.pl-2') ||
-                              document.querySelector('.ghl-footer') ||
-                              document.querySelector('#message-input-container');
-
-            if (!actionBar) return; 
-
-            log.info('Injetando dropdown na barra de ações');
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
-            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #fff; border: 1px solid #d1d5db; border-radius: 20px; z-index: 10;';
-            container.innerHTML = '<div style="width:8px; height:8px; background:#22c55e; border-radius:50%; margin-right:6px;"></div><select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:700; cursor:pointer; max-width:150px;"></select>';
+            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #fff; border: 1px solid #d1d5db; border-radius: 20px;';
+            container.innerHTML = \`<div style="width:8px; height:8px; background:#22c55e; border-radius:50%; margin-right:6px;"></div><select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:700; cursor:pointer; max-width:150px;"></select>\`;
             
             actionBar.appendChild(container);
             const select = container.querySelector('select');
 
+            // EVENTOS PARA MOSTRAR TELEFONES
             select.addEventListener('mousedown', () => renderOptions(select, true));
             select.addEventListener('blur', () => renderOptions(select, false));
-            select.addEventListener('change', (e) => savePreference(e.target.value));
+            select.addEventListener('change', (e) => {
+                savePreference(e.target.value);
+                renderOptions(select, false);
+            });
 
-            renderOptions(select, false);
-            if (state.instances.length === 0) loadInitialData();
+            fetchSync();
         }
 
         setInterval(() => {
-            if (window.location.pathname.includes('/conversations')) {
+            if (window.location.pathname.includes('/conversations/')) {
                 injectDropdown();
-                syncActiveContact();
+                fetchSync();
             }
         }, CONFIG.sync_interval);
-
     })();
-} catch (e) { console.error('Erro Crítico Bridge:', e); }
-\`;
+} catch (e) { console.error('Erro Bridge:', e); }
 `;
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  return new Response(BRIDGE_SWITCHER_SCRIPT, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Cache-Control": "public, max-age=60, must-revalidate",
+    },
+  });
+});
