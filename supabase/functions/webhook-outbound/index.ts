@@ -62,7 +62,8 @@ async function getValidToken(supabase: any, subaccount: any, settings: any): Pro
   return accessToken;
 }
 
-async function fetchGhlContactPhone(token: string, contactId: string): Promise<string> {
+// Returns { phone, email } from GHL contact
+async function fetchGhlContact(token: string, contactId: string): Promise<{ phone: string; email: string }> {
   const contactRes = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`,
     {
       headers: {
@@ -76,19 +77,21 @@ async function fetchGhlContactPhone(token: string, contactId: string): Promise<s
   const bodyText = await contactRes.text();
   if (!contactRes.ok) {
     console.error("GHL contact lookup failed:", { status: contactRes.status, body: bodyText.substring(0, 300) });
-    return "";
+    return { phone: "", email: "" };
   }
 
   try {
     const parsed = JSON.parse(bodyText);
-    return String(
+    const phone = String(
       parsed?.contact?.phone ||
         parsed?.contact?.phoneNumber ||
         parsed?.contact?.primaryPhone ||
         ""
     );
+    const email = String(parsed?.contact?.email || "");
+    return { phone, email };
   } catch {
-    return "";
+    return { phone: "", email: "" };
   }
 }
 
@@ -482,8 +485,15 @@ serve(async (req: Request) => {
           if (settings?.ghl_client_id && settings?.ghl_client_secret) {
             const token = await getValidToken(supabase, subaccount, settings);
             if (token) {
-              const contactPhone = await fetchGhlContactPhone(token, contactId);
-              if (contactPhone) targetPhone = contactPhone;
+              const contactData = await fetchGhlContact(token, contactId);
+              
+              // If email contains @g.us, it's a group JID - use it directly!
+              if (contactData.email && contactData.email.includes("@g.us")) {
+                targetPhone = contactData.email;
+                console.log("Using group JID from contact email field:", { contactId, groupJid: targetPhone });
+              } else if (contactData.phone) {
+                targetPhone = contactData.phone;
+              }
             }
           }
         } catch (e) {
