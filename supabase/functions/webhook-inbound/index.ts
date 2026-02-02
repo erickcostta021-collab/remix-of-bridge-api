@@ -241,7 +241,8 @@ async function findOrCreateContact(
   phone: string,
   name: string,
   locationId: string,
-  token: string
+  token: string,
+  email?: string
 ): Promise<any> {
   // Search for existing contact
   const searchResponse = await fetch(
@@ -258,11 +259,43 @@ async function findOrCreateContact(
   if (searchResponse.ok) {
     const searchData = await searchResponse.json();
     if (searchData.contacts && searchData.contacts.length > 0) {
-      return searchData.contacts[0];
+      const existingContact = searchData.contacts[0];
+      
+      // If email is provided (group chat) and contact doesn't have it, update the contact
+      if (email && !existingContact.email) {
+        try {
+          await fetch(`https://services.leadconnectorhq.com/contacts/${existingContact.id}`, {
+            method: "PUT",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Version": "2021-07-28",
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify({ email }),
+          });
+          console.log("Updated contact email with group ID:", email);
+        } catch (e) {
+          console.error("Failed to update contact email:", e);
+        }
+      }
+      
+      return existingContact;
     }
   }
 
-  // Create new contact
+  // Create new contact - include email if provided
+  const contactPayload: Record<string, unknown> = {
+    firstName: name || "WhatsApp Contact",
+    phone: `+${phone}`,
+    locationId,
+    source: "WhatsApp Integration",
+  };
+  
+  if (email) {
+    contactPayload.email = email;
+  }
+
   const createResponse = await fetch("https://services.leadconnectorhq.com/contacts/", {
     method: "POST",
     headers: {
@@ -271,12 +304,7 @@ async function findOrCreateContact(
       "Content-Type": "application/json",
       "Accept": "application/json",
     },
-    body: JSON.stringify({
-      firstName: name || "WhatsApp Contact",
-      phone: `+${phone}`,
-      locationId,
-      source: "WhatsApp Integration",
-    }),
+    body: JSON.stringify(contactPayload),
   });
 
   if (!createResponse.ok) {
@@ -839,11 +867,14 @@ serve(async (req) => {
     const token = await getValidToken(supabase, subaccount, settings);
 
     // Find or create contact
+    // For groups, pass the group JID (e.g., 120363426159277315@g.us) as email field
+    const groupEmailId = isGroupChat ? from : undefined;
     const contact = await findOrCreateContact(
       phoneNumber,
       pushName,
       subaccount.location_id,
-      token
+      token,
+      groupEmailId
     );
 
     // Save the normalized phone for all contacts (groups and individuals)
