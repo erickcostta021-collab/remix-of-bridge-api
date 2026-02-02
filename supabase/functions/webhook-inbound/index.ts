@@ -764,7 +764,10 @@ serve(async (req) => {
     const isGroup = from.endsWith("@g.us");
 
     // Extract phone number
-    const phoneNumber = from.split("@")[0];
+    // For groups: use first 13 digits of group JID as "simulated phone" (e.g., 1203634261592)
+    // This creates a phone-like number while the full JID goes to the email field
+    const rawJid = from.split("@")[0];
+    const phoneNumber = isGroup ? rawJid.slice(0, 13) : rawJid;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
