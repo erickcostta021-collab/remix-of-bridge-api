@@ -764,10 +764,11 @@ serve(async (req) => {
     const isGroup = from.endsWith("@g.us");
 
     // Extract phone number
-    // For groups: use first 13 digits of group JID as "simulated phone" (e.g., 1203634261592)
-    // This creates a phone-like number while the full JID goes to the email field
+    // For groups: use ONLY 11 digits as "simulated phone" to satisfy GHL phone validation,
+    // while the full original group JID continues to be stored in the contact email field.
     const rawJid = from.split("@")[0];
-    const phoneNumber = isGroup ? rawJid.slice(0, 13) : rawJid;
+    const rawDigits = rawJid.replace(/\D/g, "");
+    const phoneNumber = isGroup ? rawDigits.slice(0, 11) : rawJid;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
