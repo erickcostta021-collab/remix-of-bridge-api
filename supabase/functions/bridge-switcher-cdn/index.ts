@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.8.4 - Debug Ativado
-console.log('🚀 BRIDGE LOADER: v6.8.4 Iniciado');
+// 🚀 BRIDGE LOADER: v6.8.5 - Busca Agressiva
+console.log('🚀 BRIDGE LOADER: v6.8.5 Iniciado');
 
 try {
     (function() {
@@ -20,10 +20,8 @@ try {
 
         let state = {
             instances: [],
-            lastKnownActiveId: null,
-            isSyncing: false,
-            lastPhoneFound: null,
-            locationId: null
+            locationId: null,
+            lastPhoneFound: null
         };
 
         const log = {
@@ -34,40 +32,40 @@ try {
         };
 
         function extractPhoneFromGHL() {
-            // Seletores otimizados para GHL V2
-            const selectors = [
-                '[data-testid="contact-phone"]', 
-                '.contact-phone', 
-                '.phone-number', 
-                'a[href^="tel:"]',
-                '.contact-details .phone'
-            ];
-            for (const s of selectors) {
-                const el = document.querySelector(s);
-                if (el) {
-                    const text = el.textContent || el.getAttribute('href') || '';
-                    const phone = text.replace(/\\D/g, ''); // CORRIGIDO: \\D simples
-                    if (phone.length >= 10) return phone;
-                }
+            // 1. Tenta pegar pelo atributo específico de telefone do GHL V2
+            let phoneEl = document.querySelector('[data-testid="contact-phone"]') || 
+                          document.querySelector('a[href^="tel:"]') ||
+                          document.querySelector('#view-contact-phone');
+
+            let rawPhone = "";
+
+            if (phoneEl) {
+                rawPhone = phoneEl.textContent || phoneEl.getAttribute('href') || "";
+            } else {
+                // 2. Busca desesperada: Procura qualquer texto que pareça um número longo na barra lateral
+                const sidebar = document.querySelector('.contact-details') || document.body;
+                const matches = sidebar.innerText.match(/\\+?\\d[\\d\\s\\-\\(\\)]{9,}\\d/g);
+                if (matches) rawPhone = matches[0];
             }
-            return null;
+
+            const cleanPhone = rawPhone.replace(/\\D/g, '');
+            
+            // Se o número for brasileiro e tiver sem o 55, nós adicionamos
+            if (cleanPhone.length === 11 && !cleanPhone.startsWith('55')) {
+                return '55' + cleanPhone;
+            }
+
+            return cleanPhone.length >= 10 ? cleanPhone : null;
         }
 
         async function savePreference(instanceId) {
             const phone = extractPhoneFromGHL();
+            const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
             
-            log.info('Tentando salvar preferência...', { 
-                instance: instanceId, 
-                phone: phone, 
-                location: state.locationId 
-            });
+            log.info('Tentativa de salvamento:', { instanceId, phone, locId });
 
-            if (!instanceId || !state.locationId || !phone) {
-                log.warn('Abortado: Dados insuficientes para salvar.', {
-                    hasInstance: !!instanceId,
-                    hasLocation: !!state.locationId,
-                    hasPhone: !!phone
-                });
+            if (!instanceId || !locId || !phone) {
+                alert("⚠️ Não foi possível identificar o telefone do lead nesta tela.");
                 return;
             }
 
@@ -75,37 +73,30 @@ try {
                 const response = await fetch(CONFIG.save_url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ instanceId, locationId: state.locationId, phone })
+                    body: JSON.stringify({ instanceId, locationId: locId, phone })
                 });
                 
                 if (response.ok) {
-                    state.lastKnownActiveId = instanceId;
-                    log.success('Preferência salva no banco de dados!');
+                    log.success('Instância alterada com sucesso!');
+                    // Feedback visual para o usuário
+                    const sel = document.getElementById('bridge-api-container');
+                    sel.style.background = '#dcfce7'; 
+                    setTimeout(() => sel.style.background = '#fff', 2000);
                 } else {
-                    log.error('Erro na resposta do servidor: ' + response.status);
+                    log.error('Erro ao salvar: ' + response.status);
                 }
-            } catch (e) { 
-                log.error('Erro de conexão ao salvar preferência', e); 
-            }
+            } catch (e) { log.error('Erro de conexão', e); }
         }
 
-        function renderOptions(select, showPhones = false) {
-            if (state.instances.length === 0) {
-                select.innerHTML = '<option>Carregando...</option>';
-                return;
-            }
-            const currentValue = select.value || state.lastKnownActiveId;
-            select.innerHTML = state.instances.map(i => {
-                const label = (showPhones && i.phone) ? i.name + ' (' + i.phone + ')' : i.name;
-                return '<option value="' + i.id + '"' + (i.id === currentValue ? ' selected' : '') + '>' + label + '</option>';
-            }).join('');
+        function renderOptions(select) {
+            if (state.instances.length === 0) return;
+            const current = select.value;
+            select.innerHTML = state.instances.map(i => 
+                \`<option value="\${i.id}" \${i.id === current ? 'selected' : ''}>\${i.name}</option>\`
+            ).join('');
         }
 
-        async function loadInitialData() {
-            const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-            if (!locId) return;
-            state.locationId = locId;
-
+        async function loadInstances(locId) {
             try {
                 const res = await fetch(CONFIG.api_url + '?locationId=' + locId);
                 const data = await res.json();
@@ -113,69 +104,43 @@ try {
                     state.instances = data.instances;
                     log.success(data.instances.length + ' instâncias carregadas');
                     const select = document.getElementById('bridge-instance-selector');
-                    if (select) renderOptions(select, false);
+                    if (select) renderOptions(select);
                 }
-            } catch (e) { log.error('Erro ao carregar lista inicial'); }
+            } catch (e) { log.error('Erro ao carregar instâncias'); }
         }
 
-        async function syncActiveContact() {
-            const phone = extractPhoneFromGHL();
-            if (!state.locationId || !phone || state.isSyncing) return;
-            if (phone === state.lastPhoneFound) return;
-
-            try {
-                state.lastPhoneFound = phone;
-                log.info('Novo contato detectado: ' + phone);
-                const res = await fetch(CONFIG.api_url + '?locationId=' + state.locationId + '&phone=' + phone);
-                const data = await res.json();
-                
-                if (data.activeInstanceId) {
-                    state.lastKnownActiveId = data.activeInstanceId;
-                    const select = document.getElementById('bridge-instance-selector');
-                    if (select) {
-                        state.isSyncing = true;
-                        select.value = data.activeInstanceId;
-                        state.isSyncing = false;
-                    }
-                }
-            } catch (e) {}
-        }
-
-        function injectDropdown() {
+        function inject() {
             if (document.getElementById('bridge-api-container')) return;
-
-            const actionBar = document.querySelector('.msg-composer-actions') || 
-                              document.querySelector('.flex.flex-row.gap-2.items-center.pl-2') ||
-                              document.querySelector('.ghl-footer') ||
-                              document.querySelector('#message-input-container');
-
-            if (!actionBar) return; 
+            const actionBar = document.querySelector('.msg-composer-actions') || document.querySelector('#message-input-container');
+            if (!actionBar) return;
 
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
-            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #fff; border: 1px solid #d1d5db; border-radius: 20px; z-index: 10;';
-            container.innerHTML = '<div style="width:8px; height:8px; background:#22c55e; border-radius:50%; margin-right:6px;"></div><select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:700; cursor:pointer; max-width:150px;"></select>';
+            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #fff; border: 1px solid #d1d5db; border-radius: 20px; transition: 0.3s;';
+            container.innerHTML = \`<div style="width:8px; height:8px; background:#22c55e; border-radius:50%; margin-right:6px;"></div>
+                                   <select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:700; outline:none;"></select>\`;
             
             actionBar.appendChild(container);
             const select = container.querySelector('select');
-
-            select.addEventListener('mousedown', () => renderOptions(select, true));
-            select.addEventListener('blur', () => renderOptions(select, false));
             select.addEventListener('change', (e) => savePreference(e.target.value));
-
-            renderOptions(select, false);
-            if (state.instances.length === 0) loadInitialData();
+            
+            const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+            if (locId) loadInstances(locId);
         }
 
         setInterval(() => {
             if (window.location.pathname.includes('/conversations')) {
-                injectDropdown();
-                syncActiveContact();
+                inject();
+                // Sincronização automática ao mudar de lead
+                const phone = extractPhoneFromGHL();
+                if (phone && phone !== state.lastPhoneFound) {
+                    state.lastPhoneFound = phone;
+                    log.info('Lead focado: ' + phone);
+                }
             }
-        }, CONFIG.sync_interval);
-
+        }, 2000);
     })();
-} catch (e) { console.error('Erro Crítico Bridge:', e); }
+} catch (e) { console.error('Erro Bridge:', e); }
 `;
 
 Deno.serve(async (req) => {
