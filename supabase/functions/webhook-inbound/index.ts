@@ -686,8 +686,9 @@ serve(async (req) => {
     const pushName = isGroupChat ? `👥 ${groupName || "Grupo"}` : individualName;
     // Store member name and phone for group message formatting
     const memberName = isGroupChat ? (senderName || "") : "";
-    // Extract member phone from sender field (JID format: 5521980014713@s.whatsapp.net)
-    const memberPhone = isGroupChat ? (messageData.sender || "").split("@")[0].replace(/\D/g, "") : "";
+    // Extract member phone from owner field (JID format: 5521980014713@s.whatsapp.net)
+    // The owner field contains the actual phone number of the person who sent the message in the group
+    const memberPhone = isGroupChat ? (messageData.owner || "").split("@")[0].replace(/\D/g, "") : "";
     
     // Detect media vs text message - including stickers
     const contentRaw = messageData.content;
@@ -1167,21 +1168,27 @@ serve(async (req) => {
     } else {
       // This is a message FROM the lead - send as inbound
       // For group messages, format with member identification prefix with line break for clear reading
+      // Format: (5521980014713)-👤[ Érick ]:
+      const memberPrefix = isGroupChat && memberName ? `(${memberPhone})-👤[ ${memberName} ]:\n` : "";
+      
       let formattedMessage = textMessage;
       let formattedCaption = textMessage || undefined;
-      // Format group messages with member phone and name: (5521980014713)-👤[ Érick ]:
-      if (isGroupChat && memberName && textMessage) {
-        const memberPrefix = memberPhone ? `(${memberPhone})-` : "";
-        formattedMessage = `${memberPrefix}👤[ ${memberName} ]:\n${textMessage}`;
-      }
-      if (isGroupChat && memberName && formattedCaption) {
-        const memberPrefix = memberPhone ? `(${memberPhone})-` : "";
-        formattedCaption = `${memberPrefix}👤[ ${memberName} ]:\n${formattedCaption}`;
+      
+      // Apply member prefix to text messages
+      if (memberPrefix && textMessage) {
+        formattedMessage = `${memberPrefix}${textMessage}`;
       }
       
+      // Apply member prefix to captions
+      if (memberPrefix && formattedCaption) {
+        formattedCaption = `${memberPrefix}${formattedCaption}`;
+      }
+      
+      // For group media without caption, still add member identification
       if (isMediaMessage && publicMediaUrl) {
-        console.log("Sending inbound media to GHL:", { publicMediaUrl, formattedCaption });
-        await sendMediaToGHL(contact.id, [publicMediaUrl], token, formattedCaption);
+        const mediaCaption = formattedCaption || (memberPrefix ? memberPrefix.trim() : undefined);
+        console.log("Sending inbound media to GHL:", { publicMediaUrl, mediaCaption, memberName, memberPhone });
+        await sendMediaToGHL(contact.id, [publicMediaUrl], token, mediaCaption);
       } else {
         console.log("Sending inbound text to GHL:", { formattedMessage: formattedMessage?.substring(0, 50) });
         await sendMessageToGHL(contact.id, formattedMessage, token);
