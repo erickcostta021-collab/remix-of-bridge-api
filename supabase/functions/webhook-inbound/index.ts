@@ -686,9 +686,8 @@ serve(async (req) => {
     const pushName = isGroupChat ? `👥 ${groupName || "Grupo"}` : individualName;
     // Store member name and phone for group message formatting
     const memberName = isGroupChat ? (senderName || "") : "";
-    // Extract member phone from owner field (JID format: 5521980014713@s.whatsapp.net)
-    // The owner field contains the actual phone number of the person who sent the message in the group
-    const memberPhone = isGroupChat ? (messageData.owner || "").split("@")[0].replace(/\D/g, "") : "";
+    // Extract member phone from sender_pn field (contains the phone number of the actual sender in group)
+    const memberPhone = isGroupChat ? (messageData.sender_pn || "").replace(/\D/g, "") : "";
     
     // Detect media vs text message - including stickers
     const contentRaw = messageData.content;
