@@ -533,6 +533,11 @@ async function processGroupCommand(
             await updateGroupPictureBestEffort(baseUrl, instanceToken, groupJid, photoUrl, instanceName);
          }
         
+        // Send confirmation message to the group
+        await sleep(500);
+        console.log("Sending confirmation message to group:", groupJid);
+        await sendTextMessage(baseUrl, instanceToken, groupJid, "✅ Grupo Criado.");
+        
         return { isCommand: true, success: true, command, message: `Grupo "${name}" criado com sucesso!` };
       }
       
