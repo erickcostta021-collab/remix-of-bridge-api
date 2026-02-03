@@ -829,13 +829,37 @@ async function processGroupCommand(
   try {
     switch (command) {
       case "#criargrupo": {
-        if (params.length < 4) {
-          return { isCommand: true, success: false, command, message: "Formato: #criargrupo nome|descrição|urldafoto|telefone" };
+        // Novo formato: #criargrupo nome|telefone(s)|descrição(opcional)|urldafoto(opcional)
+        // Mínimo: nome e pelo menos 1 telefone
+        if (params.length < 2) {
+          return { isCommand: true, success: false, command, message: "Formato: #criargrupo nome|+55...|descrição(opcional)|urldafoto(opcional)" };
         }
-        const [name, description, photoUrl, ...phones] = params;
+        
+        const name = params[0];
+        
+        // Encontrar onde terminam os telefones e começam descrição/foto
+        // Telefones começam com + ou são numéricos
+        const phonePattern = /^[\+\d]/;
+        let phoneEndIndex = 1;
+        for (let i = 1; i < params.length; i++) {
+          if (phonePattern.test(params[i].trim())) {
+            phoneEndIndex = i + 1;
+          } else {
+            break;
+          }
+        }
+        
+        const phones = params.slice(1, phoneEndIndex);
+        const description = params[phoneEndIndex] || null;
+        const photoUrl = params[phoneEndIndex + 1] || null;
+        
         const formattedParticipants = phones.map(p => p.replace(/\D/g, ""));
         
-        console.log("Creating group with:", { name, description, photoUrl, formattedParticipants });
+        console.log("Creating group with:", { name, phones, description, photoUrl, formattedParticipants });
+        
+        if (formattedParticipants.length === 0 || formattedParticipants.some(p => p.length < 10)) {
+          return { isCommand: true, success: false, command, message: "Formato: #criargrupo nome|+55...|descrição(opcional)|urldafoto(opcional)" };
+        }
         
         const createResponse = await fetch(`${baseUrl}/group/create`, {
           method: "POST",
