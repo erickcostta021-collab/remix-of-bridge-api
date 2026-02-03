@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.12.0 - Chat Message Style Notification
-console.log('🚀 BRIDGE LOADER: v6.12.0 Iniciado');
+// 🚀 BRIDGE LOADER: v6.13.0 - Native GHL Message Injection
+console.log('🚀 BRIDGE LOADER: v6.13.0 Iniciado');
 
 try {
     (function() {
@@ -49,17 +49,27 @@ try {
         function injectChatNotification(fromInstance, toInstance) {
             console.log(LOG_PREFIX, '🔄 Attempting to inject chat notification:', fromInstance, '→', toInstance);
             
-            // Try multiple selectors for GHL chat container
+            // First, find an existing outgoing message to clone its structure/classes
+            const existingOutgoingMsg = document.querySelector('[class*="outgoing"]') || 
+                                        document.querySelector('[class*="sent"]') ||
+                                        document.querySelector('[class*="message-out"]') ||
+                                        document.querySelector('.hl-message-outgoing') ||
+                                        document.querySelector('[data-message-direction="outgoing"]');
+            
+            if (existingOutgoingMsg) {
+                console.log(LOG_PREFIX, '📋 Found existing outgoing message, cloning structure:', existingOutgoingMsg.className);
+            }
+            
+            // Try multiple selectors for GHL chat message list
             const selectors = [
-                '.conversation-messages-wrapper',
                 '.hl_conversations--messages-renderer',
+                '.conversation-messages-wrapper',
+                '.message-list',
+                '.messages-wrapper',
+                '[class*="message-list"]',
                 '[class*="messages-container"]',
-                '[class*="conversation-messages"]',
-                '.messages-list',
-                '[data-testid="messages-container"]',
-                '.msg-list-container',
-                '[class*="chat"] [class*="scroll"]',
-                '[class*="conversation"] [class*="scroll"]'
+                '[class*="chat-messages"]',
+                '.msg-list-container'
             ];
             
             let chatContainer = null;
@@ -67,11 +77,15 @@ try {
                 chatContainer = document.querySelector(selector);
                 if (chatContainer) {
                     console.log(LOG_PREFIX, '✅ Found chat container with selector:', selector);
+                    // Log container's children structure for debugging
+                    console.log(LOG_PREFIX, '📦 Container children count:', chatContainer.children.length);
+                    if (chatContainer.lastElementChild) {
+                        console.log(LOG_PREFIX, '📦 Last child classes:', chatContainer.lastElementChild.className);
+                    }
                     break;
                 }
             }
             
-            // If no container found, use a fixed position overlay instead
             if (!chatContainer) {
                 console.log(LOG_PREFIX, '⚠️ Chat container not found, using overlay notification');
                 
@@ -93,23 +107,9 @@ try {
                     font-size: 13px;
                     font-weight: 600;
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-                    animation: bridgeFadeIn 0.3s ease-out;
                 \`;
                 
                 overlay.innerHTML = \`🔄 Instância alterada: <b>\${fromInstance}</b> → <b>\${toInstance}</b>\`;
-                
-                if (!document.getElementById('bridge-animation-styles')) {
-                    const animStyle = document.createElement('style');
-                    animStyle.id = 'bridge-animation-styles';
-                    animStyle.textContent = \`
-                        @keyframes bridgeFadeIn {
-                            from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-                            to { opacity: 1; transform: translateX(-50%) translateY(0); }
-                        }
-                    \`;
-                    document.head.appendChild(animStyle);
-                }
-                
                 document.body.appendChild(overlay);
                 
                 setTimeout(() => {
@@ -118,59 +118,49 @@ try {
                     setTimeout(() => overlay.remove(), 300);
                 }, 4000);
                 
-                console.log(LOG_PREFIX, '✅ Overlay notification displayed');
                 return;
             }
 
             // Remove any existing bridge notifications
             document.querySelectorAll('.bridge-switch-notification').forEach(el => el.remove());
 
-            // Create message that looks like it was sent by the GHL user (outgoing message style)
-            const notification = document.createElement('div');
-            notification.className = 'bridge-switch-notification';
-            notification.style.cssText = \`
+            // Create a message wrapper that mimics GHL's outgoing message structure
+            const msgWrapper = document.createElement('div');
+            msgWrapper.className = 'bridge-switch-notification hl-message hl-message-outgoing';
+            msgWrapper.setAttribute('data-bridge-notification', 'true');
+            msgWrapper.style.cssText = \`
                 display: flex;
-                justify-content: flex-end;
+                flex-direction: row-reverse;
+                align-items: flex-end;
                 padding: 4px 16px;
-                margin: 8px 0;
-                animation: bridgeFadeIn 0.3s ease-out;
+                margin: 4px 0;
+                width: 100%;
             \`;
             
-            // Inner bubble styled like an outgoing message
-            notification.innerHTML = \`
-                <div style="
-                    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-                    color: white;
-                    padding: 10px 14px;
-                    border-radius: 16px 16px 4px 16px;
-                    font-size: 13px;
-                    max-width: 280px;
-                    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
-                ">
-                    🔄 Instância alterada: <b>\${fromInstance}</b> → <b>\${toInstance}</b>
-                </div>
+            // Create the message bubble (outgoing style - right aligned, blue/green background)
+            const bubble = document.createElement('div');
+            bubble.className = 'hl-message-bubble hl-message-bubble-outgoing';
+            bubble.style.cssText = \`
+                background: #3b82f6;
+                color: white;
+                padding: 8px 12px;
+                border-radius: 12px 12px 2px 12px;
+                font-size: 13px;
+                max-width: 70%;
+                word-wrap: break-word;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.1);
             \`;
-
-            // Add animation keyframes if not already present
-            if (!document.getElementById('bridge-animation-styles')) {
-                const animStyle = document.createElement('style');
-                animStyle.id = 'bridge-animation-styles';
-                animStyle.textContent = \`
-                    @keyframes bridgeFadeIn {
-                        from { opacity: 0; transform: translateY(-10px); }
-                        to { opacity: 1; transform: translateY(0); }
-                    }
-                \`;
-                document.head.appendChild(animStyle);
-            }
-
-            // Insert at the end of the chat
-            chatContainer.appendChild(notification);
+            bubble.innerHTML = \`🔄 Instância alterada: <b>\${fromInstance}</b> → <b>\${toInstance}</b>\`;
             
-            // Auto-scroll to show the notification
-            notification.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            msgWrapper.appendChild(bubble);
             
-            console.log(LOG_PREFIX, '✅ Chat notification injected:', fromInstance, '→', toInstance);
+            // Insert at the end of the chat container
+            chatContainer.appendChild(msgWrapper);
+            
+            // Scroll to the new message
+            msgWrapper.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            
+            console.log(LOG_PREFIX, '✅ Chat notification injected as outgoing message');
         }
 
         function renderOptions(showPhone = false) {
