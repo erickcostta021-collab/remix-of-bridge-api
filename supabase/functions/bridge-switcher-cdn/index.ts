@@ -6,12 +6,12 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.8.7 - Visual v6.6.0 Original + Smart Engine
-console.log('🚀 BRIDGE LOADER: v6.8.7 Iniciado');
+// 🚀 BRIDGE LOADER: v6.8.8 - Pure v6.6.0 UI + Fixed Label (No Phone in Header)
+console.log('🚀 BRIDGE LOADER: v6.8.8 Iniciado');
 
 try {
     (function() {
-        const VERSION = "6.8.7";
+        const VERSION = "6.8.8";
         const LOG_PREFIX = "[Bridge]";
         
         const CONFIG = {
@@ -27,11 +27,9 @@ try {
         let state = { 
             instances: [], 
             lastPhoneFound: null, 
-            currentLocationId: null,
-            lastKnownActiveId: null 
+            currentLocationId: null
         };
 
-        // --- MOTOR DE CAPTURA (v6.8) ---
         function cleanPhone(raw) {
             if (!raw) return null;
             const clean = raw.replace(/\\D/g, '');
@@ -47,7 +45,6 @@ try {
             return null;
         }
 
-        // --- UI & STYLES (v6.6.0) ---
         function injectStyles() {
             if (document.getElementById('bridge-styles')) return;
             const style = document.createElement('style');
@@ -85,34 +82,40 @@ try {
                 const data = await res.json();
                 if (data.instances) {
                     state.instances = data.instances;
-                    state.lastKnownActiveId = data.activeInstanceId || data.instances[0]?.id;
-                    renderOptions(state.lastKnownActiveId);
+                    renderOptions(data.activeInstanceId || data.instances[0]?.id);
                 }
             } catch (e) { console.error(LOG_PREFIX, e); }
         }
 
+        // A MÁGICA PARA ESCONDER O NÚMERO NO TOPO ESTÁ AQUI
         function renderOptions(activeId) {
             const select = document.getElementById('bridge-instance-selector');
             if (!select) return;
             
-            // Lógica v6.6.0: Nome no topo, Nome (Telefone) na lista
-            select.innerHTML = state.instances.map(i => 
-                \`<option value="\${i.id}" \${i.id === activeId ? 'selected' : ''}>
-                    \${i.name} \${i.phone ? ' (' + i.phone + ')' : ''}
-                </option>\`
-            ).join('');
+            select.innerHTML = ''; // Limpa
+            
+            state.instances.forEach(i => {
+                const opt = document.createElement('option');
+                opt.value = i.id;
+                opt.selected = (i.id === activeId);
+                
+                // O rótulo (label) é o que aparece na LISTA (com número)
+                // O texto (text) é o que aparece no TOPO (sem número)
+                opt.textContent = i.name; 
+                opt.label = i.phone ? \`\${i.name} (\${i.phone})\` : i.name;
+                
+                select.appendChild(opt);
+            });
         }
 
         function inject() {
             if (document.getElementById('bridge-api-container')) return;
-            
             const actionBar = document.querySelector('.msg-composer-actions') || 
                               document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
             if (!actionBar) return;
 
             injectStyles();
 
-            // Estrutura de HTML idêntica à v6.6.0
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
             container.style.cssText = \`display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid \${CONFIG.theme.border}; border-radius: 20px;\`;
@@ -129,8 +132,7 @@ try {
 
             container.querySelector('select').addEventListener('change', async (e) => {
                 const phone = extractPhone();
-                const selectedOption = e.target.options[e.target.selectedIndex];
-                const instanceName = selectedOption.text.split('(')[0].trim();
+                const instanceName = e.target.options[e.target.selectedIndex].text; // Pega o nome sem número
 
                 try {
                     await fetch(CONFIG.save_url, {
@@ -142,7 +144,6 @@ try {
                             phone: phone 
                         })
                     });
-                    state.lastKnownActiveId = e.target.value;
                     showNotification(instanceName);
                 } catch (err) { console.error("Erro Save:", err); }
             });
@@ -151,7 +152,6 @@ try {
             if (p) loadInstances(p);
         }
 
-        // Loop de verificação
         setInterval(() => {
             if (window.location.pathname.includes('/conversations')) {
                 inject();
