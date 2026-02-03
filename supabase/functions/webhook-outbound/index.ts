@@ -1033,12 +1033,43 @@ async function processGroupCommand(
           return { isCommand: true, success: false, command, message: "Formato: #attdescricao nova_descricao (envie dentro do grupo)" };
         }
         const newDescription = params.join("|"); // Allow | in description
-        await fetch(`${baseUrl}/group/updateDescription`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: currentGroupJid, description: newDescription }),
-        });
-        return { isCommand: true, success: true, command, message: `Descrição do grupo atualizada` };
+        
+        // Try multiple endpoint/payload combinations (UAZAPI v2 style)
+        let descUpdateSuccess = false;
+        const descEndpoints = [
+          { url: `${baseUrl}/group/updateDescription`, body: { groupjid: currentGroupJid, description: newDescription } },
+          { url: `${baseUrl}/group/updateDescription`, body: { groupId: currentGroupJid, description: newDescription } },
+          { url: `${baseUrl}/group/updateGroupDescription`, body: { groupjid: currentGroupJid, description: newDescription } },
+          { url: `${baseUrl}/group/updateGroupDescription`, body: { groupId: currentGroupJid, description: newDescription } },
+        ];
+        
+        for (const attempt of descEndpoints) {
+          if (descUpdateSuccess) break;
+          for (const method of ["POST", "PUT"] as const) {
+            try {
+              console.log("Trying description update:", { url: attempt.url, method, body: attempt.body });
+              const res = await fetch(attempt.url, {
+                method,
+                headers: { "Content-Type": "application/json", token: instanceToken },
+                body: JSON.stringify(attempt.body),
+              });
+              const resText = await res.text();
+              console.log("Description update response:", { status: res.status, body: resText.substring(0, 200) });
+              if (res.ok) {
+                descUpdateSuccess = true;
+                break;
+              }
+            } catch (e) {
+              console.log("Description update error:", e);
+            }
+          }
+        }
+        
+        if (descUpdateSuccess) {
+          return { isCommand: true, success: true, command, message: `Descrição do grupo atualizada` };
+        } else {
+          return { isCommand: true, success: false, command, message: `Falha ao atualizar descrição do grupo` };
+        }
       }
       
       case "#somenteadminmsg": {
