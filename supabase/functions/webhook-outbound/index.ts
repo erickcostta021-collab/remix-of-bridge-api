@@ -78,33 +78,19 @@ async function updateGroupPictureBestEffort(
   instanceToken: string,
   groupIdOrJid: string,
   imageUrl: string,
-  instanceName?: string,
+  _instanceName?: string,
 ) {
-  const urls = (
-    [
-      // Instance-in-path variants
-      instanceName ? `${baseUrl}/group/updateGroupPicture/${instanceName}` : null,
-      instanceName ? `${baseUrl}/group/updatePicture/${instanceName}` : null,
-      instanceName ? `${baseUrl}/group/profilePicture/${instanceName}` : null,
-      // Non-instance variants
-      `${baseUrl}/group/updateGroupPicture`,
-      `${baseUrl}/group/updatePicture`,
-      `${baseUrl}/group/profilePicture`,
-    ].filter(Boolean) as string[]
-  );
-  const payloads: Array<Record<string, unknown>> = [
-    { groupJid: groupIdOrJid, image: imageUrl },
-    { groupId: groupIdOrJid, image: imageUrl },
-    { groupJid: groupIdOrJid, picture: imageUrl },
-    { groupId: groupIdOrJid, picture: imageUrl },
-  ];
-
-  for (const url of urls) {
-    for (const payload of payloads) {
-      const r = await postJson(url, instanceToken, payload);
-      console.log("Picture update attempt:", { endpoint: url.split("/").slice(-2).join("/"), payloadKeys: Object.keys(payload), status: r.status, body: r.text.substring(0, 200) });
-      if (r.ok) return;
-    }
+  // Per n8n test: POST /group/updateImage with { groupjid (lowercase), image }
+  const url = `${baseUrl}/group/updateImage`;
+  const payload = { groupjid: groupIdOrJid, image: imageUrl };
+  
+  console.log("Updating group image:", { url, groupjid: groupIdOrJid, image: imageUrl });
+  
+  const r = await postJson(url, instanceToken, payload);
+  console.log("Picture update response:", { status: r.status, body: r.text.substring(0, 300) });
+  
+  if (!r.ok) {
+    console.error("Failed to update group image:", r.status, r.text);
   }
 }
 
