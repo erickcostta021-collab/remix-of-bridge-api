@@ -6,6 +6,71 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function postJson(
+  url: string,
+  instanceToken: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; status: number; text: string }> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      token: instanceToken,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  return { ok: res.ok, status: res.status, text };
+}
+
+async function updateGroupSubjectBestEffort(
+  baseUrl: string,
+  instanceToken: string,
+  groupIdOrJid: string,
+  subject: string,
+) {
+  const url = `${baseUrl}/group/updateSubject`;
+  const attempts: Array<Record<string, unknown>> = [
+    { groupJid: groupIdOrJid, subject },
+    { groupId: groupIdOrJid, subject },
+    { jid: groupIdOrJid, subject },
+    { id: groupIdOrJid, subject },
+  ];
+
+  for (const payload of attempts) {
+    const r = await postJson(url, instanceToken, payload);
+    console.log("Subject update attempt:", { payloadKeys: Object.keys(payload), status: r.status, body: r.text.substring(0, 200) });
+    if (r.ok) return;
+  }
+}
+
+async function updateGroupPictureBestEffort(
+  baseUrl: string,
+  instanceToken: string,
+  groupIdOrJid: string,
+  imageUrl: string,
+) {
+  const urls = [`${baseUrl}/group/updatePicture`, `${baseUrl}/group/profilePicture`];
+  const payloads: Array<Record<string, unknown>> = [
+    { groupJid: groupIdOrJid, image: imageUrl },
+    { groupId: groupIdOrJid, image: imageUrl },
+    { groupJid: groupIdOrJid, picture: imageUrl },
+    { groupId: groupIdOrJid, picture: imageUrl },
+  ];
+
+  for (const url of urls) {
+    for (const payload of payloads) {
+      const r = await postJson(url, instanceToken, payload);
+      console.log("Picture update attempt:", { endpoint: url.split("/").slice(-2).join("/"), payloadKeys: Object.keys(payload), status: r.status, body: r.text.substring(0, 200) });
+      if (r.ok) return;
+    }
+  }
+}
+
 interface CommandResult {
   success: boolean;
   command: string;
@@ -136,21 +201,12 @@ async function createGroup(
       };
     }
     
-    // Update group name (subject) - API requires separate call
+    await sleep(650);
+
+    // Update group name (subject) - try multiple payload shapes
     console.log("Updating group subject to:", groupName);
-    const subjectResponse = await fetch(`${baseUrl}/group/updateSubject`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "token": instanceToken,
-      },
-      body: JSON.stringify({
-        groupJid: groupJid,
-        subject: groupName,
-      }),
-    });
-    const subjectData = await subjectResponse.text();
-    console.log("Subject update response:", subjectResponse.status, subjectData);
+    await updateGroupSubjectBestEffort(baseUrl, instanceToken, groupJid, groupName);
+    await sleep(250);
     
     // Update group description if provided
     if (description) {
@@ -173,36 +229,7 @@ async function createGroup(
     // Update group photo if provided
     if (photoUrl) {
       console.log("Updating group photo to:", photoUrl);
-      const photoResponse = await fetch(`${baseUrl}/group/updatePicture`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "token": instanceToken,
-        },
-        body: JSON.stringify({
-          groupJid: groupJid,
-          image: photoUrl,
-        }),
-      });
-      
-      const photoData = await photoResponse.text();
-      console.log("Photo update response:", photoResponse.status, photoData);
-      
-      if (!photoResponse.ok) {
-        // Try alternative field name
-        const altPhotoResponse = await fetch(`${baseUrl}/group/updatePicture`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "token": instanceToken,
-          },
-          body: JSON.stringify({
-            groupId: groupJid,
-            image: photoUrl,
-          }),
-        });
-        console.log("Alt photo update response:", altPhotoResponse.status, await altPhotoResponse.text());
-      }
+      await updateGroupPictureBestEffort(baseUrl, instanceToken, groupJid, photoUrl);
     }
     
     return { 
