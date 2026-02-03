@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.13.0 - Native GHL Message Injection
-console.log('🚀 BRIDGE LOADER: v6.13.0 Iniciado');
+// 🚀 BRIDGE LOADER: v6.14.0 - GHL Native Outgoing Message Style
+console.log('🚀 BRIDGE LOADER: v6.14.0 Iniciado');
 
 try {
     (function() {
@@ -49,118 +49,105 @@ try {
         function injectChatNotification(fromInstance, toInstance) {
             console.log(LOG_PREFIX, '🔄 Attempting to inject chat notification:', fromInstance, '→', toInstance);
             
-            // First, find an existing outgoing message to clone its structure/classes
-            const existingOutgoingMsg = document.querySelector('[class*="outgoing"]') || 
-                                        document.querySelector('[class*="sent"]') ||
-                                        document.querySelector('[class*="message-out"]') ||
-                                        document.querySelector('.hl-message-outgoing') ||
-                                        document.querySelector('[data-message-direction="outgoing"]');
-            
-            if (existingOutgoingMsg) {
-                console.log(LOG_PREFIX, '📋 Found existing outgoing message, cloning structure:', existingOutgoingMsg.className);
-            }
-            
-            // Try multiple selectors for GHL chat message list
+            // Find GHL's message container - look for the actual message list
             const selectors = [
                 '.hl_conversations--messages-renderer',
                 '.conversation-messages-wrapper',
-                '.message-list',
-                '.messages-wrapper',
+                '[class*="messages-renderer"]',
                 '[class*="message-list"]',
-                '[class*="messages-container"]',
-                '[class*="chat-messages"]',
-                '.msg-list-container'
+                '.messages-wrapper'
             ];
             
             let chatContainer = null;
             for (const selector of selectors) {
                 chatContainer = document.querySelector(selector);
                 if (chatContainer) {
-                    console.log(LOG_PREFIX, '✅ Found chat container with selector:', selector);
-                    // Log container's children structure for debugging
-                    console.log(LOG_PREFIX, '📦 Container children count:', chatContainer.children.length);
-                    if (chatContainer.lastElementChild) {
-                        console.log(LOG_PREFIX, '📦 Last child classes:', chatContainer.lastElementChild.className);
-                    }
+                    console.log(LOG_PREFIX, '✅ Found chat container:', selector);
                     break;
                 }
             }
             
             if (!chatContainer) {
-                console.log(LOG_PREFIX, '⚠️ Chat container not found, using overlay notification');
-                
+                console.log(LOG_PREFIX, '⚠️ Chat container not found, using overlay');
                 const existingOverlay = document.getElementById('bridge-switch-overlay');
                 if (existingOverlay) existingOverlay.remove();
                 
                 const overlay = document.createElement('div');
                 overlay.id = 'bridge-switch-overlay';
-                overlay.style.cssText = \`
-                    position: fixed;
-                    top: 80px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    z-index: 10001;
-                    padding: 10px 20px;
-                    background: #1f2937;
-                    color: white;
-                    border-radius: 8px;
-                    font-size: 13px;
-                    font-weight: 600;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-                \`;
-                
-                overlay.innerHTML = \`🔄 Instância alterada: <b>\${fromInstance}</b> → <b>\${toInstance}</b>\`;
+                overlay.style.cssText = 'position: fixed; top: 80px; left: 50%; transform: translateX(-50%); z-index: 10001; padding: 10px 20px; background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%); color: white; border-radius: 20px; font-size: 13px; font-weight: 500; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);';
+                overlay.innerHTML = \`📱 Instância alterada: \${fromInstance} → \${toInstance}\`;
                 document.body.appendChild(overlay);
-                
-                setTimeout(() => {
-                    overlay.style.opacity = '0';
-                    overlay.style.transition = 'opacity 0.3s';
-                    setTimeout(() => overlay.remove(), 300);
-                }, 4000);
-                
+                setTimeout(() => { overlay.style.opacity = '0'; overlay.style.transition = 'opacity 0.3s'; setTimeout(() => overlay.remove(), 300); }, 4000);
                 return;
             }
 
-            // Remove any existing bridge notifications
+            // Remove existing bridge notifications
             document.querySelectorAll('.bridge-switch-notification').forEach(el => el.remove());
 
-            // Create a message wrapper that mimics GHL's outgoing message structure
-            const msgWrapper = document.createElement('div');
-            msgWrapper.className = 'bridge-switch-notification hl-message hl-message-outgoing';
-            msgWrapper.setAttribute('data-bridge-notification', 'true');
-            msgWrapper.style.cssText = \`
+            // Get current time for timestamp
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+
+            // Create message row - mimics GHL outgoing message structure exactly
+            const msgRow = document.createElement('div');
+            msgRow.className = 'bridge-switch-notification';
+            msgRow.style.cssText = \`
                 display: flex;
-                flex-direction: row-reverse;
+                flex-direction: column;
                 align-items: flex-end;
-                padding: 4px 16px;
-                margin: 4px 0;
-                width: 100%;
+                padding: 6px 16px;
+                margin: 8px 0;
             \`;
             
-            // Create the message bubble (outgoing style - right aligned, blue/green background)
-            const bubble = document.createElement('div');
-            bubble.className = 'hl-message-bubble hl-message-bubble-outgoing';
-            bubble.style.cssText = \`
-                background: #3b82f6;
-                color: white;
-                padding: 8px 12px;
-                border-radius: 12px 12px 2px 12px;
-                font-size: 13px;
-                max-width: 70%;
-                word-wrap: break-word;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            // Message content with bubble + avatar
+            msgRow.innerHTML = \`
+                <div style="display: flex; align-items: flex-end; gap: 8px; flex-direction: row-reverse;">
+                    <!-- Avatar circle (like GHL's EC avatar) -->
+                    <div style="
+                        width: 28px;
+                        height: 28px;
+                        border-radius: 50%;
+                        background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: 700;
+                        color: white;
+                        flex-shrink: 0;
+                    ">📱</div>
+                    
+                    <!-- Message bubble -->
+                    <div style="
+                        background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+                        color: white;
+                        padding: 10px 14px;
+                        border-radius: 16px 16px 4px 16px;
+                        font-size: 13px;
+                        font-weight: 500;
+                        max-width: 300px;
+                        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+                    ">
+                        📱 Instância alterada: \${fromInstance} → \${toInstance}
+                    </div>
+                </div>
+                
+                <!-- Timestamp below -->
+                <div style="
+                    font-size: 11px;
+                    color: #9ca3af;
+                    margin-top: 4px;
+                    margin-right: 40px;
+                ">\${timeStr}</div>
             \`;
-            bubble.innerHTML = \`🔄 Instância alterada: <b>\${fromInstance}</b> → <b>\${toInstance}</b>\`;
+
+            // Insert at the end of chat
+            chatContainer.appendChild(msgRow);
             
-            msgWrapper.appendChild(bubble);
+            // Scroll to show the new message
+            msgRow.scrollIntoView({ behavior: 'smooth', block: 'end' });
             
-            // Insert at the end of the chat container
-            chatContainer.appendChild(msgWrapper);
-            
-            // Scroll to the new message
-            msgWrapper.scrollIntoView({ behavior: 'smooth', block: 'end' });
-            
-            console.log(LOG_PREFIX, '✅ Chat notification injected as outgoing message');
+            console.log(LOG_PREFIX, '✅ Native-style notification injected');
         }
 
         function renderOptions(showPhone = false) {
