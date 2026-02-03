@@ -1415,6 +1415,20 @@ serve(async (req: Request) => {
     const messageText: string = String(body.message ?? body.body ?? "");
     const phoneRaw: string = String(body.phone ?? body.to ?? "");
     const attachments: string[] = Array.isArray(body.attachments) ? body.attachments : [];
+    
+    // EARLY SOURCE CHECK - Before any other processing
+    // This is the FIRST line of defense against loops
+    const isHashCommand = messageText.trim().startsWith("#");
+    console.log("[SOURCE CHECK] Analyzing message source:", { source, isHashCommand, messageId });
+    
+    if (source === "api" && !isHashCommand) {
+      console.log("🛑 [BLOCKED] Ignoring API-synced message to prevent loop:", { 
+        source, 
+        messageId,
+        messagePreview: messageText.substring(0, 50) 
+      });
+      return; // Exit immediately - this message was synced FROM WhatsApp
+    }
 
     // Check for duplicate webhook calls (GHL sometimes sends the same intent twice)
     // Primary key: messageId
@@ -1464,44 +1478,10 @@ serve(async (req: Request) => {
       return; // Already responded
     }
 
-    // CRITICAL: Check if this message was synced from WhatsApp via webhook-inbound
-    // When a message is sent from the phone, webhook-inbound syncs it to GHL and stores the GHL messageId.
-    // 
-    // Source values:
-    // - "app" = GHL web interface (user clicked send)
-    // - "workflow" = GHL automation (workflow triggered send)
-    // - "direct" = direct message from GHL
-    // - "api" = created via API (could be our webhook-inbound syncing FROM WhatsApp!)
-    // - "" (empty) = legacy SMS webhook format, OR user typed in GHL
-    // 
-    // We should ONLY process messages that originated from GHL UI or workflows.
-    // Messages with source="api" are typically synced from external sources (like our webhook-inbound)
-    // and should NOT be re-sent to WhatsApp to avoid duplicates/loops.
-    // EXCEPTION: Commands starting with # should ALWAYS be processed regardless of source.
+    // NOTE: Source filtering ("api" vs "app"/"workflow"/"direct") is now done EARLY
+    // at the top of this function to prevent loops immediately.
+    // isHashCommand was already computed there.
     const status = String(body.status ?? "");
-    
-    // Check if this is a # command - these should ALWAYS be processed
-    const isHashCommand = messageText.startsWith("#");
-    
-    // Accept messages from GHL user interface, workflows, or legacy SMS format (empty source)
-    // Reject "api" source messages - these are typically synced from external systems
-    const isFromGhlUserAction = source === "app" || source === "workflow" || source === "direct" || source === "";
-    
-    if (!isFromGhlUserAction && !isHashCommand) {
-      console.log("Ignoring message not from GHL user action:", { 
-        source, 
-        status, 
-        messageId,
-        reason: source === "api" ? "API-created (likely synced from WhatsApp)" : "Unknown source" 
-      });
-      return; // Already responded
-    }
-    
-    // If source is "api" but NOT a command, ignore (synced message from WhatsApp)
-    if (source === "api" && !isHashCommand) {
-      console.log("Ignoring API-synced message (not a command):", { source, messageId });
-      return; // Already responded
-    }
 
     const locationId: string | undefined = body.locationId;
     const contactId: string | undefined = body.contactId;
