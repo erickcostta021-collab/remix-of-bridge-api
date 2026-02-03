@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.14.0 - GHL Internal Notes
-console.log('🚀 BRIDGE LOADER: v6.14.0 Iniciado');
+// 🚀 BRIDGE LOADER: v6.14.1 - Outbound switch notification (fix conversationId)
+console.log('🚀 BRIDGE LOADER: v6.14.1 Iniciado');
 
 try {
     (function() {
@@ -21,15 +21,33 @@ try {
         let state = { instances: [], lastPhoneFound: null, currentLocationId: null, currentInstanceName: null, currentConversationId: null };
 
         function extractConversationId() {
-            // Extract conversation ID from URL: /conversations/detail/:conversationId
-            const match = window.location.pathname.match(/conversations\\/(?:detail\\/)?([a-zA-Z0-9]+)/);
-            if (match && match[1] && match[1] !== 'detail') {
-                return match[1];
-            }
-            // Try from URL hash or query params
+            // Prefer explicit params if present
             const urlParams = new URLSearchParams(window.location.search);
             const hashParams = new URLSearchParams(window.location.hash.slice(1));
-            return urlParams.get('conversationId') || hashParams.get('conversationId') || null;
+            const fromParams = urlParams.get('conversationId') || hashParams.get('conversationId');
+            if (fromParams && fromParams.length >= 10) return fromParams;
+
+            // Robust path parsing across GHL variants.
+            // Common patterns:
+            // - /conversations/detail/:id
+            // - /location/:locationId/conversations/detail/:id
+            // - /location/:locationId/conversations/:id
+            const parts = window.location.pathname.split('/').filter(Boolean);
+            const idxDetail = parts.indexOf('detail');
+            if (idxDetail !== -1) {
+                const candidate = parts[idxDetail + 1];
+                if (candidate && candidate !== 'conversations' && candidate.length >= 10) return candidate;
+            }
+
+            // Fallback: look for a plausible conversation id after a 'conversations' segment.
+            // We avoid returning placeholders like 'conversations' or 'detail'.
+            const idxConv = parts.lastIndexOf('conversations');
+            if (idxConv !== -1) {
+                const candidate = parts[idxConv + 1];
+                if (candidate && candidate !== 'detail' && candidate !== 'conversations' && candidate.length >= 10) return candidate;
+            }
+
+            return null;
         }
 
         function cleanPhone(raw) {
@@ -302,6 +320,9 @@ try {
 
         setInterval(() => {
             if (window.location.pathname.includes('/conversations')) {
+                // Keep currentConversationId fresh for the dropdown handler
+                state.currentConversationId = extractConversationId();
+
                 inject();
                 const p = extractPhone();
                 if (p && p !== state.lastPhoneFound) {
