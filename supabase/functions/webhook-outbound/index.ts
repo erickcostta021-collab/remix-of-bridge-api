@@ -821,118 +821,83 @@ async function processGroupCommand(
           return { isCommand: true, success: false, command, message: "Formato: #promoveradmin telefone (envie dentro do grupo)" };
         }
         const cleanPhone = params[0].replace(/\D/g, "");
-        const participantJid = `${cleanPhone}@s.whatsapp.net`;
         const currentGroup = currentGroupJid?.includes("@g.us")
           ? currentGroupJid
           : `${currentGroupJid}@g.us`;
         
-        // Try multiple endpoint/payload combinations
-        const promoteEndpoints = [
-          `${baseUrl}/group/promoteParticipant`,
-          `${baseUrl}/group/promote`,
-          instanceName ? `${baseUrl}/group/promoteParticipant/${instanceName}` : null,
-          instanceName ? `${baseUrl}/${instanceName}/group/promoteParticipant` : null,
-        ].filter(Boolean) as string[];
-
-        // Evolution API v2-style endpoint: /group/updateParticipant/{instance}?groupJid=...
-        const updateParticipantEndpoints = (
-          [
-            instanceName ? `${baseUrl}/group/updateParticipant/${instanceName}` : null,
-            instanceName ? `${baseUrl}/${instanceName}/group/updateParticipant` : null,
-            `${baseUrl}/group/updateParticipant`,
-          ].filter(Boolean) as string[]
-        ).map((u) => `${u}?groupJid=${encodeURIComponent(currentGroup ?? "")}`);
-        
-        const promotePayloads = [
-          { groupId: currentGroupJid, participants: [participantJid] },
-          { groupJid: currentGroupJid, participants: [participantJid] },
-          { id: currentGroupJid, participants: [participantJid] },
-          { groupId: `${currentGroupJid}@g.us`, participants: [participantJid] },
-          { groupId: currentGroupJid, participant: participantJid },
-          { groupJid: currentGroupJid, participant: participantJid },
-        ];
-
-        // Evolution updateParticipant payloads (sometimes expects raw numbers)
-        const updateParticipantPayloads = [
-          { action: "promote", participants: [cleanPhone] },
-          { action: "promote", participants: [participantJid] },
-          { action: "promote", participants: [participantJid.replace("@s.whatsapp.net", "")] },
-        ];
-        
-        const httpMethods: Array<"POST" | "PUT"> = ["PUT", "POST"];
-        const headerVariants: Array<Record<string, string>> = [
-          { "Content-Type": "application/json", token: instanceToken },
-          { "Content-Type": "application/json", apikey: instanceToken },
-          { "Content-Type": "application/json", Authorization: `Bearer ${instanceToken}` },
-        ];
-        
+        // PRIMARY: n8n confirmed working endpoint - POST /group/updateParticipants with groupjid (lowercase)
+        // This is the UAZAPI v2 style that works
         let promoteSuccess = false;
-        for (const method of httpMethods) {
-          for (const url of promoteEndpoints) {
-            for (const payload of promotePayloads) {
-              for (const headers of headerVariants) {
-                try {
-                  const res = await fetch(url, {
-                    method,
-                    headers,
-                    body: JSON.stringify(payload),
-                  });
-                  const text = await res.text();
-                  console.log("Promote attempt:", {
-                    method,
-                    endpoint: url.replace(baseUrl, ""),
-                    headerKeys: Object.keys(headers).filter((k) => k !== "Content-Type"),
-                    payloadKeys: Object.keys(payload),
-                    status: res.status,
-                    body: text.substring(0, 200),
-                  });
-
-                  if (res.ok) {
-                    promoteSuccess = true;
-                    break;
-                  }
-                } catch (e) {
-                  console.log("Promote error:", e);
+        
+        try {
+          console.log("Trying primary promote endpoint (updateParticipants):", {
+            url: `${baseUrl}/group/updateParticipants`,
+            groupjid: currentGroup,
+            action: "promote",
+            participants: [cleanPhone],
+          });
+          
+          const res = await fetch(`${baseUrl}/group/updateParticipants`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", token: instanceToken },
+            body: JSON.stringify({
+              groupjid: currentGroup,
+              action: "promote",
+              participants: [cleanPhone],
+            }),
+          });
+          const text = await res.text();
+          console.log("Primary promote response:", { status: res.status, body: text.substring(0, 500) });
+          
+          if (res.ok) {
+            promoteSuccess = true;
+          }
+        } catch (e) {
+          console.log("Primary promote error:", e);
+        }
+        
+        // FALLBACK: Try legacy endpoints if primary fails
+        if (!promoteSuccess) {
+          const participantJid = `${cleanPhone}@s.whatsapp.net`;
+          
+          const fallbackEndpoints = [
+            `${baseUrl}/group/promoteParticipant`,
+            `${baseUrl}/group/promote`,
+            instanceName ? `${baseUrl}/group/promoteParticipant/${instanceName}` : null,
+          ].filter(Boolean) as string[];
+          
+          const fallbackPayloads = [
+            { groupjid: currentGroup, participants: [cleanPhone] },
+            { groupId: currentGroup, participants: [participantJid] },
+            { groupJid: currentGroup, participants: [participantJid] },
+          ];
+          
+          for (const url of fallbackEndpoints) {
+            for (const payload of fallbackPayloads) {
+              try {
+                const res = await fetch(url, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", token: instanceToken },
+                  body: JSON.stringify(payload),
+                });
+                const text = await res.text();
+                console.log("Fallback promote attempt:", {
+                  endpoint: url.replace(baseUrl, ""),
+                  payloadKeys: Object.keys(payload),
+                  status: res.status,
+                  body: text.substring(0, 200),
+                });
+                
+                if (res.ok) {
+                  promoteSuccess = true;
+                  break;
                 }
+              } catch (e) {
+                console.log("Fallback promote error:", e);
               }
-              if (promoteSuccess) break;
             }
             if (promoteSuccess) break;
           }
-
-          // Fallback: Evolution API v2 updateParticipant(action=promote)
-          for (const url of updateParticipantEndpoints) {
-            for (const payload of updateParticipantPayloads) {
-              for (const headers of headerVariants) {
-                try {
-                  const res = await fetch(url, {
-                    method,
-                    headers,
-                    body: JSON.stringify(payload),
-                  });
-                  const text = await res.text();
-                  console.log("Promote attempt (updateParticipant):", {
-                    method,
-                    endpoint: url.replace(baseUrl, ""),
-                    headerKeys: Object.keys(headers).filter((k) => k !== "Content-Type"),
-                    payloadKeys: Object.keys(payload),
-                    status: res.status,
-                    body: text.substring(0, 200),
-                  });
-
-                  if (res.ok) {
-                    promoteSuccess = true;
-                    break;
-                  }
-                } catch (e) {
-                  console.log("Promote error (updateParticipant):", e);
-                }
-              }
-              if (promoteSuccess) break;
-            }
-            if (promoteSuccess) break;
-          }
-          if (promoteSuccess) break;
         }
         
         if (!promoteSuccess) {
@@ -948,116 +913,82 @@ async function processGroupCommand(
           return { isCommand: true, success: false, command, message: "Formato: #revogaradmin telefone (envie dentro do grupo)" };
         }
         const cleanPhoneDemote = params[0].replace(/\D/g, "");
-        const demoteJid = `${cleanPhoneDemote}@s.whatsapp.net`;
-        const currentGroup = currentGroupJid?.includes("@g.us")
+        const currentGroupDemote = currentGroupJid?.includes("@g.us")
           ? currentGroupJid
           : `${currentGroupJid}@g.us`;
         
-        const demoteEndpoints = [
-          `${baseUrl}/group/demoteParticipant`,
-          `${baseUrl}/group/demote`,
-          instanceName ? `${baseUrl}/group/demoteParticipant/${instanceName}` : null,
-          instanceName ? `${baseUrl}/${instanceName}/group/demoteParticipant` : null,
-        ].filter(Boolean) as string[];
-
-        const updateParticipantEndpoints = (
-          [
-            instanceName ? `${baseUrl}/group/updateParticipant/${instanceName}` : null,
-            instanceName ? `${baseUrl}/${instanceName}/group/updateParticipant` : null,
-            `${baseUrl}/group/updateParticipant`,
-          ].filter(Boolean) as string[]
-        ).map((u) => `${u}?groupJid=${encodeURIComponent(currentGroup ?? "")}`);
-        
-        const demotePayloads = [
-          { groupId: currentGroupJid, participants: [demoteJid] },
-          { groupJid: currentGroupJid, participants: [demoteJid] },
-          { id: currentGroupJid, participants: [demoteJid] },
-          { groupId: `${currentGroupJid}@g.us`, participants: [demoteJid] },
-          { groupId: currentGroupJid, participant: demoteJid },
-          { groupJid: currentGroupJid, participant: demoteJid },
-        ];
-
-        const updateParticipantPayloads = [
-          { action: "demote", participants: [cleanPhoneDemote] },
-          { action: "demote", participants: [demoteJid] },
-          { action: "demote", participants: [demoteJid.replace("@s.whatsapp.net", "")] },
-        ];
-        
-        const demoteMethods: Array<"POST" | "PUT"> = ["PUT", "POST"];
-
-        const headerVariants: Array<Record<string, string>> = [
-          { "Content-Type": "application/json", token: instanceToken },
-          { "Content-Type": "application/json", apikey: instanceToken },
-          { "Content-Type": "application/json", Authorization: `Bearer ${instanceToken}` },
-        ];
-        
+        // PRIMARY: n8n confirmed working endpoint - POST /group/updateParticipants with groupjid (lowercase)
         let demoteSuccess = false;
-        for (const method of demoteMethods) {
-          for (const url of demoteEndpoints) {
-            for (const payload of demotePayloads) {
-              for (const headers of headerVariants) {
-                try {
-                  const res = await fetch(url, {
-                    method,
-                    headers,
-                    body: JSON.stringify(payload),
-                  });
-                  const text = await res.text();
-                  console.log("Demote attempt:", {
-                    method,
-                    endpoint: url.replace(baseUrl, ""),
-                    headerKeys: Object.keys(headers).filter((k) => k !== "Content-Type"),
-                    payloadKeys: Object.keys(payload),
-                    status: res.status,
-                    body: text.substring(0, 200),
-                  });
-
-                  if (res.ok) {
-                    demoteSuccess = true;
-                    break;
-                  }
-                } catch (e) {
-                  console.log("Demote error:", e);
+        
+        try {
+          console.log("Trying primary demote endpoint (updateParticipants):", {
+            url: `${baseUrl}/group/updateParticipants`,
+            groupjid: currentGroupDemote,
+            action: "demote",
+            participants: [cleanPhoneDemote],
+          });
+          
+          const res = await fetch(`${baseUrl}/group/updateParticipants`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", token: instanceToken },
+            body: JSON.stringify({
+              groupjid: currentGroupDemote,
+              action: "demote",
+              participants: [cleanPhoneDemote],
+            }),
+          });
+          const text = await res.text();
+          console.log("Primary demote response:", { status: res.status, body: text.substring(0, 500) });
+          
+          if (res.ok) {
+            demoteSuccess = true;
+          }
+        } catch (e) {
+          console.log("Primary demote error:", e);
+        }
+        
+        // FALLBACK: Try legacy endpoints if primary fails
+        if (!demoteSuccess) {
+          const demoteJid = `${cleanPhoneDemote}@s.whatsapp.net`;
+          
+          const fallbackEndpoints = [
+            `${baseUrl}/group/demoteParticipant`,
+            `${baseUrl}/group/demote`,
+            instanceName ? `${baseUrl}/group/demoteParticipant/${instanceName}` : null,
+          ].filter(Boolean) as string[];
+          
+          const fallbackPayloads = [
+            { groupjid: currentGroupDemote, participants: [cleanPhoneDemote] },
+            { groupId: currentGroupDemote, participants: [demoteJid] },
+            { groupJid: currentGroupDemote, participants: [demoteJid] },
+          ];
+          
+          for (const url of fallbackEndpoints) {
+            for (const payload of fallbackPayloads) {
+              try {
+                const res = await fetch(url, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", token: instanceToken },
+                  body: JSON.stringify(payload),
+                });
+                const text = await res.text();
+                console.log("Fallback demote attempt:", {
+                  endpoint: url.replace(baseUrl, ""),
+                  payloadKeys: Object.keys(payload),
+                  status: res.status,
+                  body: text.substring(0, 200),
+                });
+                
+                if (res.ok) {
+                  demoteSuccess = true;
+                  break;
                 }
+              } catch (e) {
+                console.log("Fallback demote error:", e);
               }
-              if (demoteSuccess) break;
             }
             if (demoteSuccess) break;
           }
-
-          // Fallback: Evolution API v2 updateParticipant(action=demote)
-          for (const url of updateParticipantEndpoints) {
-            for (const payload of updateParticipantPayloads) {
-              for (const headers of headerVariants) {
-                try {
-                  const res = await fetch(url, {
-                    method,
-                    headers,
-                    body: JSON.stringify(payload),
-                  });
-                  const text = await res.text();
-                  console.log("Demote attempt (updateParticipant):", {
-                    method,
-                    endpoint: url.replace(baseUrl, ""),
-                    headerKeys: Object.keys(headers).filter((k) => k !== "Content-Type"),
-                    payloadKeys: Object.keys(payload),
-                    status: res.status,
-                    body: text.substring(0, 200),
-                  });
-
-                  if (res.ok) {
-                    demoteSuccess = true;
-                    break;
-                  }
-                } catch (e) {
-                  console.log("Demote error (updateParticipant):", e);
-                }
-              }
-              if (demoteSuccess) break;
-            }
-            if (demoteSuccess) break;
-          }
-          if (demoteSuccess) break;
         }
         
         if (!demoteSuccess) {
