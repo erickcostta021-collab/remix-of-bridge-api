@@ -6,6 +6,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const hashBuf = await crypto.subtle.digest("SHA-256", data);
+  const hashArr = Array.from(new Uint8Array(hashBuf));
+  return hashArr.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // Helper to get valid access token (refresh if needed)
 async function getValidToken(supabase: any, subaccount: any, settings: any): Promise<string> {
   const accessToken: string | null = subaccount.ghl_access_token ?? null;
@@ -330,12 +337,6 @@ serve(async (req: Request) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Check for duplicate webhook calls (GHL sometimes sends same message twice)
-    if (dedupeKey && await isDuplicate(supabase, dedupeKey)) {
-      console.log("Duplicate webhook ignored:", { messageId, dedupeKey });
-      return; // Already responded
-    }
-    
     console.log("GHL Outbound payload:", JSON.stringify(body, null, 2));
 
     // Extract message data first to check if it's a valid outbound message
@@ -345,6 +346,43 @@ serve(async (req: Request) => {
     const messageText: string = String(body.message ?? body.body ?? "");
     const phoneRaw: string = String(body.phone ?? body.to ?? "");
     const attachments: string[] = Array.isArray(body.attachments) ? body.attachments : [];
+
+    // Check for duplicate webhook calls (GHL sometimes sends the same intent twice)
+    // Primary key: messageId
+    if (dedupeKey && await isDuplicate(supabase, dedupeKey)) {
+      console.log("Duplicate webhook ignored (messageId):", { messageId, dedupeKey });
+      return; // Already responded
+    }
+
+    // Secondary key: signature by content + minute bucket.
+    // This prevents double-send when GHL fires two webhooks with different messageIds
+    // for effectively the same outbound action.
+    // IMPORTANT: bucketed by minute to avoid blocking legitimate repeated messages later.
+    try {
+      const dateAdded = String(body.dateAdded ?? body.timestamp ?? "");
+      const minuteBucket = dateAdded ? Math.floor(new Date(dateAdded).getTime() / 60000) : Math.floor(Date.now() / 60000);
+      const signaturePayload = {
+        locationId: String(body.locationId ?? ""),
+        contactId: String(body.contactId ?? ""),
+        conversationId: String(body.conversationId ?? ""),
+        direction,
+        source,
+        phoneRaw,
+        messageText,
+        attachments,
+        minuteBucket,
+      };
+      const sig = await sha256Hex(JSON.stringify(signaturePayload));
+      const sigKey = `ghl_sig:${sig.slice(0, 32)}`;
+
+      if (await isDuplicate(supabase, sigKey)) {
+        console.log("Duplicate webhook ignored (signature):", { sigKey, minuteBucket });
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to compute signature dedupe:", e);
+      // fail-open: don't block message sending
+    }
     
     // Accept messages if:
     // 1. type is OutboundMessage OR direction is outbound
