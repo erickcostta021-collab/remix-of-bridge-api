@@ -6,6 +6,71 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function postJson(
+  url: string,
+  instanceToken: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; status: number; text: string }> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      token: instanceToken,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  return { ok: res.ok, status: res.status, text };
+}
+
+async function updateGroupSubjectBestEffort(
+  baseUrl: string,
+  instanceToken: string,
+  groupIdOrJid: string,
+  subject: string,
+) {
+  const url = `${baseUrl}/group/updateSubject`;
+  const attempts: Array<Record<string, unknown>> = [
+    { groupJid: groupIdOrJid, subject },
+    { groupId: groupIdOrJid, subject },
+    { jid: groupIdOrJid, subject },
+    { id: groupIdOrJid, subject },
+  ];
+
+  for (const payload of attempts) {
+    const r = await postJson(url, instanceToken, payload);
+    console.log("Subject update attempt:", { payloadKeys: Object.keys(payload), status: r.status, body: r.text.substring(0, 200) });
+    if (r.ok) return;
+  }
+}
+
+async function updateGroupPictureBestEffort(
+  baseUrl: string,
+  instanceToken: string,
+  groupIdOrJid: string,
+  imageUrl: string,
+) {
+  const urls = [`${baseUrl}/group/updatePicture`, `${baseUrl}/group/profilePicture`];
+  const payloads: Array<Record<string, unknown>> = [
+    { groupJid: groupIdOrJid, image: imageUrl },
+    { groupId: groupIdOrJid, image: imageUrl },
+    { groupJid: groupIdOrJid, picture: imageUrl },
+    { groupId: groupIdOrJid, picture: imageUrl },
+  ];
+
+  for (const url of urls) {
+    for (const payload of payloads) {
+      const r = await postJson(url, instanceToken, payload);
+      console.log("Picture update attempt:", { endpoint: url.split("/").slice(-2).join("/"), payloadKeys: Object.keys(payload), status: r.status, body: r.text.substring(0, 200) });
+      if (r.ok) return;
+    }
+  }
+}
+
 async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
   const hashBuf = await crypto.subtle.digest("SHA-256", data);
@@ -415,22 +480,21 @@ async function processGroupCommand(
           return { isCommand: true, success: false, command, message: `Erro ao criar grupo: ${createData.message || createResponse.status}` };
         }
         
-        // Extract JID from response - API returns it in group.JID
-        const groupJid = createData.group?.JID || createData.id || createData.jid || createData.gid || createData.groupId || createData.group?.id;
+         // Extract JID from response - API returns it in group.JID
+         const groupJid = createData.group?.JID || createData.id || createData.jid || createData.gid || createData.groupId || createData.group?.id;
         console.log("Group created with JID:", groupJid);
         
         if (!groupJid) {
           return { isCommand: true, success: true, command, message: `⚠️ Grupo criado mas JID não encontrado para aplicar configurações` };
         }
         
-        // Update group subject (name)
-        console.log("Updating group subject to:", name);
-        const subjectResponse = await fetch(`${baseUrl}/group/updateSubject`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupJid, subject: name }),
-        });
-        console.log("Subject update response:", subjectResponse.status, await subjectResponse.text());
+         // Some providers create the group first and only accept metadata updates after a short delay.
+         await sleep(650);
+
+         // Update group subject (name) - try multiple payload shapes
+         console.log("Updating group subject to:", name);
+         await updateGroupSubjectBestEffort(baseUrl, instanceToken, groupJid, name);
+         await sleep(250);
         
         // Update group description
         if (description) {
@@ -443,27 +507,11 @@ async function processGroupCommand(
           console.log("Description update response:", descResponse.status, await descResponse.text());
         }
         
-        // Update group photo
-        if (photoUrl) {
-          console.log("Updating group photo to:", photoUrl);
-          const photoResponse = await fetch(`${baseUrl}/group/updatePicture`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "token": instanceToken },
-            body: JSON.stringify({ groupJid, image: photoUrl }),
-          });
-          const photoData = await photoResponse.text();
-          console.log("Photo update response:", photoResponse.status, photoData);
-          
-          if (!photoResponse.ok) {
-            // Try alternative field name
-            const altPhotoResponse = await fetch(`${baseUrl}/group/updatePicture`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "token": instanceToken },
-              body: JSON.stringify({ groupId: groupJid, image: photoUrl }),
-            });
-            console.log("Alt photo update response:", altPhotoResponse.status, await altPhotoResponse.text());
-          }
-        }
+         // Update group photo - try multiple payload shapes and fallback endpoint
+         if (photoUrl) {
+           console.log("Updating group photo to:", photoUrl);
+           await updateGroupPictureBestEffort(baseUrl, instanceToken, groupJid, photoUrl);
+         }
         
         return { isCommand: true, success: true, command, message: `Grupo "${name}" criado com sucesso!` };
       }
