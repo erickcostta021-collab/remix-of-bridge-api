@@ -504,11 +504,11 @@ async function processGroupCommand(
         
         console.log("Creating group with:", { name, description, photoUrl, formattedParticipants });
         
-        // Create group first (API creates empty group, we update name/desc/photo after)
+        // Create group with name (not subject) - per n8n successful test
         const createResponse = await fetch(`${baseUrl}/group/create`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ subject: name, participants: formattedParticipants }),
+          body: JSON.stringify({ name, participants: formattedParticipants }),
         });
         
         const createData = await createResponse.json();
@@ -518,21 +518,17 @@ async function processGroupCommand(
           return { isCommand: true, success: false, command, message: `Erro ao criar grupo: ${createData.message || createResponse.status}` };
         }
         
-         // Extract JID from response - API returns it in group.JID
-         const groupJid = createData.group?.JID || createData.id || createData.jid || createData.gid || createData.groupId || createData.group?.id;
+        // Extract JID from response - API returns it in group.JID
+        const groupJid = createData.group?.JID || createData.id || createData.jid || createData.gid || createData.groupId || createData.group?.id;
         console.log("Group created with JID:", groupJid);
         
+        // Group name is set at creation time with "name" field, no need for updateSubject
         if (!groupJid) {
           return { isCommand: true, success: true, command, message: `⚠️ Grupo criado mas JID não encontrado para aplicar configurações` };
         }
         
-         // Some providers create the group first and only accept metadata updates after a short delay.
-         await sleep(650);
-
-         // Update group subject (name) - try multiple payload shapes
-         console.log("Updating group subject to:", name);
-          await updateGroupSubjectBestEffort(baseUrl, instanceToken, groupJid, name, instanceName);
-         await sleep(250);
+        // Some providers need a short delay before metadata updates
+        await sleep(500);
         
         // Update group description
         if (description) {
