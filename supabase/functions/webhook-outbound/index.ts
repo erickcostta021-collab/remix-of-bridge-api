@@ -1213,41 +1213,104 @@ async function processGroupCommand(
           ? groupIdForLink 
           : `${groupIdForLink}@g.us`;
         
-        console.log("Getting invite link for group via /group/inviteCode:", normalizedGroupId);
+        console.log("Getting invite link for group:", normalizedGroupId);
         
         let inviteCode: string | null = null;
-        
-        // PRIMARY: Use /group/inviteCode endpoint (confirmed working via curl)
-        try {
-          const inviteResponse = await fetch(`${baseUrl}/group/inviteCode`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "token": instanceToken },
-            body: JSON.stringify({ groupjid: normalizedGroupId }),
-          });
-          
-          const inviteText = await inviteResponse.text();
-          console.log("group/inviteCode response:", { status: inviteResponse.status, body: inviteText.substring(0, 500) });
-          
-          if (inviteResponse.ok) {
-            try {
-              const inviteData = JSON.parse(inviteText);
-              // Try multiple possible response fields
-              const codeValue = inviteData.code || inviteData.inviteCode || inviteData.inviteLink || inviteData.inviteUrl || inviteData.invite;
-              
-              if (codeValue) {
-                // Extract code from full URL if needed
-                if (typeof codeValue === "string" && codeValue.startsWith("https://chat.whatsapp.com/")) {
-                  inviteCode = codeValue.replace("https://chat.whatsapp.com/", "");
-                } else {
-                  inviteCode = codeValue;
-                }
-              }
-            } catch (e) {
-              console.log("Failed to parse inviteCode response:", e);
+
+        const extractInviteCodeBestEffort = (raw: string): string | null => {
+          // 1) Direct URL in any response
+          const urlMatch = raw.match(/https?:\/\/chat\.whatsapp\.com\/([A-Za-z0-9]{10,})/);
+          if (urlMatch?.[1]) return urlMatch[1];
+
+          // 2) Common JSON fields
+          try {
+            const data = JSON.parse(raw);
+            const candidates: unknown[] = [
+              data?.code,
+              data?.inviteCode,
+              data?.invite_link,
+              data?.inviteLink,
+              data?.inviteUrl,
+              data?.invite,
+              data?.data?.code,
+              data?.data?.inviteCode,
+              data?.data?.inviteLink,
+              data?.data?.inviteUrl,
+              data?.data?.invite,
+            ];
+
+            for (const c of candidates) {
+              if (typeof c !== "string") continue;
+              if (c.startsWith("https://chat.whatsapp.com/")) return c.replace("https://chat.whatsapp.com/", "");
+              if (c.length >= 10) return c;
             }
+
+            // 3) Deep scan for any string containing chat.whatsapp.com
+            const stack: any[] = [data];
+            while (stack.length) {
+              const v = stack.pop();
+              if (!v) continue;
+              if (typeof v === "string") {
+                const m = v.match(/https?:\/\/chat\.whatsapp\.com\/([A-Za-z0-9]{10,})/);
+                if (m?.[1]) return m[1];
+              } else if (Array.isArray(v)) {
+                for (const x of v) stack.push(x);
+              } else if (typeof v === "object") {
+                for (const k of Object.keys(v)) stack.push(v[k]);
+              }
+            }
+          } catch {
+            // ignore
           }
-        } catch (e) {
-          console.log("inviteCode fetch error:", e);
+
+          // 4) Last resort: a long-ish token-like string (avoid matching phone numbers)
+          const tokenMatch = raw.match(/\b([A-Za-z0-9]{10,})\b/);
+          return tokenMatch?.[1] ?? null;
+        };
+
+        // PRIMARY: Try inviteCode endpoint with multiple method/path variants (some APIs return 405 on POST)
+        const inviteAttempts: Array<{
+          label: string;
+          url: string;
+          method: "GET" | "POST" | "PUT";
+          body?: unknown;
+        }> = [
+          { label: "inviteCode:POST", url: `${baseUrl}/group/inviteCode`, method: "POST", body: { groupjid: normalizedGroupId } },
+          { label: "inviteCode:PUT", url: `${baseUrl}/group/inviteCode`, method: "PUT", body: { groupjid: normalizedGroupId } },
+          { label: "inviteCode:GET?groupjid", url: `${baseUrl}/group/inviteCode?groupjid=${encodeURIComponent(normalizedGroupId)}`, method: "GET" },
+          { label: "inviteCode:GET?groupJid", url: `${baseUrl}/group/inviteCode?groupJid=${encodeURIComponent(normalizedGroupId)}`, method: "GET" },
+        ];
+
+        if (instanceName) {
+          inviteAttempts.push(
+            { label: "inviteCode:POST:instance", url: `${baseUrl}/group/inviteCode/${instanceName}`, method: "POST", body: { groupjid: normalizedGroupId } },
+            { label: "inviteCode:GET:instance", url: `${baseUrl}/group/inviteCode/${instanceName}?groupjid=${encodeURIComponent(normalizedGroupId)}`, method: "GET" },
+          );
+        }
+
+        for (const attempt of inviteAttempts) {
+          if (inviteCode) break;
+          try {
+            const res = await fetch(attempt.url, {
+              method: attempt.method,
+              headers: {
+                ...(attempt.method !== "GET" ? { "Content-Type": "application/json" } : {}),
+                token: instanceToken,
+              },
+              ...(attempt.method !== "GET" ? { body: JSON.stringify(attempt.body ?? {}) } : {}),
+            });
+            const text = await res.text();
+            console.log("Invite attempt response:", {
+              label: attempt.label,
+              status: res.status,
+              body: text.substring(0, 500),
+            });
+            if (res.ok) {
+              inviteCode = extractInviteCodeBestEffort(text);
+            }
+          } catch (e) {
+            console.log("Invite attempt error:", { label: attempt.label, error: String(e) });
+          }
         }
         
         // FALLBACK: Try /group/info with getInviteLink if primary fails
@@ -1269,20 +1332,7 @@ async function processGroupCommand(
             console.log("group/info fallback response:", { status: infoResponse.status, body: infoText.substring(0, 500) });
             
             if (infoResponse.ok) {
-              try {
-                const infoData = JSON.parse(infoText);
-                const linkValue = infoData.inviteLink || infoData.inviteUrl || infoData.invite || infoData.code || infoData.inviteCode;
-                
-                if (linkValue) {
-                  if (typeof linkValue === "string" && linkValue.startsWith("https://chat.whatsapp.com/")) {
-                    inviteCode = linkValue.replace("https://chat.whatsapp.com/", "");
-                  } else {
-                    inviteCode = linkValue;
-                  }
-                }
-              } catch (e) {
-                console.log("Failed to parse group/info response:", e);
-              }
+              inviteCode = extractInviteCodeBestEffort(infoText);
             }
           } catch (e) {
             console.log("group/info fallback error:", e);
