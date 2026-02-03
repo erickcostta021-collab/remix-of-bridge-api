@@ -568,12 +568,71 @@ async function findGroupByName(
   return null;
 }
 
+// Context for GHL operations inside group commands
+interface GhlContext {
+  supabase: any;
+  subaccount: any;
+  settings: any;
+  contactId?: string;
+}
+
+// Update GHL contact photo
+async function updateGhlContactPhoto(
+  ctx: GhlContext,
+  photoUrl: string,
+): Promise<void> {
+  if (!ctx.contactId || !ctx.settings?.ghl_client_id || !ctx.settings?.ghl_client_secret) {
+    console.log("[GHL] Skipping contact photo update - missing context:", {
+      hasContactId: !!ctx.contactId,
+      hasClientId: !!ctx.settings?.ghl_client_id,
+    });
+    return;
+  }
+
+  try {
+    const token = await getValidToken(ctx.supabase, ctx.subaccount, ctx.settings);
+    if (!token) {
+      console.error("[GHL] No valid token for photo update");
+      return;
+    }
+
+    console.log("[GHL] Updating contact photo:", { contactId: ctx.contactId, photoUrl });
+
+    const response = await fetch(
+      `https://services.leadconnectorhq.com/contacts/${ctx.contactId}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Version: "2021-07-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customFields: [],
+          // GHL uses 'profilePhoto' for contact avatar
+          profilePhoto: photoUrl,
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    if (response.ok) {
+      console.log("[GHL] ✅ Contact photo updated successfully");
+    } else {
+      console.error("[GHL] ❌ Failed to update contact photo:", response.status, responseText.substring(0, 300));
+    }
+  } catch (e) {
+    console.error("[GHL] Error updating contact photo:", e);
+  }
+}
+
 async function processGroupCommand(
   baseUrl: string,
   instanceToken: string,
   messageText: string,
   instanceName?: string,
   currentGroupJid?: string, // JID do grupo se a mensagem veio de dentro de um grupo
+  ghlContext?: GhlContext, // Context for GHL operations
 ): Promise<GroupCommandResult> {
   const parsed = parseGroupCommand(messageText);
   if (!parsed) return { isCommand: false };
@@ -729,7 +788,15 @@ async function processGroupCommand(
         }
         const imageUrl = params[0];
         console.log("Updating group photo (contextual):", { groupJid: currentGroupJid, imageUrl });
+        
+        // 1. Update WhatsApp group photo
         await updateGroupPictureBestEffort(baseUrl, instanceToken, currentGroupJid!, imageUrl, instanceName);
+        
+        // 2. Also update GHL contact photo (syncs immediately)
+        if (ghlContext) {
+          await updateGhlContactPhoto(ghlContext, imageUrl);
+        }
+        
         return { isCommand: true, success: true, command, message: `Foto do grupo atualizada!` };
       }
       
@@ -1247,6 +1314,7 @@ serve(async (req: Request) => {
         messageText,
         (instance as any)?.instance_name,
         groupJidForCommand, // Passa o JID do grupo se a mensagem veio de um grupo
+        { supabase, subaccount, settings, contactId }, // Context for GHL operations
       );
       
       if (commandResult.isCommand) {
