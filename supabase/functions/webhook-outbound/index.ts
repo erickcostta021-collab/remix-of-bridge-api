@@ -84,6 +84,18 @@ async function sha256Hex(input: string): Promise<string> {
   return hashArr.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function normalizePhoneForSig(phone: string): string {
+  const p = String(phone ?? "").trim();
+  if (!p) return "";
+  // Preserve group ids / JIDs
+  if (p.includes("@g.us") || p.includes("@s.whatsapp.net") || p.includes("-")) return p;
+  return p.replace(/\D/g, "");
+}
+
+function normalizeTextForSig(text: string): string {
+  return String(text ?? "").replace(/\s+/g, " ").trim();
+}
+
 // Helper to get valid access token (refresh if needed)
 async function getValidToken(supabase: any, subaccount: any, settings: any): Promise<string> {
   const accessToken: string | null = subaccount.ghl_access_token ?? null;
@@ -1600,15 +1612,20 @@ serve(async (req: Request) => {
     try {
       const dateAdded = String(body.dateAdded ?? body.timestamp ?? "");
       const minuteBucket = dateAdded ? Math.floor(new Date(dateAdded).getTime() / 60000) : Math.floor(Date.now() / 60000);
+      // Normalize payload shape differences (SMS vs OutboundMessage) so we dedupe across both.
+      // We intentionally IGNORE `type/direction/source` here because GHL may emit the same message
+      // with different wrappers/fields.
+      const normalizedPhone = normalizePhoneForSig(phoneRaw);
+      const normalizedText = normalizeTextForSig(messageText);
+      const normalizedAttachments = (attachments || []).map(String).filter(Boolean).sort();
+
       const signaturePayload = {
         locationId: String(body.locationId ?? ""),
         contactId: String(body.contactId ?? ""),
         conversationId: String(body.conversationId ?? ""),
-        direction,
-        source,
-        phoneRaw,
-        messageText,
-        attachments,
+        phone: normalizedPhone,
+        text: normalizedText,
+        attachments: normalizedAttachments,
         minuteBucket,
       };
       const sig = await sha256Hex(JSON.stringify(signaturePayload));
