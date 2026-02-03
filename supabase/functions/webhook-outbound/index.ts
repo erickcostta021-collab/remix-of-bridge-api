@@ -730,6 +730,62 @@ async function updateGhlContactName(
   }
 }
 
+// Send an outbound message to GHL (appears as "sent" in the conversation)
+async function sendGhlOutboundMessage(
+  ctx: GhlContext,
+  message: string,
+): Promise<void> {
+  if (!ctx.contactId || !ctx.settings?.ghl_client_id || !ctx.settings?.ghl_client_secret) {
+    console.log("[GHL] Skipping outbound message - missing context:", {
+      hasContactId: !!ctx.contactId,
+      hasClientId: !!ctx.settings?.ghl_client_id,
+    });
+    return;
+  }
+
+  try {
+    const token = await getValidToken(ctx.supabase, ctx.subaccount, ctx.settings);
+    if (!token) {
+      console.error("[GHL] No valid token for outbound message");
+      return;
+    }
+
+    console.log("[GHL] Sending outbound message:", { contactId: ctx.contactId, messagePreview: message.substring(0, 50) });
+
+    const payload = {
+      type: "SMS",
+      contactId: ctx.contactId,
+      message,
+      status: "delivered",
+    };
+
+    const response = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: "2021-04-15",
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    
+    if (response.ok) {
+      console.log("[GHL] ✅ Outbound message sent successfully:", responseText.substring(0, 200));
+    } else {
+      console.log("[GHL] Failed to send outbound message:", { 
+        status: response.status, 
+        body: responseText.substring(0, 300) 
+      });
+    }
+
+  } catch (e) {
+    console.error("[GHL] Error sending outbound message:", e);
+  }
+}
+
 async function processGroupCommand(
   baseUrl: string,
   instanceToken: string,
@@ -1420,6 +1476,10 @@ async function processGroupCommand(
         console.log("Leave group response:", { status: leaveRes.status, body: leaveText.substring(0, 300) });
         
         if (leaveRes.ok) {
+          // Send outbound message to GHL confirming the exit
+          if (ghlContext) {
+            await sendGhlOutboundMessage(ghlContext, "Você não faz mais parte deste grupo");
+          }
           return { isCommand: true, success: true, command, message: `Saí do grupo com sucesso` };
         } else {
           return { isCommand: true, success: false, command, message: `Falha ao sair do grupo (${leaveRes.status})` };
