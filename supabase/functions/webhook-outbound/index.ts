@@ -590,6 +590,22 @@ async function processGroupCommand(
   if (!validCommands.includes(command)) {
     return { isCommand: false };
   }
+
+  // Commands that REQUIRE being sent from inside a group (except #criargrupo and #linkgrupo)
+  const requiresGroupContext = [
+    "#removerdogrupo", "#addnogrupo", "#promoveradmin", "#revogaradmin",
+    "#attfotogrupo", "#attnomegrupo", "#attdescricao",
+    "#somenteadminmsg", "#msgliberada", "#somenteadminedit", "#editliberado"
+  ];
+
+  if (requiresGroupContext.includes(command) && !currentGroupJid) {
+    return {
+      isCommand: true,
+      success: false,
+      command,
+      message: `⚠️ O comando ${command} deve ser enviado de DENTRO do grupo que você quer gerenciar.`
+    };
+  }
   
   try {
     switch (command) {
@@ -598,12 +614,10 @@ async function processGroupCommand(
           return { isCommand: true, success: false, command, message: "Formato: #criargrupo nome|descrição|urldafoto|telefone" };
         }
         const [name, description, photoUrl, ...phones] = params;
-        // UAZAPI/Evolution expects just clean phone numbers without @s.whatsapp.net
         const formattedParticipants = phones.map(p => p.replace(/\D/g, ""));
         
         console.log("Creating group with:", { name, description, photoUrl, formattedParticipants });
         
-        // Create group with name (not subject) - per n8n successful test
         const createResponse = await fetch(`${baseUrl}/group/create`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
@@ -617,19 +631,15 @@ async function processGroupCommand(
           return { isCommand: true, success: false, command, message: `Erro ao criar grupo: ${createData.message || createResponse.status}` };
         }
         
-        // Extract JID from response - API returns it in group.JID
         const groupJid = createData.group?.JID || createData.id || createData.jid || createData.gid || createData.groupId || createData.group?.id;
         console.log("Group created with JID:", groupJid);
         
-        // Group name is set at creation time with "name" field, no need for updateSubject
         if (!groupJid) {
           return { isCommand: true, success: true, command, message: `⚠️ Grupo criado mas JID não encontrado para aplicar configurações` };
         }
         
-        // Some providers need a short delay before metadata updates
         await sleep(500);
         
-        // Update group description
         if (description) {
           console.log("Updating group description to:", description);
           const descResponse = await fetch(`${baseUrl}/group/updateDescription`, {
@@ -640,13 +650,11 @@ async function processGroupCommand(
           console.log("Description update response:", descResponse.status, await descResponse.text());
         }
         
-         // Update group photo - try multiple payload shapes and fallback endpoint
-         if (photoUrl) {
-           console.log("Updating group photo to:", photoUrl);
-            await updateGroupPictureBestEffort(baseUrl, instanceToken, groupJid, photoUrl, instanceName);
-         }
+        if (photoUrl) {
+          console.log("Updating group photo to:", photoUrl);
+          await updateGroupPictureBestEffort(baseUrl, instanceToken, groupJid, photoUrl, instanceName);
+        }
         
-        // Send confirmation message to the group
         await sleep(500);
         console.log("Sending confirmation message to group:", groupJid);
         await sendTextMessage(baseUrl, instanceToken, groupJid, "✅");
@@ -655,201 +663,166 @@ async function processGroupCommand(
       }
       
       case "#removerdogrupo": {
-        if (params.length < 2) {
-          return { isCommand: true, success: false, command, message: "Formato: #removerdogrupo nome_grupo|telefone" };
+        // Formato: #removerdogrupo telefone (enviado dentro do grupo)
+        if (params.length < 1) {
+          return { isCommand: true, success: false, command, message: "Formato: #removerdogrupo telefone (envie dentro do grupo)" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
-        const cleanPhone = params[1].replace(/\D/g, "");
+        const cleanPhone = params[0].replace(/\D/g, "");
         await fetch(`${baseUrl}/group/removeParticipant`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, participants: [`${cleanPhone}@s.whatsapp.net`] }),
+          body: JSON.stringify({ groupId: currentGroupJid, participants: [`${cleanPhone}@s.whatsapp.net`] }),
         });
         
-        return { isCommand: true, success: true, command, message: `Membro ${params[1]} removido do grupo "${params[0]}"` };
+        return { isCommand: true, success: true, command, message: `Membro ${params[0]} removido do grupo` };
       }
       
       case "#addnogrupo": {
-        if (params.length < 2) {
-          return { isCommand: true, success: false, command, message: "Formato: #addnogrupo nome_grupo|telefone" };
+        // Formato: #addnogrupo telefone (enviado dentro do grupo)
+        if (params.length < 1) {
+          return { isCommand: true, success: false, command, message: "Formato: #addnogrupo telefone (envie dentro do grupo)" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
-        const cleanPhone = params[1].replace(/\D/g, "");
+        const cleanPhone = params[0].replace(/\D/g, "");
         await fetch(`${baseUrl}/group/addParticipant`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, participants: [`${cleanPhone}@s.whatsapp.net`] }),
+          body: JSON.stringify({ groupId: currentGroupJid, participants: [`${cleanPhone}@s.whatsapp.net`] }),
         });
         
-        return { isCommand: true, success: true, command, message: `Membro ${params[1]} adicionado ao grupo "${params[0]}"` };
+        return { isCommand: true, success: true, command, message: `Membro ${params[0]} adicionado ao grupo` };
       }
       
       case "#promoveradmin": {
-        if (params.length < 2) {
-          return { isCommand: true, success: false, command, message: "Formato: #promoveradmin nome_grupo|telefone" };
+        // Formato: #promoveradmin telefone (enviado dentro do grupo)
+        if (params.length < 1) {
+          return { isCommand: true, success: false, command, message: "Formato: #promoveradmin telefone (envie dentro do grupo)" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
-        const cleanPhone = params[1].replace(/\D/g, "");
+        const cleanPhone = params[0].replace(/\D/g, "");
         await fetch(`${baseUrl}/group/promoteParticipant`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, participants: [`${cleanPhone}@s.whatsapp.net`] }),
+          body: JSON.stringify({ groupId: currentGroupJid, participants: [`${cleanPhone}@s.whatsapp.net`] }),
         });
         
-        return { isCommand: true, success: true, command, message: `Membro ${params[1]} promovido a admin` };
+        return { isCommand: true, success: true, command, message: `Membro ${params[0]} promovido a admin` };
       }
       
       case "#revogaradmin": {
-        if (params.length < 2) {
-          return { isCommand: true, success: false, command, message: "Formato: #revogaradmin nome_grupo|telefone" };
+        // Formato: #revogaradmin telefone (enviado dentro do grupo)
+        if (params.length < 1) {
+          return { isCommand: true, success: false, command, message: "Formato: #revogaradmin telefone (envie dentro do grupo)" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
-        const cleanPhone = params[1].replace(/\D/g, "");
+        const cleanPhone = params[0].replace(/\D/g, "");
         await fetch(`${baseUrl}/group/demoteParticipant`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, participants: [`${cleanPhone}@s.whatsapp.net`] }),
+          body: JSON.stringify({ groupId: currentGroupJid, participants: [`${cleanPhone}@s.whatsapp.net`] }),
         });
         
-        return { isCommand: true, success: true, command, message: `Admin ${params[1]} rebaixado a membro` };
+        return { isCommand: true, success: true, command, message: `Admin ${params[0]} rebaixado a membro` };
       }
       
       case "#attfotogrupo": {
-        // Se enviado de dentro do grupo: #attfotogrupo url
-        // Se enviado de fora: #attfotogrupo nome_grupo|url_foto
-        if (params.length === 1 && currentGroupJid) {
-          // Comando enviado de dentro do grupo - usa o JID atual
-          const imageUrl = params[0];
-          console.log("Updating group photo (from inside group):", { groupJid: currentGroupJid, imageUrl });
-          await updateGroupPictureBestEffort(baseUrl, instanceToken, currentGroupJid, imageUrl, instanceName);
-          return { isCommand: true, success: true, command, message: `Foto do grupo atualizada!` };
-        } else if (params.length >= 2) {
-          // Comando enviado de fora - busca pelo nome
-          const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-          if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-          
-          await updateGroupPictureBestEffort(baseUrl, instanceToken, group.id, params[1], instanceName);
-          return { isCommand: true, success: true, command, message: `Foto do grupo "${params[0]}" atualizada` };
-        } else {
-          return { isCommand: true, success: false, command, message: "Formato: #attfotogrupo url (dentro do grupo) ou #attfotogrupo nome_grupo|url_foto (fora do grupo)" };
+        // Formato: #attfotogrupo url (enviado dentro do grupo)
+        if (params.length < 1) {
+          return { isCommand: true, success: false, command, message: "Formato: #attfotogrupo url_da_foto (envie dentro do grupo)" };
         }
+        const imageUrl = params[0];
+        console.log("Updating group photo (contextual):", { groupJid: currentGroupJid, imageUrl });
+        await updateGroupPictureBestEffort(baseUrl, instanceToken, currentGroupJid!, imageUrl, instanceName);
+        return { isCommand: true, success: true, command, message: `Foto do grupo atualizada!` };
       }
       
       case "#attnomegrupo": {
-        if (params.length < 2) {
-          return { isCommand: true, success: false, command, message: "Formato: #attnomegrupo nome_atual|nome_novo" };
+        // Formato: #attnomegrupo novo_nome (enviado dentro do grupo)
+        if (params.length < 1) {
+          return { isCommand: true, success: false, command, message: "Formato: #attnomegrupo novo_nome (envie dentro do grupo)" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
-        await fetch(`${baseUrl}/group/updateSubject`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, subject: params[1] }),
-        });
-        
-        return { isCommand: true, success: true, command, message: `Nome do grupo alterado para "${params[1]}"` };
+        const newSubject = params.join("|"); // Allow | in name
+        await updateGroupSubjectBestEffort(baseUrl, instanceToken, currentGroupJid!, newSubject, instanceName);
+        return { isCommand: true, success: true, command, message: `Nome do grupo alterado para "${newSubject}"` };
       }
       
       case "#attdescricao": {
-        if (params.length < 2) {
-          return { isCommand: true, success: false, command, message: "Formato: #attdescricao nome_grupo|nova_descricao" };
+        // Formato: #attdescricao nova_descricao (enviado dentro do grupo)
+        if (params.length < 1) {
+          return { isCommand: true, success: false, command, message: "Formato: #attdescricao nova_descricao (envie dentro do grupo)" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
+        const newDescription = params.join("|"); // Allow | in description
         await fetch(`${baseUrl}/group/updateDescription`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, description: params[1] }),
+          body: JSON.stringify({ groupId: currentGroupJid, description: newDescription }),
         });
-        
-        return { isCommand: true, success: true, command, message: `Descrição do grupo "${params[0]}" atualizada` };
+        return { isCommand: true, success: true, command, message: `Descrição do grupo atualizada` };
       }
       
       case "#somenteadminmsg": {
-        if (params.length < 1) {
-          return { isCommand: true, success: false, command, message: "Formato: #somenteadminmsg nome_grupo" };
-        }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
+        // Formato: #somenteadminmsg (enviado dentro do grupo)
         await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, action: "announcement" }),
+          body: JSON.stringify({ groupId: currentGroupJid, action: "announcement" }),
         });
-        
-        return { isCommand: true, success: true, command, message: `Apenas admins podem enviar mensagens no grupo "${params[0]}"` };
+        return { isCommand: true, success: true, command, message: `Apenas admins podem enviar mensagens neste grupo` };
       }
       
       case "#msgliberada": {
-        if (params.length < 1) {
-          return { isCommand: true, success: false, command, message: "Formato: #msgliberada nome_grupo" };
-        }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
+        // Formato: #msgliberada (enviado dentro do grupo)
         await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, action: "not_announcement" }),
+          body: JSON.stringify({ groupId: currentGroupJid, action: "not_announcement" }),
         });
-        
-        return { isCommand: true, success: true, command, message: `Todos podem enviar mensagens no grupo "${params[0]}"` };
+        return { isCommand: true, success: true, command, message: `Todos podem enviar mensagens neste grupo` };
       }
       
       case "#somenteadminedit": {
-        if (params.length < 1) {
-          return { isCommand: true, success: false, command, message: "Formato: #somenteadminedit nome_grupo" };
-        }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
+        // Formato: #somenteadminedit (enviado dentro do grupo)
         await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, action: "locked" }),
+          body: JSON.stringify({ groupId: currentGroupJid, action: "locked" }),
         });
-        
-        return { isCommand: true, success: true, command, message: `Apenas admins podem editar o grupo "${params[0]}"` };
+        return { isCommand: true, success: true, command, message: `Apenas admins podem editar este grupo` };
       }
       
       case "#editliberado": {
-        if (params.length < 1) {
-          return { isCommand: true, success: false, command, message: "Formato: #editliberado nome_grupo" };
-        }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
+        // Formato: #editliberado (enviado dentro do grupo)
         await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, action: "unlocked" }),
+          body: JSON.stringify({ groupId: currentGroupJid, action: "unlocked" }),
         });
-        
-        return { isCommand: true, success: true, command, message: `Todos podem editar o grupo "${params[0]}"` };
+        return { isCommand: true, success: true, command, message: `Todos podem editar este grupo` };
       }
       
       case "#linkgrupo": {
-        if (params.length < 2) {
-          return { isCommand: true, success: false, command, message: "Formato: #linkgrupo nome_grupo|telefone" };
+        // Formato: #linkgrupo telefone (enviado dentro ou fora - se dentro usa currentGroupJid, se fora precisa do nome)
+        // Para simplificar: se dentro do grupo, só passa telefone. Se fora, precisa nome_grupo|telefone
+        let groupIdForLink = currentGroupJid;
+        let phoneParam = params[0];
+
+        if (!currentGroupJid) {
+          // Fora do grupo - precisa nome|telefone
+          if (params.length < 2) {
+            return { isCommand: true, success: false, command, message: "Formato fora do grupo: #linkgrupo nome_grupo|telefone" };
+          }
+          const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
+          if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
+          groupIdForLink = group.id;
+          phoneParam = params[1];
+        } else {
+          // Dentro do grupo - só telefone
+          if (params.length < 1) {
+            return { isCommand: true, success: false, command, message: "Formato: #linkgrupo telefone (envie dentro do grupo)" };
+          }
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         const inviteResponse = await fetch(`${baseUrl}/group/inviteCode`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id }),
+          body: JSON.stringify({ groupId: groupIdForLink }),
         });
         
         const inviteData = await inviteResponse.json();
@@ -860,15 +833,15 @@ async function processGroupCommand(
         }
         
         const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
-        const cleanPhone = params[1].replace(/\D/g, "");
+        const cleanPhone = phoneParam.replace(/\D/g, "");
         
         await fetch(`${baseUrl}/send/text`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ number: cleanPhone, text: `📎 Link do grupo "${params[0]}":\n${inviteLink}` }),
+          body: JSON.stringify({ number: cleanPhone, text: `📎 Link do grupo:\n${inviteLink}` }),
         });
         
-        return { isCommand: true, success: true, command, message: `Link do grupo "${params[0]}" enviado para ${params[1]}` };
+        return { isCommand: true, success: true, command, message: `Link do grupo enviado para ${phoneParam}` };
       }
       
       default:
