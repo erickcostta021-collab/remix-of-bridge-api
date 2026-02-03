@@ -747,7 +747,7 @@ async function processGroupCommand(
   const validCommands = [
     "#criargrupo", "#removerdogrupo", "#addnogrupo", "#promoveradmin",
     "#revogaradmin", "#attfotogrupo", "#attnomegrupo", "#attdescricao",
-    "#somenteadminmsg", "#msgliberada", "#somenteadminedit", "#editliberado", "#linkgrupo"
+    "#somenteadminmsg", "#msgliberada", "#somenteadminedit", "#editliberado", "#linkgrupo", "#sairgrupo"
   ];
   
   if (!validCommands.includes(command)) {
@@ -758,7 +758,7 @@ async function processGroupCommand(
   const requiresGroupContext = [
     "#removerdogrupo", "#addnogrupo", "#promoveradmin", "#revogaradmin",
     "#attfotogrupo", "#attnomegrupo", "#attdescricao",
-    "#somenteadminmsg", "#msgliberada", "#somenteadminedit", "#editliberado"
+    "#somenteadminmsg", "#msgliberada", "#somenteadminedit", "#editliberado", "#sairgrupo"
   ];
 
   if (requiresGroupContext.includes(command) && !currentGroupJid) {
@@ -1400,6 +1400,30 @@ async function processGroupCommand(
         });
         
         return { isCommand: true, success: true, command, message: `Link do grupo enviado para ${phoneParam}` };
+      }
+      
+      case "#sairgrupo": {
+        // Formato: #sairgrupo (enviado dentro do grupo)
+        // UAZAPI: POST /group/leave with { groupjid }
+        const groupToLeave = currentGroupJid?.includes("@g.us")
+          ? currentGroupJid
+          : `${currentGroupJid}@g.us`;
+        
+        console.log("Leaving group:", { groupjid: groupToLeave });
+        
+        const leaveRes = await fetch(`${baseUrl}/group/leave`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "token": instanceToken },
+          body: JSON.stringify({ groupjid: groupToLeave }),
+        });
+        const leaveText = await leaveRes.text();
+        console.log("Leave group response:", { status: leaveRes.status, body: leaveText.substring(0, 300) });
+        
+        if (leaveRes.ok) {
+          return { isCommand: true, success: true, command, message: `Saí do grupo com sucesso` };
+        } else {
+          return { isCommand: true, success: false, command, message: `Falha ao sair do grupo (${leaveRes.status})` };
+        }
       }
       
       default:
