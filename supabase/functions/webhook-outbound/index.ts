@@ -461,6 +461,7 @@ async function processGroupCommand(
   instanceToken: string,
   messageText: string,
   instanceName?: string,
+  currentGroupJid?: string, // JID do grupo se a mensagem veio de dentro de um grupo
 ): Promise<GroupCommandResult> {
   const parsed = parseGroupCommand(messageText);
   if (!parsed) return { isCommand: false };
@@ -610,19 +611,24 @@ async function processGroupCommand(
       }
       
       case "#attfotogrupo": {
-        if (params.length < 2) {
-          return { isCommand: true, success: false, command, message: "Formato: #attfotogrupo nome_grupo|url_foto" };
+        // Se enviado de dentro do grupo: #attfotogrupo url
+        // Se enviado de fora: #attfotogrupo nome_grupo|url_foto
+        if (params.length === 1 && currentGroupJid) {
+          // Comando enviado de dentro do grupo - usa o JID atual
+          const imageUrl = params[0];
+          console.log("Updating group photo (from inside group):", { groupJid: currentGroupJid, imageUrl });
+          await updateGroupPictureBestEffort(baseUrl, instanceToken, currentGroupJid, imageUrl, instanceName);
+          return { isCommand: true, success: true, command, message: `Foto do grupo atualizada!` };
+        } else if (params.length >= 2) {
+          // Comando enviado de fora - busca pelo nome
+          const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+          if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
+          
+          await updateGroupPictureBestEffort(baseUrl, instanceToken, group.id, params[1], instanceName);
+          return { isCommand: true, success: true, command, message: `Foto do grupo "${params[0]}" atualizada` };
+        } else {
+          return { isCommand: true, success: false, command, message: "Formato: #attfotogrupo url (dentro do grupo) ou #attfotogrupo nome_grupo|url_foto (fora do grupo)" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
-        if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
-        
-        await fetch(`${baseUrl}/group/updatePicture`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: group.id, image: params[1] }),
-        });
-        
-        return { isCommand: true, success: true, command, message: `Foto do grupo "${params[0]}" atualizada` };
       }
       
       case "#attnomegrupo": {
@@ -1147,11 +1153,15 @@ serve(async (req: Request) => {
     if (messageText && messageText.trim().startsWith("#")) {
       console.log("Detected potential group command:", messageText.substring(0, 50));
       
+      // Se for um grupo, passa o JID para comandos como #attfotogrupo
+      const groupJidForCommand = isGroup ? targetPhone : undefined;
+      
       const commandResult = await processGroupCommand(
         base,
         instanceToken,
         messageText,
         (instance as any)?.instance_name,
+        groupJidForCommand, // Passa o JID do grupo se a mensagem veio de um grupo
       );
       
       if (commandResult.isCommand) {
