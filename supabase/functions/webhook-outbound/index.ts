@@ -1323,21 +1323,29 @@ serve(async (req: Request) => {
 
     // CRITICAL: Check if this message was synced from WhatsApp via webhook-inbound
     // When a message is sent from the phone, webhook-inbound syncs it to GHL and stores the GHL messageId.
-    // If source is NOT from GHL UI/workflow (source !== "workflow" && source !== "direct"), it might be a synced message.
-    // We should only process messages that originated from GHL, not messages that were synced FROM WhatsApp.
     // 
     // Source values:
-    // - "app" = GHL web interface
-    // - "workflow" = GHL automation
-    // - "direct" = direct API call from GHL
-    // - Others = potentially synced from external source
-    const isFromGhlInterface = source === "app" || source === "workflow" || source === "direct";
-    
-    // If the message has status "delivered" and is NOT from GHL interface, it's likely a synced message
-    // from webhook-inbound - we should NOT re-send it
+    // - "app" = GHL web interface (user clicked send)
+    // - "workflow" = GHL automation (workflow triggered send)
+    // - "direct" = direct message from GHL
+    // - "api" = created via API (could be our webhook-inbound syncing FROM WhatsApp!)
+    // 
+    // We should ONLY process messages that originated from GHL UI or workflows.
+    // Messages with source="api" are typically synced from external sources (like our webhook-inbound)
+    // and should NOT be re-sent to WhatsApp to avoid duplicates/loops.
     const status = String(body.status ?? "");
-    if (status === "delivered" && !isFromGhlInterface) {
-      console.log("Ignoring already-delivered message (likely synced from WhatsApp):", { source, status, messageId });
+    
+    // Accept ONLY messages from GHL user interface or workflows
+    // Reject "api" source messages - these are typically synced from external systems
+    const isFromGhlUserAction = source === "app" || source === "workflow" || source === "direct";
+    
+    if (!isFromGhlUserAction) {
+      console.log("Ignoring message not from GHL user action:", { 
+        source, 
+        status, 
+        messageId,
+        reason: source === "api" ? "API-created (likely synced from WhatsApp)" : "Unknown source" 
+      });
       return; // Already responded
     }
 
