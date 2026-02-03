@@ -415,43 +415,76 @@ function parseGroupCommand(text: string): { command: string; params: string[] } 
 async function findGroupByName(
   baseUrl: string,
   instanceToken: string,
-  groupName: string
+  groupName: string,
+  instanceName?: string,
 ): Promise<{ id: string; name: string } | null> {
-  const url = `${baseUrl}/group/all`;
-  
+  const endpoints = (
+    [
+      // Most common
+      `${baseUrl}/group/all`,
+      // Some deployments require instance in path
+      instanceName ? `${baseUrl}/group/all/${instanceName}` : null,
+      instanceName ? `${baseUrl}/${instanceName}/group/all` : null,
+
+      // Alternative group listing endpoints seen in different UAZAPI/Evolution builds
+      `${baseUrl}/group/list`,
+      instanceName ? `${baseUrl}/group/list/${instanceName}` : null,
+      instanceName ? `${baseUrl}/${instanceName}/group/list` : null,
+
+      `${baseUrl}/group/findAll`,
+      instanceName ? `${baseUrl}/group/findAll/${instanceName}` : null,
+      instanceName ? `${baseUrl}/${instanceName}/group/findAll` : null,
+    ].filter(Boolean) as string[]
+  );
+
   // Try multiple header combinations - UAZAPI may accept 'token' or 'apikey'
   const headerVariants: Record<string, string>[] = [
-    { "Content-Type": "application/json", "token": instanceToken },
-    { "Content-Type": "application/json", "apikey": instanceToken },
+    { "Content-Type": "application/json", token: instanceToken },
+    { "Content-Type": "application/json", apikey: instanceToken },
   ];
-  
+
   let groups: any[] | null = null;
-  
-  for (const headers of headerVariants) {
-    try {
-      console.log("Attempting to list groups with headers:", Object.keys(headers).filter(k => k !== "Content-Type"));
-      const response = await fetch(url, {
-        method: "GET",
-        headers,
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          groups = data;
-          console.log(`Successfully listed ${groups.length} groups`);
-          break;
+
+  for (const url of endpoints) {
+    for (const headers of headerVariants) {
+      try {
+        console.log(
+          "Attempting to list groups:",
+          { endpoint: url.replace(baseUrl, ""), headers: Object.keys(headers).filter((k) => k !== "Content-Type") },
+        );
+
+        const response = await fetch(url, { method: "GET", headers });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data)) {
+            groups = data;
+            console.log(`Successfully listed ${groups.length} groups`, { endpoint: url.replace(baseUrl, "") });
+            break;
+          }
+
+          // Some APIs wrap arrays inside objects
+          if (data && Array.isArray((data as any).groups)) {
+            const wrapped = (data as any).groups as any[];
+            groups = wrapped;
+            console.log(`Successfully listed ${wrapped.length} groups (wrapped)`, { endpoint: url.replace(baseUrl, "") });
+            break;
+          }
+        } else {
+          console.log(`List groups failed (${response.status})`, {
+            endpoint: url.replace(baseUrl, ""),
+            body: (await response.text()).substring(0, 300),
+          });
         }
-      } else {
-        console.log(`Header variant failed (${response.status}):`, await response.text());
+      } catch (err) {
+        console.log("Error listing groups attempt:", { endpoint: url.replace(baseUrl, "") }, err);
       }
-    } catch (err) {
-      console.log("Error with header variant:", err);
     }
+    if (groups) break;
   }
-  
+
   if (!groups) {
-    console.error("Failed to list groups with all header variants");
+    console.error("Failed to list groups using all endpoint/header variants", { instanceName });
     return null;
   }
   
@@ -561,7 +594,7 @@ async function processGroupCommand(
         if (params.length < 2) {
           return { isCommand: true, success: false, command, message: "Formato: #removerdogrupo nome_grupo|telefone" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         const cleanPhone = params[1].replace(/\D/g, "");
@@ -578,7 +611,7 @@ async function processGroupCommand(
         if (params.length < 2) {
           return { isCommand: true, success: false, command, message: "Formato: #addnogrupo nome_grupo|telefone" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         const cleanPhone = params[1].replace(/\D/g, "");
@@ -595,7 +628,7 @@ async function processGroupCommand(
         if (params.length < 2) {
           return { isCommand: true, success: false, command, message: "Formato: #promoveradmin nome_grupo|telefone" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         const cleanPhone = params[1].replace(/\D/g, "");
@@ -612,7 +645,7 @@ async function processGroupCommand(
         if (params.length < 2) {
           return { isCommand: true, success: false, command, message: "Formato: #revogaradmin nome_grupo|telefone" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         const cleanPhone = params[1].replace(/\D/g, "");
@@ -636,7 +669,7 @@ async function processGroupCommand(
           return { isCommand: true, success: true, command, message: `Foto do grupo atualizada!` };
         } else if (params.length >= 2) {
           // Comando enviado de fora - busca pelo nome
-          const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+          const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
           if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
           
           await updateGroupPictureBestEffort(baseUrl, instanceToken, group.id, params[1], instanceName);
@@ -650,7 +683,7 @@ async function processGroupCommand(
         if (params.length < 2) {
           return { isCommand: true, success: false, command, message: "Formato: #attnomegrupo nome_atual|nome_novo" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         await fetch(`${baseUrl}/group/updateSubject`, {
@@ -666,7 +699,7 @@ async function processGroupCommand(
         if (params.length < 2) {
           return { isCommand: true, success: false, command, message: "Formato: #attdescricao nome_grupo|nova_descricao" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         await fetch(`${baseUrl}/group/updateDescription`, {
@@ -682,7 +715,7 @@ async function processGroupCommand(
         if (params.length < 1) {
           return { isCommand: true, success: false, command, message: "Formato: #somenteadminmsg nome_grupo" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         await fetch(`${baseUrl}/group/updateSetting`, {
@@ -698,7 +731,7 @@ async function processGroupCommand(
         if (params.length < 1) {
           return { isCommand: true, success: false, command, message: "Formato: #msgliberada nome_grupo" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         await fetch(`${baseUrl}/group/updateSetting`, {
@@ -714,7 +747,7 @@ async function processGroupCommand(
         if (params.length < 1) {
           return { isCommand: true, success: false, command, message: "Formato: #somenteadminedit nome_grupo" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         await fetch(`${baseUrl}/group/updateSetting`, {
@@ -730,7 +763,7 @@ async function processGroupCommand(
         if (params.length < 1) {
           return { isCommand: true, success: false, command, message: "Formato: #editliberado nome_grupo" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         await fetch(`${baseUrl}/group/updateSetting`, {
@@ -746,7 +779,7 @@ async function processGroupCommand(
         if (params.length < 2) {
           return { isCommand: true, success: false, command, message: "Formato: #linkgrupo nome_grupo|telefone" };
         }
-        const group = await findGroupByName(baseUrl, instanceToken, params[0]);
+        const group = await findGroupByName(baseUrl, instanceToken, params[0], instanceName);
         if (!group) return { isCommand: true, success: false, command, message: `Grupo "${params[0]}" não encontrado` };
         
         const inviteResponse = await fetch(`${baseUrl}/group/inviteCode`, {
