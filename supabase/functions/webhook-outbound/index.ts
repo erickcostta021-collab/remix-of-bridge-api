@@ -1166,22 +1166,42 @@ async function processGroupCommand(
           }
         }
         
+        // UAZAPI v2: POST /group/inviteCode with { groupjid }
+        console.log("Getting invite link for group:", groupIdForLink);
         const inviteResponse = await fetch(`${baseUrl}/group/inviteCode`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: groupIdForLink }),
+          body: JSON.stringify({ groupjid: groupIdForLink }),
         });
         
-        const inviteData = await inviteResponse.json();
-        const inviteCode = inviteData.code || inviteData.inviteCode || inviteData.invite;
+        const inviteText = await inviteResponse.text();
+        console.log("inviteCode response:", { status: inviteResponse.status, body: inviteText.substring(0, 300) });
         
-        if (!inviteCode) {
-          return { isCommand: true, success: false, command, message: "Não foi possível obter o link do grupo" };
+        let inviteCode: string | null = null;
+        try {
+          const inviteData = JSON.parse(inviteText);
+          // Try multiple response formats
+          inviteCode = inviteData.code || inviteData.inviteCode || inviteData.invite || inviteData.inviteUrl;
+          
+          // If inviteUrl is a full URL, extract code
+          if (inviteCode && inviteCode.startsWith("https://chat.whatsapp.com/")) {
+            inviteCode = inviteCode.replace("https://chat.whatsapp.com/", "");
+          }
+        } catch (e) {
+          // Response might be plain text invite code
+          if (inviteText && !inviteText.includes("{") && inviteText.length > 10 && inviteText.length < 50) {
+            inviteCode = inviteText.trim();
+          }
+        }
+        
+        if (!inviteCode || inviteCode === String(inviteResponse.status)) {
+          return { isCommand: true, success: false, command, message: `Não foi possível obter o link do grupo (${inviteResponse.status})` };
         }
         
         const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
         const cleanPhone = phoneParam.replace(/\D/g, "");
         
+        console.log("Sending invite link to:", cleanPhone, "link:", inviteLink);
         await fetch(`${baseUrl}/send/text`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
