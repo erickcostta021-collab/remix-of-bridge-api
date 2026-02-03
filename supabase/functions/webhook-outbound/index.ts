@@ -488,11 +488,27 @@ async function findGroupByName(
     return null;
   }
   
-  const targetName = groupName.toLowerCase();
-  const found = groups.find((g: any) => {
-    const name = (g.subject || g.name || g.groupName || "").toLowerCase();
+  // Normalize for flexible matching: lowercase, remove accents
+  const normalize = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const targetName = normalize(groupName);
+  
+  // Log all group names for debugging
+  console.log("Available groups:", groups.map((g: any) => g.subject || g.name || g.groupName || "(no name)").slice(0, 10));
+  
+  // Try exact match first
+  let found = groups.find((g: any) => {
+    const name = normalize(g.subject || g.name || g.groupName || "");
     return name === targetName;
   });
+  
+  // If no exact match, try partial match (contains)
+  if (!found) {
+    found = groups.find((g: any) => {
+      const name = normalize(g.subject || g.name || g.groupName || "");
+      return name.includes(targetName) || targetName.includes(name);
+    });
+  }
   
   if (found) {
     return {
