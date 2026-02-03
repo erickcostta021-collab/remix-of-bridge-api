@@ -1335,23 +1335,34 @@ serve(async (req: Request) => {
     // - "workflow" = GHL automation (workflow triggered send)
     // - "direct" = direct message from GHL
     // - "api" = created via API (could be our webhook-inbound syncing FROM WhatsApp!)
+    // - "" (empty) = legacy SMS webhook format, OR user typed in GHL
     // 
     // We should ONLY process messages that originated from GHL UI or workflows.
     // Messages with source="api" are typically synced from external sources (like our webhook-inbound)
     // and should NOT be re-sent to WhatsApp to avoid duplicates/loops.
+    // EXCEPTION: Commands starting with # should ALWAYS be processed regardless of source.
     const status = String(body.status ?? "");
     
-    // Accept ONLY messages from GHL user interface or workflows
-    // Reject "api" source messages - these are typically synced from external systems
-    const isFromGhlUserAction = source === "app" || source === "workflow" || source === "direct";
+    // Check if this is a # command - these should ALWAYS be processed
+    const isHashCommand = messageText.startsWith("#");
     
-    if (!isFromGhlUserAction) {
+    // Accept messages from GHL user interface, workflows, or legacy SMS format (empty source)
+    // Reject "api" source messages - these are typically synced from external systems
+    const isFromGhlUserAction = source === "app" || source === "workflow" || source === "direct" || source === "";
+    
+    if (!isFromGhlUserAction && !isHashCommand) {
       console.log("Ignoring message not from GHL user action:", { 
         source, 
         status, 
         messageId,
         reason: source === "api" ? "API-created (likely synced from WhatsApp)" : "Unknown source" 
       });
+      return; // Already responded
+    }
+    
+    // If source is "api" but NOT a command, ignore (synced message from WhatsApp)
+    if (source === "api" && !isHashCommand) {
+      console.log("Ignoring API-synced message (not a command):", { source, messageId });
       return; // Already responded
     }
 
