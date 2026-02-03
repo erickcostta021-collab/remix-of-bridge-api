@@ -101,7 +101,7 @@ async function createGroup(
     
     console.log("Formatted participants:", formattedParticipants);
     
-    // Create group
+    // Create group - API creates with participants first, then we update name/description/photo
     const createUrl = `${baseUrl}/group/create`;
     const createResponse = await fetch(createUrl, {
       method: "POST",
@@ -112,7 +112,6 @@ async function createGroup(
       body: JSON.stringify({
         subject: groupName,
         participants: formattedParticipants,
-        description,
       }),
     });
     
@@ -123,12 +122,57 @@ async function createGroup(
       return { success: false, command: "criargrupo", message: `Erro ao criar grupo: ${createData.message || createResponse.status}` };
     }
     
-    // Try multiple possible field names for the group ID
-    const groupId = createData.id || createData.jid || createData.gid || createData.groupId || createData.group?.id;
-    console.log("Group created with ID:", groupId);
+    // Extract group JID from response - API returns it in group.JID
+    const groupJid = createData.group?.JID || createData.id || createData.jid || createData.gid || createData.groupId || createData.group?.id;
+    console.log("Group created with JID:", groupJid);
+    
+    if (!groupJid) {
+      console.error("Could not extract group JID from response");
+      return { 
+        success: true, 
+        command: "criargrupo", 
+        message: `⚠️ Grupo criado mas não foi possível aplicar nome/descrição/foto (JID não encontrado)`,
+        data: createData 
+      };
+    }
+    
+    // Update group name (subject) - API requires separate call
+    console.log("Updating group subject to:", groupName);
+    const subjectResponse = await fetch(`${baseUrl}/group/updateSubject`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "token": instanceToken,
+      },
+      body: JSON.stringify({
+        groupJid: groupJid,
+        subject: groupName,
+      }),
+    });
+    const subjectData = await subjectResponse.text();
+    console.log("Subject update response:", subjectResponse.status, subjectData);
+    
+    // Update group description if provided
+    if (description) {
+      console.log("Updating group description to:", description);
+      const descResponse = await fetch(`${baseUrl}/group/updateDescription`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "token": instanceToken,
+        },
+        body: JSON.stringify({
+          groupJid: groupJid,
+          description: description,
+        }),
+      });
+      const descData = await descResponse.text();
+      console.log("Description update response:", descResponse.status, descData);
+    }
     
     // Update group photo if provided
-    if (photoUrl && groupId) {
+    if (photoUrl) {
+      console.log("Updating group photo to:", photoUrl);
       const photoResponse = await fetch(`${baseUrl}/group/updatePicture`, {
         method: "POST",
         headers: {
@@ -136,7 +180,7 @@ async function createGroup(
           "token": instanceToken,
         },
         body: JSON.stringify({
-          groupId,
+          groupJid: groupJid,
           image: photoUrl,
         }),
       });
@@ -145,15 +189,15 @@ async function createGroup(
       console.log("Photo update response:", photoResponse.status, photoData);
       
       if (!photoResponse.ok) {
-        // Try alternative endpoint
-        const altPhotoResponse = await fetch(`${baseUrl}/group/profilePicture`, {
+        // Try alternative field name
+        const altPhotoResponse = await fetch(`${baseUrl}/group/updatePicture`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "token": instanceToken,
           },
           body: JSON.stringify({
-            groupJid: groupId,
+            groupId: groupJid,
             image: photoUrl,
           }),
         });
