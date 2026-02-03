@@ -348,17 +348,16 @@ Deno.serve(async (req) => {
 
       console.log("Preference saved successfully:", { contactId, instanceId, leadPhone });
 
-      // Create GHL Custom message (appears as outbound in chat, NOT sent to contact)
-      // Using type: "Custom" with conversationProviderId to log without sending
-      // Endpoint: POST /conversations/messages (not /:id/messages)
+      // Create GHL Contact Note (visible only to agents in the Notes tab, NOT sent to contact)
+      // Using POST /contacts/:contactId/notes endpoint
       if (conversationId && previousInstanceName && newInstanceName && previousInstanceName !== newInstanceName) {
-        console.log("Creating GHL outbound message (Custom type) for conversation:", conversationId);
+        console.log("Creating GHL contact note for instance switch");
         
         try {
-          // Get the GHL access token and conversation provider ID for this location
+          // Get the GHL access token for this location
           const { data: subaccount } = await supabase
             .from("ghl_subaccounts")
-            .select("ghl_access_token, ghl_token_expires_at, user_id")
+            .select("ghl_access_token, ghl_token_expires_at")
             .eq("location_id", locationId)
             .maybeSingle();
           
@@ -368,9 +367,9 @@ Deno.serve(async (req) => {
             const needsRefresh = expiresAt && expiresAt.getTime() - Date.now() < 5 * 60 * 1000;
             
             if (needsRefresh) {
-              console.log("Token needs refresh, skipping message creation");
+              console.log("Token needs refresh, skipping note creation");
             } else {
-              // First, get the contactId from the conversation
+              // Get the contactId from the conversation
               const convResponse = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}`, {
                 headers: {
                   "Authorization": `Bearer ${subaccount.ghl_access_token}`,
@@ -385,88 +384,26 @@ Deno.serve(async (req) => {
                 console.log("Got contactId from conversation:", contactIdFromConv);
                 
                 if (contactIdFromConv) {
-                  // Get the conversation provider ID from user_settings
-                  const { data: userSettings } = await supabase
-                    .from("user_settings")
-                    .select("ghl_conversation_provider_id")
-                    .eq("user_id", subaccount.user_id)
-                    .maybeSingle();
+                  // Create contact note via GHL API - visible in Notes tab only
+                  const noteContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
                   
-                  const conversationProviderId = userSettings?.ghl_conversation_provider_id;
+                  const ghlResponse = await fetch(`https://services.leadconnectorhq.com/contacts/${contactIdFromConv}/notes`, {
+                    method: "POST",
+                    headers: {
+                      "Authorization": `Bearer ${subaccount.ghl_access_token}`,
+                      "Content-Type": "application/json",
+                      "Version": "2021-07-28"
+                    },
+                    body: JSON.stringify({
+                      body: noteContent
+                    })
+                  });
                   
-                  const messageContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
-                  let shouldCreateNote = true;
-
-                  // 1) Try Custom message (requires valid conversationProviderId)
-                  if (conversationProviderId) {
-                    const ghlResponse = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
-                      method: "POST",
-                      headers: {
-                        "Authorization": `Bearer ${subaccount.ghl_access_token}`,
-                        "Content-Type": "application/json",
-                        "Version": "2021-04-15",
-                        "Accept": "application/json",
-                      },
-                      body: JSON.stringify({
-                        type: "Custom",
-                        contactId: contactIdFromConv,
-                        message: messageContent,
-                        conversationProviderId,
-                      }),
-                    });
-
-                    if (ghlResponse.ok) {
-                      console.log("GHL Custom outbound message created successfully");
-                      shouldCreateNote = false;
-                    }
-
-                    if (!ghlResponse.ok) {
-                      const errorText = await ghlResponse.text();
-                      console.error("Failed to create GHL Custom message:", ghlResponse.status, errorText);
-
-                      // If provider is invalid/not installed, fall back to internal note in conversation.
-                      // Otherwise, don't try any other strategy (avoid accidental sends).
-                      const providerNotFound =
-                        ghlResponse.status === 404 &&
-                        (errorText.includes("No conversation provider found") ||
-                          errorText.toLowerCase().includes("conversation provider"));
-
-                      if (!providerNotFound) {
-                        shouldCreateNote = false;
-                      } else {
-                        console.log(
-                          "Conversation provider not found/invalid for this location. Falling back to conversation note."
-                        );
-                      }
-                    }
+                  if (ghlResponse.ok) {
+                    console.log("GHL contact note created successfully for contact:", contactIdFromConv);
                   } else {
-                    console.log("No conversation provider ID configured. Falling back to conversation note.");
-                  }
-
-                  // 2) Fallback: create internal note in conversation (does not send to contact)
-                  // NOTE: This renders as an internal note (not outbound bubble), but it's safe.
-                  if (shouldCreateNote) {
-                    const noteRes = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
-                      method: "POST",
-                      headers: {
-                        "Authorization": `Bearer ${subaccount.ghl_access_token}`,
-                        "Content-Type": "application/json",
-                        "Version": "2021-04-15",
-                        "Accept": "application/json",
-                      },
-                      body: JSON.stringify({
-                        type: "note",
-                        contactId: contactIdFromConv,
-                        message: messageContent,
-                      }),
-                    });
-
-                    if (noteRes.ok) {
-                      console.log("GHL conversation note created successfully");
-                    } else {
-                      const errorText = await noteRes.text();
-                      console.error("Failed to create GHL conversation note:", noteRes.status, errorText);
-                    }
+                    const errorText = await ghlResponse.text();
+                    console.error("Failed to create GHL contact note:", ghlResponse.status, errorText);
                   }
                 } else {
                   console.log("Could not get contactId from conversation:", conversationId);
@@ -479,9 +416,9 @@ Deno.serve(async (req) => {
           } else {
             console.log("No GHL access token found for location:", locationId);
           }
-        } catch (msgError) {
-          console.error("Error creating GHL message:", msgError);
-          // Don't fail the request just because message creation failed
+        } catch (noteError) {
+          console.error("Error creating GHL note:", noteError);
+          // Don't fail the request just because note creation failed
         }
       }
 
