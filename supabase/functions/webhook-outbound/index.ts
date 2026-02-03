@@ -42,17 +42,35 @@ async function updateGroupSubjectBestEffort(
   subject: string,
   instanceName?: string,
 ) {
+  // Evolution API uses: POST /group/updateGroupSubject/{instance}?groupJid=xxx
+  // with { subject } in body
+  
+  // Try with query parameter first (Evolution API style)
+  if (instanceName) {
+    const queryUrl = `${baseUrl}/group/updateGroupSubject/${instanceName}?groupJid=${encodeURIComponent(groupIdOrJid)}`;
+    console.log("Trying Evolution API style with query param:", { url: queryUrl });
+    
+    const r = await postJson(queryUrl, instanceToken, { subject });
+    console.log("Subject update attempt (query param):", {
+      endpoint: `updateGroupSubject/${instanceName}?groupJid=...`,
+      status: r.status,
+      body: r.text.substring(0, 200),
+    });
+    if (r.ok) return;
+  }
+  
+  // Fallback: Try multiple URL/payload combinations (UAZAPI variants)
   const urls = (
     [
-      // Instance-in-path variants (common in Evolution/UAZAPI deployments)
       instanceName ? `${baseUrl}/group/updateGroupSubject/${instanceName}` : null,
       instanceName ? `${baseUrl}/group/updateSubject/${instanceName}` : null,
-      // Non-instance variants
       `${baseUrl}/group/updateGroupSubject`,
       `${baseUrl}/group/updateSubject`,
     ].filter(Boolean) as string[]
   );
+  
   const attempts: Array<Record<string, unknown>> = [
+    { groupjid: groupIdOrJid, subject }, // lowercase groupjid (like updateImage)
     { groupJid: groupIdOrJid, subject },
     { groupId: groupIdOrJid, subject },
     { jid: groupIdOrJid, subject },
@@ -71,6 +89,8 @@ async function updateGroupSubjectBestEffort(
       if (r.ok) return;
     }
   }
+  
+  console.error("All subject update attempts failed for group:", groupIdOrJid);
 }
 
 async function updateGroupPictureBestEffort(
