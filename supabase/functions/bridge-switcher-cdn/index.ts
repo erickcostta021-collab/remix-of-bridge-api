@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.9.0 - Pure v6.6.0 UI + No Focus Outline
-console.log('🚀 BRIDGE LOADER: v6.9.0 Iniciado');
+// 🚀 BRIDGE LOADER: v6.10.0 - Chat Instance Change Notification
+console.log('🚀 BRIDGE LOADER: v6.10.0 Iniciado');
 
 try {
     (function() {
@@ -18,7 +18,7 @@ try {
             theme: { primary: '#22c55e', border: '#d1d5db', text: '#374151' }
         };
 
-        let state = { instances: [], lastPhoneFound: null, currentLocationId: null };
+        let state = { instances: [], lastPhoneFound: null, currentLocationId: null, currentInstanceName: null };
 
         function cleanPhone(raw) {
             if (!raw) return null;
@@ -46,6 +46,70 @@ try {
             setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
         }
 
+        function injectChatNotification(fromInstance, toInstance) {
+            // Find the GHL chat messages container
+            const chatContainer = document.querySelector('.conversation-messages-wrapper') || 
+                                  document.querySelector('[class*="messages-container"]') ||
+                                  document.querySelector('.hl_conversations--messages-renderer');
+            
+            if (!chatContainer) {
+                console.log(LOG_PREFIX, 'Chat container not found for notification');
+                return;
+            }
+
+            // Remove any existing bridge notifications
+            const existing = chatContainer.querySelectorAll('.bridge-switch-notification');
+            existing.forEach(el => el.remove());
+
+            // Create the notification element
+            const notification = document.createElement('div');
+            notification.className = 'bridge-switch-notification';
+            notification.style.cssText = \`
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 8px 16px;
+                margin: 12px auto;
+                max-width: 300px;
+                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+                border: 1px solid #86efac;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                color: #166534;
+                box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
+                animation: bridgeFadeIn 0.3s ease-out;
+            \`;
+            
+            notification.innerHTML = \`
+                <span style="margin-right: 6px;">🔄</span>
+                <span style="color: #dc2626; font-weight: 700;">\${fromInstance}</span>
+                <span style="margin: 0 8px; color: #9ca3af;">→</span>
+                <span style="color: #16a34a; font-weight: 700;">\${toInstance}</span>
+            \`;
+
+            // Add animation keyframes if not already present
+            if (!document.getElementById('bridge-animation-styles')) {
+                const animStyle = document.createElement('style');
+                animStyle.id = 'bridge-animation-styles';
+                animStyle.textContent = \`
+                    @keyframes bridgeFadeIn {
+                        from { opacity: 0; transform: translateY(-10px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                \`;
+                document.head.appendChild(animStyle);
+            }
+
+            // Insert at the end of the chat
+            chatContainer.appendChild(notification);
+            
+            // Auto-scroll to show the notification
+            notification.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            
+            console.log(LOG_PREFIX, 'Chat notification injected:', fromInstance, '→', toInstance);
+        }
+
         function renderOptions(showPhone = false) {
             const select = document.getElementById('bridge-instance-selector');
             if (!select) return;
@@ -67,6 +131,8 @@ try {
                 if (data.instances) {
                     state.instances = data.instances;
                     const activeId = data.activeInstanceId || data.instances[0]?.id;
+                    const activeInstance = data.instances.find(i => i.id === activeId);
+                    state.currentInstanceName = activeInstance?.name || null;
                     const select = document.getElementById('bridge-instance-selector');
                     if (select) {
                         select.value = activeId;
@@ -127,7 +193,9 @@ try {
             
             select.addEventListener('change', async (e) => {
                 const phone = extractPhone();
-                const instanceName = state.instances.find(i => i.id === e.target.value)?.name || "";
+                const previousName = state.currentInstanceName;
+                const newInstance = state.instances.find(i => i.id === e.target.value);
+                const newName = newInstance?.name || "";
                 renderOptions(false);
                 
                 try {
@@ -136,7 +204,16 @@ try {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ instanceId: e.target.value, locationId: state.currentLocationId, phone: phone })
                     });
-                    showNotification(instanceName);
+                    
+                    // Inject chat notification showing the switch
+                    if (previousName && previousName !== newName) {
+                        injectChatNotification(previousName, newName);
+                    }
+                    
+                    // Update current instance name
+                    state.currentInstanceName = newName;
+                    
+                    showNotification(newName);
                 } catch (err) { console.error("Erro Save:", err); }
             });
 
