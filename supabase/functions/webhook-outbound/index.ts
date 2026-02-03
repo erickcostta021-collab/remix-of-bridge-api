@@ -419,41 +419,56 @@ async function findGroupByName(
 ): Promise<{ id: string; name: string } | null> {
   const url = `${baseUrl}/group/all`;
   
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "token": instanceToken,
-      },
-    });
-    
-    if (!response.ok) {
-      console.error("Failed to list groups:", await response.text());
-      return null;
+  // Try multiple header combinations - UAZAPI may accept 'token' or 'apikey'
+  const headerVariants: Record<string, string>[] = [
+    { "Content-Type": "application/json", "token": instanceToken },
+    { "Content-Type": "application/json", "apikey": instanceToken },
+  ];
+  
+  let groups: any[] | null = null;
+  
+  for (const headers of headerVariants) {
+    try {
+      console.log("Attempting to list groups with headers:", Object.keys(headers).filter(k => k !== "Content-Type"));
+      const response = await fetch(url, {
+        method: "GET",
+        headers,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          groups = data;
+          console.log(`Successfully listed ${groups.length} groups`);
+          break;
+        }
+      } else {
+        console.log(`Header variant failed (${response.status}):`, await response.text());
+      }
+    } catch (err) {
+      console.log("Error with header variant:", err);
     }
-    
-    const groups = await response.json();
-    if (!Array.isArray(groups)) return null;
-    
-    const targetName = groupName.toLowerCase();
-    const found = groups.find((g: any) => {
-      const name = (g.subject || g.name || g.groupName || "").toLowerCase();
-      return name === targetName;
-    });
-    
-    if (found) {
-      return {
-        id: found.id || found.jid || found.groupId,
-        name: found.subject || found.name || found.groupName,
-      };
-    }
-    
-    return null;
-  } catch (e) {
-    console.error("Error finding group:", e);
+  }
+  
+  if (!groups) {
+    console.error("Failed to list groups with all header variants");
     return null;
   }
+  
+  const targetName = groupName.toLowerCase();
+  const found = groups.find((g: any) => {
+    const name = (g.subject || g.name || g.groupName || "").toLowerCase();
+    return name === targetName;
+  });
+  
+  if (found) {
+    return {
+      id: found.id || found.jid || found.groupId,
+      name: found.subject || found.name || found.groupName,
+    };
+  }
+  
+  return null;
 }
 
 async function processGroupCommand(
