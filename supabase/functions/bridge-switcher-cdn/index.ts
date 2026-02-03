@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.10.0 - Chat Instance Change Notification
-console.log('🚀 BRIDGE LOADER: v6.10.0 Iniciado');
+// 🚀 BRIDGE LOADER: v6.11.0 - Chat Notification with Overlay Fallback
+console.log('🚀 BRIDGE LOADER: v6.11.0 Iniciado');
 
 try {
     (function() {
@@ -47,19 +47,97 @@ try {
         }
 
         function injectChatNotification(fromInstance, toInstance) {
-            // Find the GHL chat messages container
-            const chatContainer = document.querySelector('.conversation-messages-wrapper') || 
-                                  document.querySelector('[class*="messages-container"]') ||
-                                  document.querySelector('.hl_conversations--messages-renderer');
+            console.log(LOG_PREFIX, '🔄 Attempting to inject chat notification:', fromInstance, '→', toInstance);
             
+            // Try multiple selectors for GHL chat container
+            const selectors = [
+                '.conversation-messages-wrapper',
+                '.hl_conversations--messages-renderer',
+                '[class*="messages-container"]',
+                '[class*="conversation-messages"]',
+                '.messages-list',
+                '[data-testid="messages-container"]',
+                '.msg-list-container',
+                // Fallback: find any scrollable container that looks like a chat
+                '[class*="chat"] [class*="scroll"]',
+                '[class*="conversation"] [class*="scroll"]'
+            ];
+            
+            let chatContainer = null;
+            for (const selector of selectors) {
+                chatContainer = document.querySelector(selector);
+                if (chatContainer) {
+                    console.log(LOG_PREFIX, '✅ Found chat container with selector:', selector);
+                    break;
+                }
+            }
+            
+            // If no container found, use a fixed position overlay instead
             if (!chatContainer) {
-                console.log(LOG_PREFIX, 'Chat container not found for notification');
+                console.log(LOG_PREFIX, '⚠️ Chat container not found, using overlay notification');
+                
+                // Remove existing overlay
+                const existingOverlay = document.getElementById('bridge-switch-overlay');
+                if (existingOverlay) existingOverlay.remove();
+                
+                // Create overlay notification
+                const overlay = document.createElement('div');
+                overlay.id = 'bridge-switch-overlay';
+                overlay.style.cssText = \`
+                    position: fixed;
+                    top: 80px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    z-index: 10001;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    padding: 10px 20px;
+                    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+                    border: 1px solid #86efac;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: #166534;
+                    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.25);
+                    animation: bridgeFadeIn 0.3s ease-out;
+                \`;
+                
+                overlay.innerHTML = \`
+                    <span style="margin-right: 8px;">🔄</span>
+                    <span style="color: #dc2626; font-weight: 700;">\${fromInstance}</span>
+                    <span style="margin: 0 10px; color: #9ca3af;">→</span>
+                    <span style="color: #16a34a; font-weight: 700;">\${toInstance}</span>
+                \`;
+                
+                // Add animation keyframes
+                if (!document.getElementById('bridge-animation-styles')) {
+                    const animStyle = document.createElement('style');
+                    animStyle.id = 'bridge-animation-styles';
+                    animStyle.textContent = \`
+                        @keyframes bridgeFadeIn {
+                            from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+                            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+                        }
+                    \`;
+                    document.head.appendChild(animStyle);
+                }
+                
+                document.body.appendChild(overlay);
+                
+                // Auto-remove after 4 seconds
+                setTimeout(() => {
+                    overlay.style.opacity = '0';
+                    overlay.style.transition = 'opacity 0.3s';
+                    setTimeout(() => overlay.remove(), 300);
+                }, 4000);
+                
+                console.log(LOG_PREFIX, '✅ Overlay notification displayed');
                 return;
             }
 
             // Remove any existing bridge notifications
-            const existing = chatContainer.querySelectorAll('.bridge-switch-notification');
-            existing.forEach(el => el.remove());
+            document.querySelectorAll('.bridge-switch-notification').forEach(el => el.remove());
 
             // Create the notification element
             const notification = document.createElement('div');
@@ -107,7 +185,7 @@ try {
             // Auto-scroll to show the notification
             notification.scrollIntoView({ behavior: 'smooth', block: 'end' });
             
-            console.log(LOG_PREFIX, 'Chat notification injected:', fromInstance, '→', toInstance);
+            console.log(LOG_PREFIX, '✅ Chat notification injected:', fromInstance, '→', toInstance);
         }
 
         function renderOptions(showPhone = false) {
@@ -196,6 +274,9 @@ try {
                 const previousName = state.currentInstanceName;
                 const newInstance = state.instances.find(i => i.id === e.target.value);
                 const newName = newInstance?.name || "";
+                
+                console.log(LOG_PREFIX, '🔄 Instance change detected:', { previousName, newName, instanceId: e.target.value });
+                
                 renderOptions(false);
                 
                 try {
@@ -207,7 +288,10 @@ try {
                     
                     // Inject chat notification showing the switch
                     if (previousName && previousName !== newName) {
+                        console.log(LOG_PREFIX, '📢 Calling injectChatNotification:', previousName, '→', newName);
                         injectChatNotification(previousName, newName);
+                    } else {
+                        console.log(LOG_PREFIX, '⚠️ Skipping notification - previousName:', previousName, 'newName:', newName);
                     }
                     
                     // Update current instance name
