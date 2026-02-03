@@ -1502,7 +1502,7 @@ async function processGroupCommand(
         if (leaveRes.ok) {
           // Send outbound message to GHL confirming the exit
           if (ghlContext) {
-            await sendGhlOutboundMessage(ghlContext, "Você não faz mais parte deste grupo");
+            await sendGhlOutboundMessage(ghlContext, "⚠️ Você não faz mais parte deste grupo ⚠️");
           }
           return { isCommand: true, success: true, command, message: `Saí do grupo com sucesso` };
         } else {
