@@ -1187,8 +1187,8 @@ async function processGroupCommand(
       }
       
       case "#linkgrupo": {
-        // Formato: #linkgrupo telefone (enviado dentro ou fora - se dentro usa currentGroupJid, se fora precisa do nome)
-        // Para simplificar: se dentro do grupo, só passa telefone. Se fora, precisa nome_grupo|telefone
+        // Formato: #linkgrupo telefone (enviado dentro do grupo - usa currentGroupJid)
+        // Se fora do grupo: #linkgrupo nome_grupo|telefone
         let groupIdForLink = currentGroupJid;
         let phoneParam = params[0];
 
@@ -1208,42 +1208,89 @@ async function processGroupCommand(
           }
         }
         
-        // Use /group/info with getInviteLink: true (confirmed working via curl)
-        console.log("Getting invite link for group via /group/info:", groupIdForLink);
-        const inviteResponse = await fetch(`${baseUrl}/group/info`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ 
-            groupjid: groupIdForLink, 
-            getInviteLink: true,
-            getRequestsParticipants: false,
-            force: false 
-          }),
-        });
+        // Ensure groupJid has @g.us suffix
+        const normalizedGroupId = groupIdForLink?.includes("@g.us") 
+          ? groupIdForLink 
+          : `${groupIdForLink}@g.us`;
         
-        const inviteText = await inviteResponse.text();
-        console.log("group/info response:", { status: inviteResponse.status, body: inviteText.substring(0, 500) });
+        console.log("Getting invite link for group via /group/inviteCode:", normalizedGroupId);
         
         let inviteCode: string | null = null;
+        
+        // PRIMARY: Use /group/inviteCode endpoint (confirmed working via curl)
         try {
-          const inviteData = JSON.parse(inviteText);
-          // /group/info returns inviteLink directly
-          const inviteLink = inviteData.inviteLink || inviteData.inviteUrl || inviteData.invite || inviteData.code || inviteData.inviteCode;
+          const inviteResponse = await fetch(`${baseUrl}/group/inviteCode`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "token": instanceToken },
+            body: JSON.stringify({ groupjid: normalizedGroupId }),
+          });
           
-          if (inviteLink) {
-            // Extract code from full URL if needed
-            if (inviteLink.startsWith("https://chat.whatsapp.com/")) {
-              inviteCode = inviteLink.replace("https://chat.whatsapp.com/", "");
-            } else {
-              inviteCode = inviteLink;
+          const inviteText = await inviteResponse.text();
+          console.log("group/inviteCode response:", { status: inviteResponse.status, body: inviteText.substring(0, 500) });
+          
+          if (inviteResponse.ok) {
+            try {
+              const inviteData = JSON.parse(inviteText);
+              // Try multiple possible response fields
+              const codeValue = inviteData.code || inviteData.inviteCode || inviteData.inviteLink || inviteData.inviteUrl || inviteData.invite;
+              
+              if (codeValue) {
+                // Extract code from full URL if needed
+                if (typeof codeValue === "string" && codeValue.startsWith("https://chat.whatsapp.com/")) {
+                  inviteCode = codeValue.replace("https://chat.whatsapp.com/", "");
+                } else {
+                  inviteCode = codeValue;
+                }
+              }
+            } catch (e) {
+              console.log("Failed to parse inviteCode response:", e);
             }
           }
         } catch (e) {
-          console.log("Failed to parse group/info response:", e);
+          console.log("inviteCode fetch error:", e);
+        }
+        
+        // FALLBACK: Try /group/info with getInviteLink if primary fails
+        if (!inviteCode || inviteCode.length < 10) {
+          console.log("Trying fallback /group/info with getInviteLink");
+          try {
+            const infoResponse = await fetch(`${baseUrl}/group/info`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "token": instanceToken },
+              body: JSON.stringify({ 
+                groupjid: normalizedGroupId, 
+                getInviteLink: true,
+                getRequestsParticipants: false,
+                force: false 
+              }),
+            });
+            
+            const infoText = await infoResponse.text();
+            console.log("group/info fallback response:", { status: infoResponse.status, body: infoText.substring(0, 500) });
+            
+            if (infoResponse.ok) {
+              try {
+                const infoData = JSON.parse(infoText);
+                const linkValue = infoData.inviteLink || infoData.inviteUrl || infoData.invite || infoData.code || infoData.inviteCode;
+                
+                if (linkValue) {
+                  if (typeof linkValue === "string" && linkValue.startsWith("https://chat.whatsapp.com/")) {
+                    inviteCode = linkValue.replace("https://chat.whatsapp.com/", "");
+                  } else {
+                    inviteCode = linkValue;
+                  }
+                }
+              } catch (e) {
+                console.log("Failed to parse group/info response:", e);
+              }
+            }
+          } catch (e) {
+            console.log("group/info fallback error:", e);
+          }
         }
         
         if (!inviteCode || inviteCode.length < 10) {
-          return { isCommand: true, success: false, command, message: `Não foi possível obter o link do grupo (${inviteResponse.status})` };
+          return { isCommand: true, success: false, command, message: `Não foi possível obter o link do grupo` };
         }
         
         const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
