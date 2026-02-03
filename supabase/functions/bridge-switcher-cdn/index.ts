@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.13.0 - Native GHL Message Injection
-console.log('🚀 BRIDGE LOADER: v6.13.0 Iniciado');
+// 🚀 BRIDGE LOADER: v6.14.0 - GHL Internal Notes
+console.log('🚀 BRIDGE LOADER: v6.14.0 Iniciado');
 
 try {
     (function() {
@@ -18,7 +18,19 @@ try {
             theme: { primary: '#22c55e', border: '#d1d5db', text: '#374151' }
         };
 
-        let state = { instances: [], lastPhoneFound: null, currentLocationId: null, currentInstanceName: null };
+        let state = { instances: [], lastPhoneFound: null, currentLocationId: null, currentInstanceName: null, currentConversationId: null };
+
+        function extractConversationId() {
+            // Extract conversation ID from URL: /conversations/detail/:conversationId
+            const match = window.location.pathname.match(/conversations\\/(?:detail\\/)?([a-zA-Z0-9]+)/);
+            if (match && match[1] && match[1] !== 'detail') {
+                return match[1];
+            }
+            // Try from URL hash or query params
+            const urlParams = new URLSearchParams(window.location.search);
+            const hashParams = new URLSearchParams(window.location.hash.slice(1));
+            return urlParams.get('conversationId') || hashParams.get('conversationId') || null;
+        }
 
         function cleanPhone(raw) {
             if (!raw) return null;
@@ -246,11 +258,12 @@ try {
             
             select.addEventListener('change', async (e) => {
                 const phone = extractPhone();
+                const conversationId = extractConversationId();
                 const previousName = state.currentInstanceName;
                 const newInstance = state.instances.find(i => i.id === e.target.value);
                 const newName = newInstance?.name || "";
                 
-                console.log(LOG_PREFIX, '🔄 Instance change detected:', { previousName, newName, instanceId: e.target.value });
+                console.log(LOG_PREFIX, '🔄 Instance change detected:', { previousName, newName, instanceId: e.target.value, conversationId });
                 
                 renderOptions(false);
                 
@@ -258,7 +271,14 @@ try {
                     await fetch(CONFIG.save_url, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ instanceId: e.target.value, locationId: state.currentLocationId, phone: phone })
+                        body: JSON.stringify({ 
+                            instanceId: e.target.value, 
+                            locationId: state.currentLocationId, 
+                            phone: phone,
+                            conversationId: conversationId,
+                            previousInstanceName: previousName,
+                            newInstanceName: newName
+                        })
                     });
                     
                     // Inject chat notification showing the switch

@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
     // POST: Salvar preferência de instância para o contato
     if (req.method === "POST") {
       const body = await req.json();
-      const { instanceId, contactId, locationId, phone } = body;
+      const { instanceId, contactId, locationId, phone, conversationId, previousInstanceName, newInstanceName } = body;
 
       if (!instanceId || !locationId) {
         return new Response(
@@ -347,6 +347,61 @@ Deno.serve(async (req) => {
       }
 
       console.log("Preference saved successfully:", { contactId, instanceId, leadPhone });
+
+      // Create GHL internal note if conversationId is provided
+      if (conversationId && previousInstanceName && newInstanceName && previousInstanceName !== newInstanceName) {
+        console.log("Creating GHL internal note for conversation:", conversationId);
+        
+        try {
+          // Get the GHL access token for this location
+          const { data: subaccount } = await supabase
+            .from("ghl_subaccounts")
+            .select("ghl_access_token, ghl_token_expires_at")
+            .eq("location_id", locationId)
+            .maybeSingle();
+          
+          if (subaccount?.ghl_access_token) {
+            // Check if token needs refresh (expires in less than 5 minutes)
+            const expiresAt = subaccount.ghl_token_expires_at ? new Date(subaccount.ghl_token_expires_at) : null;
+            const needsRefresh = expiresAt && expiresAt.getTime() - Date.now() < 5 * 60 * 1000;
+            
+            let accessToken = subaccount.ghl_access_token;
+            
+            if (needsRefresh) {
+              console.log("Token needs refresh, skipping note creation");
+              // Could call refresh-token here, but for now we'll skip
+            }
+            
+            // Create internal note via GHL API
+            const noteContent = `🔄 Bridge: Instância alterada de "${previousInstanceName}" para "${newInstanceName}"`;
+            
+            const ghlResponse = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}/messages`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+                "Version": "2021-04-15"
+              },
+              body: JSON.stringify({
+                type: "note",
+                message: noteContent
+              })
+            });
+            
+            if (ghlResponse.ok) {
+              console.log("GHL internal note created successfully");
+            } else {
+              const errorText = await ghlResponse.text();
+              console.error("Failed to create GHL note:", ghlResponse.status, errorText);
+            }
+          } else {
+            console.log("No GHL access token found for location:", locationId);
+          }
+        } catch (noteError) {
+          console.error("Error creating GHL note:", noteError);
+          // Don't fail the request just because note creation failed
+        }
+      }
 
       return new Response(
         JSON.stringify({ success: true }),
