@@ -6,6 +6,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const hashBuf = await crypto.subtle.digest("SHA-256", data);
+  const hashArr = Array.from(new Uint8Array(hashBuf));
+  return hashArr.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // Helper to download media from UAZAPI and get public URL
 // Based on n8n workflow: POST /message/download with { "id": messageId }
 async function getPublicMediaUrl(
@@ -571,6 +578,14 @@ async function markIfNew(supabase: any, messageId: string): Promise<boolean> {
   }
 }
 
+function toEpochMs(ts: unknown): number {
+  const n = Number(ts ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  // If it's in seconds (10 digits-ish), convert to ms
+  if (n < 1_000_000_000_000) return Math.floor(n * 1000);
+  return Math.floor(n);
+}
+
 // Opportunistic cleanup: 1% chance to run cleanup on each request
 async function maybeCleanupOldMappings(supabase: any): Promise<void> {
   // 1% chance to run cleanup
@@ -789,6 +804,44 @@ serve(async (req) => {
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+    }
+
+    // Secondary dedupe: sometimes the provider replays the same message with a different ID (or no ID).
+    // We compute a content signature bucketed by minute to avoid blocking legitimate repeated messages later.
+    try {
+      const tsMs =
+        toEpochMs((messageData as any)?.timestamp) ||
+        toEpochMs((messageData as any)?.ts) ||
+        toEpochMs((body as any)?.event?.Timestamp) ||
+        Date.now();
+      const minuteBucket = Math.floor(tsMs / 60000);
+
+      const signaturePayload = {
+        instanceToken: String(instanceToken ?? ""),
+        from: String(from ?? ""),
+        isFromMe: Boolean(isFromMe),
+        isGroup: Boolean(isGroup),
+        phoneNumber: String(phoneNumber ?? ""),
+        textMessage: String(textMessage ?? ""),
+        mediaUrl: String(mediaUrl ?? ""),
+        mediaType: String(mediaType ?? ""),
+        minuteBucket,
+      };
+
+      const sig = await sha256Hex(JSON.stringify(signaturePayload));
+      const sigKey = `uazapi_sig:${sig.slice(0, 32)}`;
+
+      const isNewSig = await markIfNew(supabase, sigKey);
+      if (!isNewSig) {
+        console.log("Duplicate UAZAPI message ignored (signature):", { sigKey, minuteBucket });
+        return new Response(
+          JSON.stringify({ received: true, ignored: true, reason: "duplicate_uazapi_signature", sigKey }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } catch (e) {
+      console.error("Secondary dedupe (signature) failed (allowing processing):", e);
+      // fail-open
     }
 
     // Find the instance by token
