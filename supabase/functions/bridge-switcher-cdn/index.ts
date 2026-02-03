@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.8.2 - Fixed Selector + Fast Phone Extraction
-console.log('🚀 BRIDGE LOADER: v6.8.2 Iniciado');
+// 🚀 BRIDGE LOADER: v6.8.3 - Full Feedback + Instance Phone
+console.log('🚀 BRIDGE LOADER: v6.8.3 Iniciado');
 
 try {
     (function() {
@@ -27,21 +27,24 @@ try {
         }
 
         function extractPhone() {
-            // 1. Tenta no input lateral (aba aberta)
             const input = document.querySelector('input.hr-input-phone');
             if (input && input.value) return cleanPhone(input.value);
-
-            // 2. Tenta no elemento que você mandou (card ativo na lista)
             const activeCard = document.querySelector('[data-is-active="true"][phone]');
             if (activeCard) return cleanPhone(activeCard.getAttribute('phone'));
-
             return null;
+        }
+
+        function showNotification(msg) {
+            const t = document.createElement('div');
+            t.style.cssText = 'position:fixed; top:80px; left:50%; transform:translateX(-50%); z-index:10001; background:#155EEF; color:white; padding:12px 24px; border-radius:30px; font-weight:bold; font-size:14px; box-shadow:0 4px 12px rgba(0,0,0,0.15); transition: opacity 0.3s;';
+            t.innerText = msg;
+            document.body.appendChild(t);
+            setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2000);
         }
 
         async function loadInstances(phone) {
             const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
             if (!locId || !phone) return;
-
             try {
                 const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locId}&phone=\${phone}\`);
                 const data = await res.json();
@@ -49,39 +52,33 @@ try {
                     state.instances = data.instances;
                     renderOptions(data.activeInstanceId || data.instances[0]?.id);
                 }
-            } catch (e) { console.error(LOG_PREFIX, "Erro Load:", e); }
+            } catch (e) { console.error(LOG_PREFIX, e); }
         }
 
         function renderOptions(activeId) {
             const select = document.getElementById('bridge-instance-selector');
             if (!select) return;
             
-            if (state.instances.length === 0) {
-                select.innerHTML = '<option>Nenhuma instância</option>';
-                return;
-            }
-
             select.innerHTML = state.instances.map(i => 
-                \`<option value="\${i.id}" \${i.id === activeId ? 'selected' : ''}>\${i.name}</option>\`
+                \`<option value="\${i.id}" \${i.id === activeId ? 'selected' : ''}>
+                    \${i.name} (\${i.phone || 'S/N'})
+                </option>\`
             ).join('');
         }
 
         function inject() {
             if (document.getElementById('bridge-api-container')) return;
-
-            const actionBar = document.querySelector('.msg-composer-actions') || 
-                               document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
-            
+            const actionBar = document.querySelector('.msg-composer-actions') || document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
             if (!actionBar) return;
 
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
-            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 12px; padding: 2px 8px; height: 32px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;';
+            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 12px; padding: 0 10px; height: 32px; background: #f9fafb; border: 1px solid #d1d5db; border-radius: 6px;';
             
             container.innerHTML = \`
                 <div style="width:8px; height:8px; background:#22c55e; border-radius:50%; margin-right:8px;"></div>
-                <select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:600; outline:none !important; box-shadow:none !important; color:#374151; cursor:pointer; -webkit-appearance:none;">
-                    <option>Carregando...</option>
+                <select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:700; outline:none !important; box-shadow:none !important; color:#111827; cursor:pointer; -webkit-appearance:none;">
+                    <option>Buscando...</option>
                 </select>\`;
             
             actionBar.appendChild(container);
@@ -89,7 +86,7 @@ try {
             container.querySelector('select').addEventListener('change', async (e) => {
                 const phone = extractPhone();
                 const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-                if (!phone) return;
+                const selectedText = e.target.options[e.target.selectedIndex].text;
 
                 try {
                     await fetch(CONFIG.save_url, {
@@ -97,28 +94,26 @@ try {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ instanceId: e.target.value, locationId: locId, phone: phone })
                     });
+                    showNotification(\`Instância: \${selectedText.split('(')[0].trim()} Ativada ✅\`);
                 } catch (err) { console.error("Erro Save:", err); }
             });
 
-            // Força busca imediata ao injetar
             const p = extractPhone();
             if (p) loadInstances(p);
         }
 
-        // Loop principal
         setInterval(() => {
             if (window.location.pathname.includes('/conversations')) {
                 inject();
-                const currentPhone = extractPhone();
-                if (currentPhone && currentPhone !== state.lastPhoneFound) {
-                    state.lastPhoneFound = currentPhone;
-                    console.log(LOG_PREFIX, "Telefone:", currentPhone);
-                    loadInstances(currentPhone);
+                const p = extractPhone();
+                if (p && p !== state.lastPhoneFound) {
+                    state.lastPhoneFound = p;
+                    loadInstances(p);
                 }
             }
         }, 2000);
     })();
-} catch (e) { console.error('Erro Fatal Bridge:', e); }
+} catch (e) { console.error('Erro Bridge:', e); }
 `;
 
 Deno.serve(async (req) => {
