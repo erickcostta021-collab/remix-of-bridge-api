@@ -490,31 +490,79 @@ async function findGroupByName(
   
   // Normalize for flexible matching: lowercase, remove accents
   const normalize = (s: string) =>
-    s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    String(s ?? "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+  const extractGroupName = (g: any): string => {
+    return (
+      g?.subject ||
+      g?.name ||
+      g?.groupName ||
+      g?.group_name ||
+      g?.groupSubject ||
+      g?.group?.subject ||
+      g?.group?.name ||
+      g?.groupMetadata?.subject ||
+      g?.groupMetadata?.name ||
+      g?.metadata?.subject ||
+      g?.metadata?.name ||
+      ""
+    );
+  };
+
+  const extractGroupId = (g: any): string => {
+    // Cover common shapes across UAZAPI/Evolution builds
+    return (
+      g?.id ||
+      g?.jid ||
+      g?.groupId ||
+      g?.groupJid ||
+      g?.groupjid ||
+      g?.group_jid ||
+      g?.group?.id ||
+      g?.group?.jid ||
+      g?.groupMetadata?.id ||
+      g?.groupMetadata?.jid ||
+      g?.metadata?.id ||
+      g?.metadata?.jid ||
+      ""
+    );
+  };
+
   const targetName = normalize(groupName);
-  
-  // Log all group names for debugging
-  console.log("Available groups:", groups.map((g: any) => g.subject || g.name || g.groupName || "(no name)").slice(0, 10));
-  
+
+  // Debug: show sample shape (truncated) so we can adapt extractors when API changes
+  console.log("Group list sample (first item):", JSON.stringify(groups[0] ?? null).substring(0, 800));
+  console.log(
+    "Available groups:",
+    groups.map((g: any) => extractGroupName(g) || "(no name)").slice(0, 10),
+  );
+
   // Try exact match first
-  let found = groups.find((g: any) => {
-    const name = normalize(g.subject || g.name || g.groupName || "");
-    return name === targetName;
-  });
-  
+  let found = groups.find((g: any) => normalize(extractGroupName(g)) === targetName);
+
   // If no exact match, try partial match (contains)
   if (!found) {
     found = groups.find((g: any) => {
-      const name = normalize(g.subject || g.name || g.groupName || "");
-      return name.includes(targetName) || targetName.includes(name);
+      const n = normalize(extractGroupName(g));
+      return n.includes(targetName) || targetName.includes(n);
     });
   }
-  
+
   if (found) {
-    return {
-      id: found.id || found.jid || found.groupId,
-      name: found.subject || found.name || found.groupName,
-    };
+    const id = extractGroupId(found);
+    const name = extractGroupName(found);
+
+    // Prevent false positives (we can't update without an id/jid)
+    if (!id) {
+      console.error("Group matched by name but missing id/jid:", JSON.stringify(found).substring(0, 800));
+      return null;
+    }
+
+    return { id, name };
   }
   
   return null;
