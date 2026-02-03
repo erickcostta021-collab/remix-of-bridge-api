@@ -537,7 +537,7 @@ async function processGroupCommand(
         // Send confirmation message to the group
         await sleep(500);
         console.log("Sending confirmation message to group:", groupJid);
-        await sendTextMessage(baseUrl, instanceToken, groupJid, "✅ Grupo Criado.");
+        await sendTextMessage(baseUrl, instanceToken, groupJid, "✅");
         
         return { isCommand: true, success: true, command, message: `Grupo "${name}" criado com sucesso!` };
       }
