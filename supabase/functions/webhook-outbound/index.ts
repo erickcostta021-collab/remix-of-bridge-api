@@ -418,38 +418,11 @@ serve(async (req: Request) => {
       return; // Already responded
     }
 
-    // Verificar se há preferência de instância para este contato (Bridge Switcher)
-    // webhook-inbound salva usando contactId, então buscamos APENAS por contactId
-    let instance = instances[0]; // Default: primeira instância
-    
-    if (contactId) {
-      const { data: preference } = await supabase
-        .from("contact_instance_preferences")
-        .select("instance_id, lead_phone")
-        .eq("contact_id", contactId)
-        .eq("location_id", locationId)
-        .maybeSingle();
-      
-      if (preference?.instance_id) {
-        // Encontrar a instância preferida
-        const preferredInstance = instances.find(i => i.id === preference.instance_id);
-        if (preferredInstance) {
-          instance = preferredInstance;
-          console.log("Using preferred instance from contact preference:", { instanceId: instance.id, contactId });
-          
-          // Se a preferência existe mas NÃO tem lead_phone, tentar preencher depois
-          if (!preference.lead_phone) {
-            console.log("[Outbound] ⚠️ Preferência existe mas lead_phone está NULL, será atualizado após resolver o telefone");
-          }
-        } else {
-          console.log("Preferred instance not found in subaccount instances, using default");
-        }
-      } else {
-        console.log("No preference found for contactId, will create one after resolving phone:", { contactId, locationId });
-      }
-    } else {
-      console.log("No contactId in payload, using default instance");
-    }
+    // Escolha de instância:
+    // 1) Preferência mais recente por lead_phone (resolve "espelhamento" quando há múltiplas instâncias)
+    // 2) Fallback por contact_id
+    // 3) Fallback primeira instância
+    let instance = instances[0]; // fallback
 
     const { data: settings, error: settingsErr } = await supabase
       .from("user_settings")
@@ -524,6 +497,75 @@ serve(async (req: Request) => {
     }
 
     console.log("Phone formatting:", { original: phoneRaw, formatted: targetPhone, isGroup, usedMappingTable });
+
+    // =======================================================================
+    // CRITICAL: Resolver instância preferida do lead por telefone (última escolha vence)
+    // Motivo: um mesmo lead pode ter múltiplos contactIds no GHL; se buscarmos só por contactId,
+    // caímos no fallback (instances[0]) e a mensagem sai pela instância errada (parece "espelhado").
+    // =======================================================================
+    if (!isGroup) {
+      try {
+        const normalizedPhone = targetPhone.replace(/\D/g, "");
+        const last10Digits = normalizedPhone.slice(-10);
+
+        if (normalizedPhone.length >= 10) {
+          const { data: prefsByPhone, error: prefPhoneErr } = await supabase
+            .from("contact_instance_preferences")
+            .select("instance_id, lead_phone, updated_at")
+            .eq("location_id", locationId)
+            .or(
+              `lead_phone.eq.${normalizedPhone},lead_phone.like.%${normalizedPhone},lead_phone.like.%${last10Digits}%`
+            )
+            .order("updated_at", { ascending: false })
+            .limit(1);
+
+          if (prefPhoneErr) {
+            console.error("[Outbound] Error fetching preference by phone:", prefPhoneErr);
+          }
+
+          const pref = prefsByPhone?.[0];
+          if (pref?.instance_id) {
+            const preferredInstance = instances.find((i) => i.id === pref.instance_id);
+            if (preferredInstance) {
+              instance = preferredInstance;
+              console.log("[Outbound] ✅ Using preferred instance by phone (latest):", {
+                instanceId: instance.id,
+                leadPhone: pref.lead_phone?.slice(0, 15),
+                updatedAt: pref.updated_at,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[Outbound] Failed to resolve preference by phone:", e);
+      }
+    }
+
+    // Fallback por contactId (compat)
+    if (contactId && instance === instances[0]) {
+      try {
+        const { data: preference, error: prefErr } = await supabase
+          .from("contact_instance_preferences")
+          .select("instance_id")
+          .eq("contact_id", contactId)
+          .eq("location_id", locationId)
+          .maybeSingle();
+
+        if (prefErr) {
+          console.error("[Outbound] Error fetching preference by contactId:", prefErr);
+        }
+
+        if (preference?.instance_id) {
+          const preferredInstance = instances.find((i) => i.id === preference.instance_id);
+          if (preferredInstance) {
+            instance = preferredInstance;
+            console.log("[Outbound] Using preferred instance by contactId:", { instanceId: instance.id, contactId });
+          }
+        }
+      } catch (e) {
+        console.error("[Outbound] Failed to resolve preference by contactId:", e);
+      }
+    }
 
     // =======================================================================
     // IMPORTANTE: Atualizar/criar preferência com lead_phone para bridge-switcher
