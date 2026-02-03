@@ -350,6 +350,7 @@ Deno.serve(async (req) => {
 
       // Create GHL Custom message (appears as outbound in chat, NOT sent to contact)
       // Using type: "Custom" with conversationProviderId to log without sending
+      // Endpoint: POST /conversations/messages (not /:id/messages)
       if (conversationId && previousInstanceName && newInstanceName && previousInstanceName !== newInstanceName) {
         console.log("Creating GHL outbound message (Custom type) for conversation:", conversationId);
         
@@ -369,41 +370,66 @@ Deno.serve(async (req) => {
             if (needsRefresh) {
               console.log("Token needs refresh, skipping message creation");
             } else {
-              // Get the conversation provider ID from user_settings
-              const { data: userSettings } = await supabase
-                .from("user_settings")
-                .select("ghl_conversation_provider_id")
-                .eq("user_id", subaccount.user_id)
-                .maybeSingle();
+              // First, get the contactId from the conversation
+              const convResponse = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}`, {
+                headers: {
+                  "Authorization": `Bearer ${subaccount.ghl_access_token}`,
+                  "Version": "2021-04-15",
+                  "Accept": "application/json",
+                }
+              });
               
-              const conversationProviderId = userSettings?.ghl_conversation_provider_id;
-              
-              if (conversationProviderId) {
-                // Create Custom message via GHL API - this logs as outbound but does NOT send
-                const messageContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
+              if (convResponse.ok) {
+                const convData = await convResponse.json();
+                const contactIdFromConv = convData.conversation?.contactId || convData.contactId;
+                console.log("Got contactId from conversation:", contactIdFromConv);
                 
-                const ghlResponse = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}/messages`, {
-                  method: "POST",
-                  headers: {
-                    "Authorization": `Bearer ${subaccount.ghl_access_token}`,
-                    "Content-Type": "application/json",
-                    "Version": "2021-04-15"
-                  },
-                  body: JSON.stringify({
-                    type: "Custom",
-                    message: messageContent,
-                    conversationProviderId: conversationProviderId
-                  })
-                });
-                
-                if (ghlResponse.ok) {
-                  console.log("GHL Custom outbound message created successfully");
+                if (contactIdFromConv) {
+                  // Get the conversation provider ID from user_settings
+                  const { data: userSettings } = await supabase
+                    .from("user_settings")
+                    .select("ghl_conversation_provider_id")
+                    .eq("user_id", subaccount.user_id)
+                    .maybeSingle();
+                  
+                  const conversationProviderId = userSettings?.ghl_conversation_provider_id;
+                  
+                  if (conversationProviderId) {
+                    // Create Custom message via GHL API - this logs as outbound but does NOT send
+                    // Using contactId in body, not conversationId in URL
+                    const messageContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
+                    
+                    const ghlResponse = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+                      method: "POST",
+                      headers: {
+                        "Authorization": `Bearer ${subaccount.ghl_access_token}`,
+                        "Content-Type": "application/json",
+                        "Version": "2021-04-15",
+                        "Accept": "application/json",
+                      },
+                      body: JSON.stringify({
+                        type: "Custom",
+                        contactId: contactIdFromConv,
+                        message: messageContent,
+                        conversationProviderId: conversationProviderId
+                      })
+                    });
+                    
+                    if (ghlResponse.ok) {
+                      console.log("GHL Custom outbound message created successfully");
+                    } else {
+                      const errorText = await ghlResponse.text();
+                      console.error("Failed to create GHL Custom message:", ghlResponse.status, errorText);
+                    }
+                  } else {
+                    console.log("No conversation provider ID configured, skipping message creation");
+                  }
                 } else {
-                  const errorText = await ghlResponse.text();
-                  console.error("Failed to create GHL Custom message:", ghlResponse.status, errorText);
+                  console.log("Could not get contactId from conversation:", conversationId);
                 }
               } else {
-                console.log("No conversation provider ID configured, skipping message creation");
+                const errorText = await convResponse.text();
+                console.error("Failed to get conversation details:", convResponse.status, errorText);
               }
             }
           } else {
