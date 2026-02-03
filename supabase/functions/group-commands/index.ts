@@ -15,16 +15,24 @@ async function postJson(
   instanceToken: string,
   body: Record<string, unknown>,
 ): Promise<{ ok: boolean; status: number; text: string }> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      token: instanceToken,
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  return { ok: res.ok, status: res.status, text };
+  const methods: Array<"POST" | "PUT"> = ["POST", "PUT"];
+  let last = { ok: false, status: 0, text: "" };
+
+  for (const method of methods) {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        token: instanceToken,
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    last = { ok: res.ok, status: res.status, text };
+    if (res.ok) return last;
+  }
+
+  return last;
 }
 
 async function updateGroupSubjectBestEffort(
@@ -33,7 +41,10 @@ async function updateGroupSubjectBestEffort(
   groupIdOrJid: string,
   subject: string,
 ) {
-  const url = `${baseUrl}/group/updateSubject`;
+  const urls = [
+    `${baseUrl}/group/updateGroupSubject`,
+    `${baseUrl}/group/updateSubject`,
+  ];
   const attempts: Array<Record<string, unknown>> = [
     { groupJid: groupIdOrJid, subject },
     { groupId: groupIdOrJid, subject },
@@ -41,10 +52,17 @@ async function updateGroupSubjectBestEffort(
     { id: groupIdOrJid, subject },
   ];
 
-  for (const payload of attempts) {
-    const r = await postJson(url, instanceToken, payload);
-    console.log("Subject update attempt:", { payloadKeys: Object.keys(payload), status: r.status, body: r.text.substring(0, 200) });
-    if (r.ok) return;
+  for (const url of urls) {
+    for (const payload of attempts) {
+      const r = await postJson(url, instanceToken, payload);
+      console.log("Subject update attempt:", {
+        endpoint: url.split("/").slice(-2).join("/"),
+        payloadKeys: Object.keys(payload),
+        status: r.status,
+        body: r.text.substring(0, 200),
+      });
+      if (r.ok) return;
+    }
   }
 }
 
@@ -54,7 +72,11 @@ async function updateGroupPictureBestEffort(
   groupIdOrJid: string,
   imageUrl: string,
 ) {
-  const urls = [`${baseUrl}/group/updatePicture`, `${baseUrl}/group/profilePicture`];
+  const urls = [
+    `${baseUrl}/group/updateGroupPicture`,
+    `${baseUrl}/group/updatePicture`,
+    `${baseUrl}/group/profilePicture`,
+  ];
   const payloads: Array<Record<string, unknown>> = [
     { groupJid: groupIdOrJid, image: imageUrl },
     { groupId: groupIdOrJid, image: imageUrl },
