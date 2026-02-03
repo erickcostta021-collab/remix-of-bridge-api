@@ -6,12 +6,12 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.8.0 - API Fallback Mode
-console.log('🚀 BRIDGE LOADER: v6.8.0 Iniciado');
+// 🚀 BRIDGE LOADER: v6.8.1 - Layout Original + API Fallback
+console.log('🚀 BRIDGE LOADER: v6.8.1 Iniciado');
 
 try {
     (function() {
-        const VERSION = "6.8.0";
+        const VERSION = "6.8.1";
         const LOG_PREFIX = "[Bridge]";
         const CONFIG = {
             api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
@@ -20,30 +20,20 @@ try {
 
         let state = { instances: [], lastPhoneFound: null, isFetching: false };
 
-        // 🔍 Função Híbrida: Tenta DOM primeiro, depois API do GHL
+        // 🔍 Busca telefone no Input OU via API interna do GHL
         async function getPhone() {
-            // 1. Tenta pegar do input que você mandou
             const input = document.querySelector('input.hr-input-phone');
             if (input && input.value) return cleanPhone(input.value);
 
-            // 2. Se a aba tá fechada, pega o Contact ID da URL e pergunta ao GHL
             const contactId = window.location.pathname.match(/conversations\\/([^\\/\\?]+)/)?.[1];
-            const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-
             if (contactId && contactId.length > 10 && !state.isFetching) {
                 state.isFetching = true;
                 try {
-                    // Chamada para a API interna do HighLevel
-                    const response = await fetch(\`/v1/contacts/\${contactId}\`, {
-                        headers: { 'Accept': 'application/json' }
-                    });
+                    const response = await fetch(\`/v1/contacts/\${contactId}\`);
                     const data = await response.json();
                     state.isFetching = false;
                     return data.contact?.phone ? cleanPhone(data.contact.phone) : null;
-                } catch (e) { 
-                    state.isFetching = false;
-                    return null; 
-                }
+                } catch (e) { state.isFetching = false; return null; }
             }
             return null;
         }
@@ -57,52 +47,61 @@ try {
         async function syncData() {
             const phone = await getPhone();
             const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-            
             if (phone && phone !== state.lastPhoneFound) {
                 state.lastPhoneFound = phone;
-                console.log(\`\${LOG_PREFIX} Lead: \${phone}\`);
-                
+                console.log(\`\${LOG_PREFIX} Lead Detectado: \${phone}\`);
                 try {
                     const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locId}&phone=\${phone}\`);
                     const data = await res.json();
                     if (data.instances) {
                         state.instances = data.instances;
-                        updateUI(data.activeInstanceId || data.instances[0]?.id);
+                        const select = document.getElementById('bridge-instance-selector');
+                        if (select) {
+                            const activeId = data.activeInstanceId || data.instances[0]?.id;
+                            select.innerHTML = data.instances.map(i => 
+                                \`<option value="\${i.id}" \${i.id === activeId ? 'selected' : ''}>\${i.name}</option>\`
+                            ).join('');
+                        }
                     }
                 } catch (e) { console.error(LOG_PREFIX, e); }
             }
         }
 
-        function updateUI(activeId) {
-            const select = document.getElementById('bridge-instance-selector');
-            if (select) {
-                select.innerHTML = state.instances.map(i => 
-                    \`<option value="\${i.id}" \${i.id === activeId ? 'selected' : ''}>\${i.name}</option>\`
-                ).join('');
-            }
-        }
-
         function inject() {
             if (document.getElementById('bridge-api-container')) return;
-            const target = document.querySelector('.msg-composer-actions') || document.body;
-            
+
+            // Seletor original da barra de ações
+            const actionBar = document.querySelector('.msg-composer-actions') || 
+                               document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
+            if (!actionBar) return;
+
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
-            container.style.cssText = 'position:absolute; bottom:65px; right:20px; z-index:9999; display:flex; align-items:center; background:#fff; padding:4px 12px; border-radius:20px; border:2px solid #22c55e; box-shadow:0 2px 10px rgba(0,0,0,0.1);';
-            container.innerHTML = \`<span style="font-size:9px; font-weight:800; color:#22c55e; margin-right:6px;">BRIDGE</span>
-                                   <select id="bridge-instance-selector" style="border:none; background:transparent; font-size:11px; font-weight:700; outline:none; cursor:pointer;"></select>\`;
+            // Voltei para o estilo inline discreto da v6.6.0
+            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #fff; border: 1px solid #d1d5db; border-radius: 20px;';
             
-            target.style.position = 'relative';
-            target.appendChild(container);
+            container.innerHTML = \`
+                <div style="width:8px; height:8px; background:#22c55e; border-radius:50%; margin-right:6px;"></div>
+                <select id="bridge-instance-selector" style="border:none; background:transparent; font-size:11px; font-weight:700; outline:none; color:#333; box-shadow:none; -webkit-appearance:none; cursor:pointer;">
+                    <option>...</option>
+                </select>\`;
             
+            actionBar.appendChild(container);
+
             container.querySelector('select').addEventListener('change', async (e) => {
                 const phone = await getPhone();
                 const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-                await fetch(CONFIG.save_url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ instanceId: e.target.value, locationId: locId, phone: phone })
-                });
+                if (!phone) return;
+
+                try {
+                    await fetch(CONFIG.save_url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ instanceId: e.target.value, locationId: locId, phone: phone })
+                    });
+                    // Notificação simples sem bugar layout
+                    console.log(LOG_PREFIX + " Salvo com sucesso!");
+                } catch (err) { console.error("Erro ao salvar", err); }
             });
             syncData();
         }
@@ -112,7 +111,7 @@ try {
                 inject();
                 syncData();
             }
-        }, 2000);
+        }, 1500);
     })();
 } catch (e) { console.error('Erro Bridge:', e); }
 `;
