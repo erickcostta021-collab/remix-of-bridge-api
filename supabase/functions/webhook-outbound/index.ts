@@ -840,30 +840,36 @@ async function processGroupCommand(
           { groupJid: currentGroupJid, participant: participantJid },
         ];
         
+        const httpMethods: Array<"POST" | "PUT"> = ["PUT", "POST"];
+        
         let promoteSuccess = false;
-        for (const url of promoteEndpoints) {
-          for (const payload of promotePayloads) {
-            try {
-              const res = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "token": instanceToken },
-                body: JSON.stringify(payload),
-              });
-              const text = await res.text();
-              console.log("Promote attempt:", { 
-                endpoint: url.replace(baseUrl, ""), 
-                payloadKeys: Object.keys(payload),
-                status: res.status, 
-                body: text.substring(0, 200) 
-              });
-              
-              if (res.ok) {
-                promoteSuccess = true;
-                break;
+        for (const method of httpMethods) {
+          for (const url of promoteEndpoints) {
+            for (const payload of promotePayloads) {
+              try {
+                const res = await fetch(url, {
+                  method,
+                  headers: { "Content-Type": "application/json", "token": instanceToken },
+                  body: JSON.stringify(payload),
+                });
+                const text = await res.text();
+                console.log("Promote attempt:", { 
+                  method,
+                  endpoint: url.replace(baseUrl, ""), 
+                  payloadKeys: Object.keys(payload),
+                  status: res.status, 
+                  body: text.substring(0, 200) 
+                });
+                
+                if (res.ok) {
+                  promoteSuccess = true;
+                  break;
+                }
+              } catch (e) {
+                console.log("Promote error:", e);
               }
-            } catch (e) {
-              console.log("Promote error:", e);
             }
+            if (promoteSuccess) break;
           }
           if (promoteSuccess) break;
         }
@@ -899,30 +905,36 @@ async function processGroupCommand(
           { groupJid: currentGroupJid, participant: demoteJid },
         ];
         
+        const demoteMethods: Array<"POST" | "PUT"> = ["PUT", "POST"];
+        
         let demoteSuccess = false;
-        for (const url of demoteEndpoints) {
-          for (const payload of demotePayloads) {
-            try {
-              const res = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "token": instanceToken },
-                body: JSON.stringify(payload),
-              });
-              const text = await res.text();
-              console.log("Demote attempt:", { 
-                endpoint: url.replace(baseUrl, ""), 
-                payloadKeys: Object.keys(payload),
-                status: res.status, 
-                body: text.substring(0, 200) 
-              });
-              
-              if (res.ok) {
-                demoteSuccess = true;
-                break;
+        for (const method of demoteMethods) {
+          for (const url of demoteEndpoints) {
+            for (const payload of demotePayloads) {
+              try {
+                const res = await fetch(url, {
+                  method,
+                  headers: { "Content-Type": "application/json", "token": instanceToken },
+                  body: JSON.stringify(payload),
+                });
+                const text = await res.text();
+                console.log("Demote attempt:", { 
+                  method,
+                  endpoint: url.replace(baseUrl, ""), 
+                  payloadKeys: Object.keys(payload),
+                  status: res.status, 
+                  body: text.substring(0, 200) 
+                });
+                
+                if (res.ok) {
+                  demoteSuccess = true;
+                  break;
+                }
+              } catch (e) {
+                console.log("Demote error:", e);
               }
-            } catch (e) {
-              console.log("Demote error:", e);
             }
+            if (demoteSuccess) break;
           }
           if (demoteSuccess) break;
         }
