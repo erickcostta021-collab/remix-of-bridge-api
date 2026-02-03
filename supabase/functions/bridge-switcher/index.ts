@@ -348,13 +348,13 @@ Deno.serve(async (req) => {
 
       console.log("Preference saved successfully:", { contactId, instanceId, leadPhone });
 
-      // Create GHL outbound message (appears as sent message, not internal note)
-      // This uses the same pattern as webhook-inbound's sendOutboundMessageToGHL
+      // Create GHL internal note (visible only to agents, NOT sent to contact)
+      // Using type: "note" ensures the message stays internal with yellow background
       if (conversationId && previousInstanceName && newInstanceName && previousInstanceName !== newInstanceName) {
-        console.log("Creating GHL outbound switch notification for conversation:", conversationId);
+        console.log("Creating GHL internal note for conversation:", conversationId);
         
         try {
-          // Get the GHL access token and contact info for this location
+          // Get the GHL access token for this location
           const { data: subaccount } = await supabase
             .from("ghl_subaccounts")
             .select("ghl_access_token, ghl_token_expires_at")
@@ -366,65 +366,38 @@ Deno.serve(async (req) => {
             const expiresAt = subaccount.ghl_token_expires_at ? new Date(subaccount.ghl_token_expires_at) : null;
             const needsRefresh = expiresAt && expiresAt.getTime() - Date.now() < 5 * 60 * 1000;
             
-            let accessToken = subaccount.ghl_access_token;
-            
             if (needsRefresh) {
-              console.log("Token needs refresh, skipping notification creation");
+              console.log("Token needs refresh, skipping note creation");
             } else {
-              // First get the contactId from the conversation
-              const convResponse = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}`, {
+              // Create internal note via GHL API - this does NOT send to the contact
+              const noteContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
+              
+              const ghlResponse = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}/messages`, {
+                method: "POST",
                 headers: {
-                  "Authorization": `Bearer ${accessToken}`,
-                  "Version": "2021-04-15",
-                  "Accept": "application/json",
-                }
+                  "Authorization": `Bearer ${subaccount.ghl_access_token}`,
+                  "Content-Type": "application/json",
+                  "Version": "2021-04-15"
+                },
+                body: JSON.stringify({
+                  type: "note",
+                  message: noteContent
+                })
               });
               
-              if (convResponse.ok) {
-                const convData = await convResponse.json();
-                const contactIdFromConv = convData.conversation?.contactId || convData.contactId;
-                
-                if (contactIdFromConv) {
-                  // Create outbound message that appears as "sent" in GHL
-                  // Same pattern as sendOutboundMessageToGHL in webhook-inbound
-                  const messageContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
-                  
-                  const ghlResponse = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
-                    method: "POST",
-                    headers: {
-                      "Authorization": `Bearer ${accessToken}`,
-                      "Content-Type": "application/json",
-                      "Version": "2021-04-15",
-                      "Accept": "application/json",
-                    },
-                    body: JSON.stringify({
-                      type: "SMS",
-                      contactId: contactIdFromConv,
-                      message: messageContent,
-                      status: "delivered",
-                    })
-                  });
-                  
-                  if (ghlResponse.ok) {
-                    console.log("GHL outbound switch notification created successfully");
-                  } else {
-                    const errorText = await ghlResponse.text();
-                    console.error("Failed to create GHL outbound message:", ghlResponse.status, errorText);
-                  }
-                } else {
-                  console.log("Could not get contactId from conversation:", conversationId);
-                }
+              if (ghlResponse.ok) {
+                console.log("GHL internal note created successfully");
               } else {
-                const errorText = await convResponse.text();
-                console.error("Failed to get conversation details:", convResponse.status, errorText);
+                const errorText = await ghlResponse.text();
+                console.error("Failed to create GHL note:", ghlResponse.status, errorText);
               }
             }
           } else {
             console.log("No GHL access token found for location:", locationId);
           }
-        } catch (notifError) {
-          console.error("Error creating GHL switch notification:", notifError);
-          // Don't fail the request just because notification failed
+        } catch (noteError) {
+          console.error("Error creating GHL note:", noteError);
+          // Don't fail the request just because note creation failed
         }
       }
 
