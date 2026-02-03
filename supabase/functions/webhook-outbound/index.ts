@@ -40,13 +40,18 @@ async function updateGroupSubjectBestEffort(
   instanceToken: string,
   groupIdOrJid: string,
   subject: string,
+  instanceName?: string,
 ) {
-  const urls = [
-    // Evolution-style
-    `${baseUrl}/group/updateGroupSubject`,
-    // Legacy
-    `${baseUrl}/group/updateSubject`,
-  ];
+  const urls = (
+    [
+      // Instance-in-path variants (common in Evolution/UAZAPI deployments)
+      instanceName ? `${baseUrl}/group/updateGroupSubject/${instanceName}` : null,
+      instanceName ? `${baseUrl}/group/updateSubject/${instanceName}` : null,
+      // Non-instance variants
+      `${baseUrl}/group/updateGroupSubject`,
+      `${baseUrl}/group/updateSubject`,
+    ].filter(Boolean) as string[]
+  );
   const attempts: Array<Record<string, unknown>> = [
     { groupJid: groupIdOrJid, subject },
     { groupId: groupIdOrJid, subject },
@@ -73,15 +78,20 @@ async function updateGroupPictureBestEffort(
   instanceToken: string,
   groupIdOrJid: string,
   imageUrl: string,
+  instanceName?: string,
 ) {
-  const urls = [
-    // Evolution-style
-    `${baseUrl}/group/updateGroupPicture`,
-    // Legacy
-    `${baseUrl}/group/updatePicture`,
-    // Some providers use this naming
-    `${baseUrl}/group/profilePicture`,
-  ];
+  const urls = (
+    [
+      // Instance-in-path variants
+      instanceName ? `${baseUrl}/group/updateGroupPicture/${instanceName}` : null,
+      instanceName ? `${baseUrl}/group/updatePicture/${instanceName}` : null,
+      instanceName ? `${baseUrl}/group/profilePicture/${instanceName}` : null,
+      // Non-instance variants
+      `${baseUrl}/group/updateGroupPicture`,
+      `${baseUrl}/group/updatePicture`,
+      `${baseUrl}/group/profilePicture`,
+    ].filter(Boolean) as string[]
+  );
   const payloads: Array<Record<string, unknown>> = [
     { groupJid: groupIdOrJid, image: imageUrl },
     { groupId: groupIdOrJid, image: imageUrl },
@@ -463,7 +473,8 @@ async function findGroupByName(
 async function processGroupCommand(
   baseUrl: string,
   instanceToken: string,
-  messageText: string
+  messageText: string,
+  instanceName?: string,
 ): Promise<GroupCommandResult> {
   const parsed = parseGroupCommand(messageText);
   if (!parsed) return { isCommand: false };
@@ -520,7 +531,7 @@ async function processGroupCommand(
 
          // Update group subject (name) - try multiple payload shapes
          console.log("Updating group subject to:", name);
-         await updateGroupSubjectBestEffort(baseUrl, instanceToken, groupJid, name);
+          await updateGroupSubjectBestEffort(baseUrl, instanceToken, groupJid, name, instanceName);
          await sleep(250);
         
         // Update group description
@@ -537,7 +548,7 @@ async function processGroupCommand(
          // Update group photo - try multiple payload shapes and fallback endpoint
          if (photoUrl) {
            console.log("Updating group photo to:", photoUrl);
-           await updateGroupPictureBestEffort(baseUrl, instanceToken, groupJid, photoUrl);
+            await updateGroupPictureBestEffort(baseUrl, instanceToken, groupJid, photoUrl, instanceName);
          }
         
         return { isCommand: true, success: true, command, message: `Grupo "${name}" criado com sucesso!` };
@@ -917,7 +928,7 @@ serve(async (req: Request) => {
     // Buscar todas as instâncias da subconta
     const { data: instances, error: instErr } = await supabase
       .from("instances")
-      .select("id, uazapi_instance_token")
+      .select("id, instance_name, uazapi_instance_token")
       .eq("subaccount_id", subaccount.id)
       .order("created_at", { ascending: true });
 
@@ -1149,7 +1160,12 @@ serve(async (req: Request) => {
     if (messageText && messageText.trim().startsWith("#")) {
       console.log("Detected potential group command:", messageText.substring(0, 50));
       
-      const commandResult = await processGroupCommand(base, instanceToken, messageText);
+      const commandResult = await processGroupCommand(
+        base,
+        instanceToken,
+        messageText,
+        (instance as any)?.instance_name,
+      );
       
       if (commandResult.isCommand) {
         console.log("Group command processed:", commandResult);
