@@ -1074,42 +1074,73 @@ async function processGroupCommand(
       
       case "#somenteadminmsg": {
         // Formato: #somenteadminmsg (enviado dentro do grupo)
-        await fetch(`${baseUrl}/group/updateSetting`, {
+        // UAZAPI v2: POST /group/updateAnnounce with { groupjid, announce: true }
+        console.log("Executing #somenteadminmsg with updateAnnounce endpoint");
+        const announceRes = await fetch(`${baseUrl}/group/updateAnnounce`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: currentGroupJid, action: "announcement" }),
+          body: JSON.stringify({ groupjid: currentGroupJid, announce: true }),
         });
-        return { isCommand: true, success: true, command, message: `Apenas admins podem enviar mensagens neste grupo` };
+        const announceText = await announceRes.text();
+        console.log("updateAnnounce response:", { status: announceRes.status, body: announceText.substring(0, 200) });
+        if (announceRes.ok) {
+          return { isCommand: true, success: true, command, message: `Apenas admins podem enviar mensagens neste grupo` };
+        } else {
+          return { isCommand: true, success: false, command, message: `Falha ao restringir mensagens (${announceRes.status})` };
+        }
       }
       
       case "#msgliberada": {
         // Formato: #msgliberada (enviado dentro do grupo)
-        await fetch(`${baseUrl}/group/updateSetting`, {
+        // UAZAPI v2: POST /group/updateAnnounce with { groupjid, announce: false }
+        console.log("Executing #msgliberada with updateAnnounce endpoint");
+        const unannounceRes = await fetch(`${baseUrl}/group/updateAnnounce`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: currentGroupJid, action: "not_announcement" }),
+          body: JSON.stringify({ groupjid: currentGroupJid, announce: false }),
         });
-        return { isCommand: true, success: true, command, message: `Todos podem enviar mensagens neste grupo` };
+        const unannounceText = await unannounceRes.text();
+        console.log("updateAnnounce (false) response:", { status: unannounceRes.status, body: unannounceText.substring(0, 200) });
+        if (unannounceRes.ok) {
+          return { isCommand: true, success: true, command, message: `Todos podem enviar mensagens neste grupo` };
+        } else {
+          return { isCommand: true, success: false, command, message: `Falha ao liberar mensagens (${unannounceRes.status})` };
+        }
       }
       
       case "#somenteadminedit": {
         // Formato: #somenteadminedit (enviado dentro do grupo)
-        await fetch(`${baseUrl}/group/updateSetting`, {
+        // Try updateSetting with locked, fallback to other endpoints
+        console.log("Executing #somenteadminedit");
+        const lockRes = await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: currentGroupJid, action: "locked" }),
+          body: JSON.stringify({ groupjid: currentGroupJid, action: "locked" }),
         });
-        return { isCommand: true, success: true, command, message: `Apenas admins podem editar este grupo` };
+        const lockText = await lockRes.text();
+        console.log("updateSetting locked response:", { status: lockRes.status, body: lockText.substring(0, 200) });
+        if (lockRes.ok) {
+          return { isCommand: true, success: true, command, message: `Apenas admins podem editar este grupo` };
+        } else {
+          return { isCommand: true, success: false, command, message: `Falha ao restringir edição (${lockRes.status})` };
+        }
       }
       
       case "#editliberado": {
         // Formato: #editliberado (enviado dentro do grupo)
-        await fetch(`${baseUrl}/group/updateSetting`, {
+        console.log("Executing #editliberado");
+        const unlockRes = await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: currentGroupJid, action: "unlocked" }),
+          body: JSON.stringify({ groupjid: currentGroupJid, action: "unlocked" }),
         });
-        return { isCommand: true, success: true, command, message: `Todos podem editar este grupo` };
+        const unlockText = await unlockRes.text();
+        console.log("updateSetting unlocked response:", { status: unlockRes.status, body: unlockText.substring(0, 200) });
+        if (unlockRes.ok) {
+          return { isCommand: true, success: true, command, message: `Todos podem editar este grupo` };
+        } else {
+          return { isCommand: true, success: false, command, message: `Falha ao liberar edição (${unlockRes.status})` };
+        }
       }
       
       case "#linkgrupo": {
