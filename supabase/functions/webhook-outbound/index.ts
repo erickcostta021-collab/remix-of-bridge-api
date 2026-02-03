@@ -821,11 +821,56 @@ async function processGroupCommand(
           return { isCommand: true, success: false, command, message: "Formato: #promoveradmin telefone (envie dentro do grupo)" };
         }
         const cleanPhone = params[0].replace(/\D/g, "");
-        await fetch(`${baseUrl}/group/promoteParticipant`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: currentGroupJid, participants: [`${cleanPhone}@s.whatsapp.net`] }),
-        });
+        const participantJid = `${cleanPhone}@s.whatsapp.net`;
+        
+        // Try multiple endpoint/payload combinations
+        const promoteEndpoints = [
+          `${baseUrl}/group/promoteParticipant`,
+          `${baseUrl}/group/promote`,
+          instanceName ? `${baseUrl}/group/promoteParticipant/${instanceName}` : null,
+          instanceName ? `${baseUrl}/${instanceName}/group/promoteParticipant` : null,
+        ].filter(Boolean) as string[];
+        
+        const promotePayloads = [
+          { groupId: currentGroupJid, participants: [participantJid] },
+          { groupJid: currentGroupJid, participants: [participantJid] },
+          { id: currentGroupJid, participants: [participantJid] },
+          { groupId: `${currentGroupJid}@g.us`, participants: [participantJid] },
+          { groupId: currentGroupJid, participant: participantJid },
+          { groupJid: currentGroupJid, participant: participantJid },
+        ];
+        
+        let promoteSuccess = false;
+        for (const url of promoteEndpoints) {
+          for (const payload of promotePayloads) {
+            try {
+              const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "token": instanceToken },
+                body: JSON.stringify(payload),
+              });
+              const text = await res.text();
+              console.log("Promote attempt:", { 
+                endpoint: url.replace(baseUrl, ""), 
+                payloadKeys: Object.keys(payload),
+                status: res.status, 
+                body: text.substring(0, 200) 
+              });
+              
+              if (res.ok) {
+                promoteSuccess = true;
+                break;
+              }
+            } catch (e) {
+              console.log("Promote error:", e);
+            }
+          }
+          if (promoteSuccess) break;
+        }
+        
+        if (!promoteSuccess) {
+          return { isCommand: true, success: false, command, message: `❌ Erro ao promover ${params[0]} a admin` };
+        }
         
         return { isCommand: true, success: true, command, message: `Membro ${params[0]} promovido a admin` };
       }
@@ -835,12 +880,56 @@ async function processGroupCommand(
         if (params.length < 1) {
           return { isCommand: true, success: false, command, message: "Formato: #revogaradmin telefone (envie dentro do grupo)" };
         }
-        const cleanPhone = params[0].replace(/\D/g, "");
-        await fetch(`${baseUrl}/group/demoteParticipant`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: currentGroupJid, participants: [`${cleanPhone}@s.whatsapp.net`] }),
-        });
+        const cleanPhoneDemote = params[0].replace(/\D/g, "");
+        const demoteJid = `${cleanPhoneDemote}@s.whatsapp.net`;
+        
+        const demoteEndpoints = [
+          `${baseUrl}/group/demoteParticipant`,
+          `${baseUrl}/group/demote`,
+          instanceName ? `${baseUrl}/group/demoteParticipant/${instanceName}` : null,
+          instanceName ? `${baseUrl}/${instanceName}/group/demoteParticipant` : null,
+        ].filter(Boolean) as string[];
+        
+        const demotePayloads = [
+          { groupId: currentGroupJid, participants: [demoteJid] },
+          { groupJid: currentGroupJid, participants: [demoteJid] },
+          { id: currentGroupJid, participants: [demoteJid] },
+          { groupId: `${currentGroupJid}@g.us`, participants: [demoteJid] },
+          { groupId: currentGroupJid, participant: demoteJid },
+          { groupJid: currentGroupJid, participant: demoteJid },
+        ];
+        
+        let demoteSuccess = false;
+        for (const url of demoteEndpoints) {
+          for (const payload of demotePayloads) {
+            try {
+              const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "token": instanceToken },
+                body: JSON.stringify(payload),
+              });
+              const text = await res.text();
+              console.log("Demote attempt:", { 
+                endpoint: url.replace(baseUrl, ""), 
+                payloadKeys: Object.keys(payload),
+                status: res.status, 
+                body: text.substring(0, 200) 
+              });
+              
+              if (res.ok) {
+                demoteSuccess = true;
+                break;
+              }
+            } catch (e) {
+              console.log("Demote error:", e);
+            }
+          }
+          if (demoteSuccess) break;
+        }
+        
+        if (!demoteSuccess) {
+          return { isCommand: true, success: false, command, message: `❌ Erro ao revogar admin de ${params[0]}` };
+        }
         
         return { isCommand: true, success: true, command, message: `Admin ${params[0]} rebaixado a membro` };
       }
