@@ -673,6 +673,63 @@ async function updateGhlContactPhoto(
   }
 }
 
+// Update GHL contact name (firstName/lastName or name) for group sync
+async function updateGhlContactName(
+  ctx: GhlContext,
+  newName: string,
+): Promise<void> {
+  if (!ctx.contactId || !ctx.settings?.ghl_client_id || !ctx.settings?.ghl_client_secret) {
+    console.log("[GHL] Skipping contact name update - missing context:", {
+      hasContactId: !!ctx.contactId,
+      hasClientId: !!ctx.settings?.ghl_client_id,
+    });
+    return;
+  }
+
+  try {
+    const token = await getValidToken(ctx.supabase, ctx.subaccount, ctx.settings);
+    if (!token) {
+      console.error("[GHL] No valid token for name update");
+      return;
+    }
+
+    console.log("[GHL] Updating contact name:", { contactId: ctx.contactId, newName });
+
+    // GHL contacts use firstName/lastName fields
+    // For groups, we'll put the full group name in firstName and clear lastName
+    // This matches how groups are typically displayed in GHL
+    const response = await fetch(
+      `https://services.leadconnectorhq.com/contacts/${ctx.contactId}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Version: "2021-07-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          firstName: newName,
+          lastName: "", // Clear lastName to show just the group name
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    
+    if (response.ok) {
+      console.log("[GHL] ✅ Contact name updated successfully:", { newName });
+    } else {
+      console.log("[GHL] Failed to update contact name:", { 
+        status: response.status, 
+        body: responseText.substring(0, 300) 
+      });
+    }
+
+  } catch (e) {
+    console.error("[GHL] Error updating contact name:", e);
+  }
+}
+
 async function processGroupCommand(
   baseUrl: string,
   instanceToken: string,
@@ -1048,7 +1105,15 @@ async function processGroupCommand(
           return { isCommand: true, success: false, command, message: "Formato: #attnomegrupo novo_nome (envie dentro do grupo)" };
         }
         const newSubject = params.join("|"); // Allow | in name
+        
+        // 1. Update WhatsApp group name
         await updateGroupSubjectBestEffort(baseUrl, instanceToken, currentGroupJid!, newSubject, instanceName);
+        
+        // 2. Sync with GHL contact name
+        if (ghlContext) {
+          await updateGhlContactName(ghlContext, newSubject);
+        }
+        
         return { isCommand: true, success: true, command, message: `Nome do grupo alterado para "${newSubject}"` };
       }
       
