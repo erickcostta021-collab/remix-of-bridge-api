@@ -1166,35 +1166,41 @@ async function processGroupCommand(
           }
         }
         
-        // UAZAPI v2: POST /group/inviteCode with { groupjid }
-        console.log("Getting invite link for group:", groupIdForLink);
-        const inviteResponse = await fetch(`${baseUrl}/group/inviteCode`, {
+        // Use /group/info with getInviteLink: true (confirmed working via curl)
+        console.log("Getting invite link for group via /group/info:", groupIdForLink);
+        const inviteResponse = await fetch(`${baseUrl}/group/info`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupjid: groupIdForLink }),
+          body: JSON.stringify({ 
+            groupjid: groupIdForLink, 
+            getInviteLink: true,
+            getRequestsParticipants: false,
+            force: false 
+          }),
         });
         
         const inviteText = await inviteResponse.text();
-        console.log("inviteCode response:", { status: inviteResponse.status, body: inviteText.substring(0, 300) });
+        console.log("group/info response:", { status: inviteResponse.status, body: inviteText.substring(0, 500) });
         
         let inviteCode: string | null = null;
         try {
           const inviteData = JSON.parse(inviteText);
-          // Try multiple response formats
-          inviteCode = inviteData.code || inviteData.inviteCode || inviteData.invite || inviteData.inviteUrl;
+          // /group/info returns inviteLink directly
+          const inviteLink = inviteData.inviteLink || inviteData.inviteUrl || inviteData.invite || inviteData.code || inviteData.inviteCode;
           
-          // If inviteUrl is a full URL, extract code
-          if (inviteCode && inviteCode.startsWith("https://chat.whatsapp.com/")) {
-            inviteCode = inviteCode.replace("https://chat.whatsapp.com/", "");
+          if (inviteLink) {
+            // Extract code from full URL if needed
+            if (inviteLink.startsWith("https://chat.whatsapp.com/")) {
+              inviteCode = inviteLink.replace("https://chat.whatsapp.com/", "");
+            } else {
+              inviteCode = inviteLink;
+            }
           }
         } catch (e) {
-          // Response might be plain text invite code
-          if (inviteText && !inviteText.includes("{") && inviteText.length > 10 && inviteText.length < 50) {
-            inviteCode = inviteText.trim();
-          }
+          console.log("Failed to parse group/info response:", e);
         }
         
-        if (!inviteCode || inviteCode === String(inviteResponse.status)) {
+        if (!inviteCode || inviteCode.length < 10) {
           return { isCommand: true, success: false, command, message: `Não foi possível obter o link do grupo (${inviteResponse.status})` };
         }
         
