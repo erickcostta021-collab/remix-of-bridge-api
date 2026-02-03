@@ -40,12 +40,23 @@ async function updateGroupSubjectBestEffort(
   instanceToken: string,
   groupIdOrJid: string,
   subject: string,
+  instanceName?: string,
 ) {
-  const urls = [
-    `${baseUrl}/group/updateGroupSubject`,
-    `${baseUrl}/group/updateSubject`,
-  ];
+  // UAZAPI uses PUT /group/{jid} with { subject } body similar to Baileys/Zappaz
+  const urls = (
+    [
+      // PUT /group/{jid} - likely main one
+      `${baseUrl}/group/${groupIdOrJid}`,
+      // Instance-in-path variants
+      instanceName ? `${baseUrl}/group/updateGroupSubject/${instanceName}` : null,
+      instanceName ? `${baseUrl}/group/updateSubject/${instanceName}` : null,
+      // Non-instance variants
+      `${baseUrl}/group/updateGroupSubject`,
+      `${baseUrl}/group/updateSubject`,
+    ].filter(Boolean) as string[]
+  );
   const attempts: Array<Record<string, unknown>> = [
+    { subject },
     { groupJid: groupIdOrJid, subject },
     { groupId: groupIdOrJid, subject },
     { jid: groupIdOrJid, subject },
@@ -56,7 +67,7 @@ async function updateGroupSubjectBestEffort(
     for (const payload of attempts) {
       const r = await postJson(url, instanceToken, payload);
       console.log("Subject update attempt:", {
-        endpoint: url.split("/").slice(-2).join("/"),
+        endpoint: url.replace(baseUrl, ""),
         payloadKeys: Object.keys(payload),
         status: r.status,
         body: r.text.substring(0, 200),
@@ -71,13 +82,26 @@ async function updateGroupPictureBestEffort(
   instanceToken: string,
   groupIdOrJid: string,
   imageUrl: string,
+  instanceName?: string,
 ) {
-  const urls = [
-    `${baseUrl}/group/updateGroupPicture`,
-    `${baseUrl}/group/updatePicture`,
-    `${baseUrl}/group/profilePicture`,
-  ];
+  // UAZAPI may use PUT /group/{jid} with { picture } or /group/profilePicture
+  const urls = (
+    [
+      // PUT /group/{jid} - likely main one
+      `${baseUrl}/group/${groupIdOrJid}`,
+      // Instance-in-path variants
+      instanceName ? `${baseUrl}/group/updateGroupPicture/${instanceName}` : null,
+      instanceName ? `${baseUrl}/group/updatePicture/${instanceName}` : null,
+      instanceName ? `${baseUrl}/group/profilePicture/${instanceName}` : null,
+      // Non-instance variants
+      `${baseUrl}/group/updateGroupPicture`,
+      `${baseUrl}/group/updatePicture`,
+      `${baseUrl}/group/profilePicture`,
+    ].filter(Boolean) as string[]
+  );
   const payloads: Array<Record<string, unknown>> = [
+    { picture: imageUrl },
+    { image: imageUrl },
     { groupJid: groupIdOrJid, image: imageUrl },
     { groupId: groupIdOrJid, image: imageUrl },
     { groupJid: groupIdOrJid, picture: imageUrl },
@@ -87,7 +111,7 @@ async function updateGroupPictureBestEffort(
   for (const url of urls) {
     for (const payload of payloads) {
       const r = await postJson(url, instanceToken, payload);
-      console.log("Picture update attempt:", { endpoint: url.split("/").slice(-2).join("/"), payloadKeys: Object.keys(payload), status: r.status, body: r.text.substring(0, 200) });
+      console.log("Picture update attempt:", { endpoint: url.replace(baseUrl, ""), payloadKeys: Object.keys(payload), status: r.status, body: r.text.substring(0, 200) });
       if (r.ok) return;
     }
   }
@@ -178,7 +202,8 @@ async function createGroup(
   groupName: string,
   description: string,
   photoUrl: string,
-  participants: string[]
+  participants: string[],
+  instanceName?: string,
 ): Promise<CommandResult> {
   console.log("Creating group:", { groupName, description, photoUrl, participants });
   
@@ -227,7 +252,7 @@ async function createGroup(
 
     // Update group name (subject) - try multiple payload shapes
     console.log("Updating group subject to:", groupName);
-    await updateGroupSubjectBestEffort(baseUrl, instanceToken, groupJid, groupName);
+    await updateGroupSubjectBestEffort(baseUrl, instanceToken, groupJid, groupName, instanceName);
     await sleep(250);
     
     // Update group description if provided
@@ -251,7 +276,7 @@ async function createGroup(
     // Update group photo if provided
     if (photoUrl) {
       console.log("Updating group photo to:", photoUrl);
-      await updateGroupPictureBestEffort(baseUrl, instanceToken, groupJid, photoUrl);
+      await updateGroupPictureBestEffort(baseUrl, instanceToken, groupJid, photoUrl, instanceName);
     }
     
     return { 
@@ -649,7 +674,8 @@ async function processCommand(
   command: string,
   params: string[],
   baseUrl: string,
-  instanceToken: string
+  instanceToken: string,
+  instanceName?: string,
 ): Promise<CommandResult | null> {
   console.log("Processing command:", { command, params });
   
@@ -660,7 +686,7 @@ async function processCommand(
         return { success: false, command: "criargrupo", message: "❌ Formato: #criargrupo nome|descrição|urldafoto|telefone" };
       }
       const [name, description, photoUrl, ...phones] = params;
-      return createGroup(baseUrl, instanceToken, name, description, photoUrl, phones);
+      return createGroup(baseUrl, instanceToken, name, description, photoUrl, phones, instanceName);
     }
     
     case "#removerdogrupo": {
@@ -835,7 +861,8 @@ serve(async (req: Request) => {
       parsed.command,
       parsed.params,
       baseUrl,
-      instanceData.uazapi_instance_token
+      instanceData.uazapi_instance_token,
+      instanceData.instance_name,
     );
 
     if (!result) {
