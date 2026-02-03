@@ -40,57 +40,20 @@ async function updateGroupSubjectBestEffort(
   instanceToken: string,
   groupIdOrJid: string,
   subject: string,
-  instanceName?: string,
+  _instanceName?: string,
 ) {
-  // Evolution API uses: POST /group/updateGroupSubject/{instance}?groupJid=xxx
-  // with { subject } in body
+  // UAZAPI uses: POST /group/updateName with { groupjid, name }
+  const url = `${baseUrl}/group/updateName`;
+  const payload = { groupjid: groupIdOrJid, name: subject };
   
-  // Try with query parameter first (Evolution API style)
-  if (instanceName) {
-    const queryUrl = `${baseUrl}/group/updateGroupSubject/${instanceName}?groupJid=${encodeURIComponent(groupIdOrJid)}`;
-    console.log("Trying Evolution API style with query param:", { url: queryUrl });
-    
-    const r = await postJson(queryUrl, instanceToken, { subject });
-    console.log("Subject update attempt (query param):", {
-      endpoint: `updateGroupSubject/${instanceName}?groupJid=...`,
-      status: r.status,
-      body: r.text.substring(0, 200),
-    });
-    if (r.ok) return;
+  console.log("Updating group name (UAZAPI):", { url, groupjid: groupIdOrJid, name: subject });
+  
+  const r = await postJson(url, instanceToken, payload);
+  console.log("Group name update response:", { status: r.status, body: r.text.substring(0, 300) });
+  
+  if (!r.ok) {
+    console.error("Failed to update group name:", r.status, r.text);
   }
-  
-  // Fallback: Try multiple URL/payload combinations (UAZAPI variants)
-  const urls = (
-    [
-      instanceName ? `${baseUrl}/group/updateGroupSubject/${instanceName}` : null,
-      instanceName ? `${baseUrl}/group/updateSubject/${instanceName}` : null,
-      `${baseUrl}/group/updateGroupSubject`,
-      `${baseUrl}/group/updateSubject`,
-    ].filter(Boolean) as string[]
-  );
-  
-  const attempts: Array<Record<string, unknown>> = [
-    { groupjid: groupIdOrJid, subject }, // lowercase groupjid (like updateImage)
-    { groupJid: groupIdOrJid, subject },
-    { groupId: groupIdOrJid, subject },
-    { jid: groupIdOrJid, subject },
-    { id: groupIdOrJid, subject },
-  ];
-
-  for (const url of urls) {
-    for (const payload of attempts) {
-      const r = await postJson(url, instanceToken, payload);
-      console.log("Subject update attempt:", {
-        endpoint: url.split("/").slice(-2).join("/"),
-        payloadKeys: Object.keys(payload),
-        status: r.status,
-        body: r.text.substring(0, 200),
-      });
-      if (r.ok) return;
-    }
-  }
-  
-  console.error("All subject update attempts failed for group:", groupIdOrJid);
 }
 
 async function updateGroupPictureBestEffort(
