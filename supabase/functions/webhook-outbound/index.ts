@@ -822,6 +822,9 @@ async function processGroupCommand(
         }
         const cleanPhone = params[0].replace(/\D/g, "");
         const participantJid = `${cleanPhone}@s.whatsapp.net`;
+        const currentGroup = currentGroupJid?.includes("@g.us")
+          ? currentGroupJid
+          : `${currentGroupJid}@g.us`;
         
         // Try multiple endpoint/payload combinations
         const promoteEndpoints = [
@@ -830,6 +833,15 @@ async function processGroupCommand(
           instanceName ? `${baseUrl}/group/promoteParticipant/${instanceName}` : null,
           instanceName ? `${baseUrl}/${instanceName}/group/promoteParticipant` : null,
         ].filter(Boolean) as string[];
+
+        // Evolution API v2-style endpoint: /group/updateParticipant/{instance}?groupJid=...
+        const updateParticipantEndpoints = (
+          [
+            instanceName ? `${baseUrl}/group/updateParticipant/${instanceName}` : null,
+            instanceName ? `${baseUrl}/${instanceName}/group/updateParticipant` : null,
+            `${baseUrl}/group/updateParticipant`,
+          ].filter(Boolean) as string[]
+        ).map((u) => `${u}?groupJid=${encodeURIComponent(currentGroup ?? "")}`);
         
         const promotePayloads = [
           { groupId: currentGroupJid, participants: [participantJid] },
@@ -839,35 +851,84 @@ async function processGroupCommand(
           { groupId: currentGroupJid, participant: participantJid },
           { groupJid: currentGroupJid, participant: participantJid },
         ];
+
+        // Evolution updateParticipant payloads (sometimes expects raw numbers)
+        const updateParticipantPayloads = [
+          { action: "promote", participants: [cleanPhone] },
+          { action: "promote", participants: [participantJid] },
+          { action: "promote", participants: [participantJid.replace("@s.whatsapp.net", "")] },
+        ];
         
         const httpMethods: Array<"POST" | "PUT"> = ["PUT", "POST"];
+        const headerVariants: Array<Record<string, string>> = [
+          { "Content-Type": "application/json", token: instanceToken },
+          { "Content-Type": "application/json", apikey: instanceToken },
+          { "Content-Type": "application/json", Authorization: `Bearer ${instanceToken}` },
+        ];
         
         let promoteSuccess = false;
         for (const method of httpMethods) {
           for (const url of promoteEndpoints) {
             for (const payload of promotePayloads) {
-              try {
-                const res = await fetch(url, {
-                  method,
-                  headers: { "Content-Type": "application/json", "token": instanceToken },
-                  body: JSON.stringify(payload),
-                });
-                const text = await res.text();
-                console.log("Promote attempt:", { 
-                  method,
-                  endpoint: url.replace(baseUrl, ""), 
-                  payloadKeys: Object.keys(payload),
-                  status: res.status, 
-                  body: text.substring(0, 200) 
-                });
-                
-                if (res.ok) {
-                  promoteSuccess = true;
-                  break;
+              for (const headers of headerVariants) {
+                try {
+                  const res = await fetch(url, {
+                    method,
+                    headers,
+                    body: JSON.stringify(payload),
+                  });
+                  const text = await res.text();
+                  console.log("Promote attempt:", {
+                    method,
+                    endpoint: url.replace(baseUrl, ""),
+                    headerKeys: Object.keys(headers).filter((k) => k !== "Content-Type"),
+                    payloadKeys: Object.keys(payload),
+                    status: res.status,
+                    body: text.substring(0, 200),
+                  });
+
+                  if (res.ok) {
+                    promoteSuccess = true;
+                    break;
+                  }
+                } catch (e) {
+                  console.log("Promote error:", e);
                 }
-              } catch (e) {
-                console.log("Promote error:", e);
               }
+              if (promoteSuccess) break;
+            }
+            if (promoteSuccess) break;
+          }
+
+          // Fallback: Evolution API v2 updateParticipant(action=promote)
+          for (const url of updateParticipantEndpoints) {
+            for (const payload of updateParticipantPayloads) {
+              for (const headers of headerVariants) {
+                try {
+                  const res = await fetch(url, {
+                    method,
+                    headers,
+                    body: JSON.stringify(payload),
+                  });
+                  const text = await res.text();
+                  console.log("Promote attempt (updateParticipant):", {
+                    method,
+                    endpoint: url.replace(baseUrl, ""),
+                    headerKeys: Object.keys(headers).filter((k) => k !== "Content-Type"),
+                    payloadKeys: Object.keys(payload),
+                    status: res.status,
+                    body: text.substring(0, 200),
+                  });
+
+                  if (res.ok) {
+                    promoteSuccess = true;
+                    break;
+                  }
+                } catch (e) {
+                  console.log("Promote error (updateParticipant):", e);
+                }
+              }
+              if (promoteSuccess) break;
             }
             if (promoteSuccess) break;
           }
@@ -888,6 +949,9 @@ async function processGroupCommand(
         }
         const cleanPhoneDemote = params[0].replace(/\D/g, "");
         const demoteJid = `${cleanPhoneDemote}@s.whatsapp.net`;
+        const currentGroup = currentGroupJid?.includes("@g.us")
+          ? currentGroupJid
+          : `${currentGroupJid}@g.us`;
         
         const demoteEndpoints = [
           `${baseUrl}/group/demoteParticipant`,
@@ -895,6 +959,14 @@ async function processGroupCommand(
           instanceName ? `${baseUrl}/group/demoteParticipant/${instanceName}` : null,
           instanceName ? `${baseUrl}/${instanceName}/group/demoteParticipant` : null,
         ].filter(Boolean) as string[];
+
+        const updateParticipantEndpoints = (
+          [
+            instanceName ? `${baseUrl}/group/updateParticipant/${instanceName}` : null,
+            instanceName ? `${baseUrl}/${instanceName}/group/updateParticipant` : null,
+            `${baseUrl}/group/updateParticipant`,
+          ].filter(Boolean) as string[]
+        ).map((u) => `${u}?groupJid=${encodeURIComponent(currentGroup ?? "")}`);
         
         const demotePayloads = [
           { groupId: currentGroupJid, participants: [demoteJid] },
@@ -904,35 +976,84 @@ async function processGroupCommand(
           { groupId: currentGroupJid, participant: demoteJid },
           { groupJid: currentGroupJid, participant: demoteJid },
         ];
+
+        const updateParticipantPayloads = [
+          { action: "demote", participants: [cleanPhoneDemote] },
+          { action: "demote", participants: [demoteJid] },
+          { action: "demote", participants: [demoteJid.replace("@s.whatsapp.net", "")] },
+        ];
         
         const demoteMethods: Array<"POST" | "PUT"> = ["PUT", "POST"];
+
+        const headerVariants: Array<Record<string, string>> = [
+          { "Content-Type": "application/json", token: instanceToken },
+          { "Content-Type": "application/json", apikey: instanceToken },
+          { "Content-Type": "application/json", Authorization: `Bearer ${instanceToken}` },
+        ];
         
         let demoteSuccess = false;
         for (const method of demoteMethods) {
           for (const url of demoteEndpoints) {
             for (const payload of demotePayloads) {
-              try {
-                const res = await fetch(url, {
-                  method,
-                  headers: { "Content-Type": "application/json", "token": instanceToken },
-                  body: JSON.stringify(payload),
-                });
-                const text = await res.text();
-                console.log("Demote attempt:", { 
-                  method,
-                  endpoint: url.replace(baseUrl, ""), 
-                  payloadKeys: Object.keys(payload),
-                  status: res.status, 
-                  body: text.substring(0, 200) 
-                });
-                
-                if (res.ok) {
-                  demoteSuccess = true;
-                  break;
+              for (const headers of headerVariants) {
+                try {
+                  const res = await fetch(url, {
+                    method,
+                    headers,
+                    body: JSON.stringify(payload),
+                  });
+                  const text = await res.text();
+                  console.log("Demote attempt:", {
+                    method,
+                    endpoint: url.replace(baseUrl, ""),
+                    headerKeys: Object.keys(headers).filter((k) => k !== "Content-Type"),
+                    payloadKeys: Object.keys(payload),
+                    status: res.status,
+                    body: text.substring(0, 200),
+                  });
+
+                  if (res.ok) {
+                    demoteSuccess = true;
+                    break;
+                  }
+                } catch (e) {
+                  console.log("Demote error:", e);
                 }
-              } catch (e) {
-                console.log("Demote error:", e);
               }
+              if (demoteSuccess) break;
+            }
+            if (demoteSuccess) break;
+          }
+
+          // Fallback: Evolution API v2 updateParticipant(action=demote)
+          for (const url of updateParticipantEndpoints) {
+            for (const payload of updateParticipantPayloads) {
+              for (const headers of headerVariants) {
+                try {
+                  const res = await fetch(url, {
+                    method,
+                    headers,
+                    body: JSON.stringify(payload),
+                  });
+                  const text = await res.text();
+                  console.log("Demote attempt (updateParticipant):", {
+                    method,
+                    endpoint: url.replace(baseUrl, ""),
+                    headerKeys: Object.keys(headers).filter((k) => k !== "Content-Type"),
+                    payloadKeys: Object.keys(payload),
+                    status: res.status,
+                    body: text.substring(0, 200),
+                  });
+
+                  if (res.ok) {
+                    demoteSuccess = true;
+                    break;
+                  }
+                } catch (e) {
+                  console.log("Demote error (updateParticipant):", e);
+                }
+              }
+              if (demoteSuccess) break;
             }
             if (demoteSuccess) break;
           }
