@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.8.9 - Pure v6.6.0 UI + Dynamic Number Toggle
-console.log('🚀 BRIDGE LOADER: v6.8.9 Iniciado');
+// 🚀 BRIDGE LOADER: v6.9.0 - Pure v6.6.0 UI + No Focus Outline
+console.log('🚀 BRIDGE LOADER: v6.9.0 Iniciado');
 
 try {
     (function() {
@@ -70,7 +70,7 @@ try {
                     const select = document.getElementById('bridge-instance-selector');
                     if (select) {
                         select.value = activeId;
-                        renderOptions(false); // Garante que carrega escondido
+                        renderOptions(false);
                         select.value = activeId;
                     }
                 }
@@ -87,10 +87,34 @@ try {
             container.id = 'bridge-api-container';
             container.style.cssText = \`display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid \${CONFIG.theme.border}; border-radius: 20px;\`;
             
+            // CSS para remover a linha azul e resetar o visual do select
+            const styleTag = document.createElement('style');
+            styleTag.textContent = \`
+                #bridge-instance-selector {
+                    border: none !important;
+                    background: transparent !important;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: \${CONFIG.theme.text};
+                    cursor: pointer;
+                    outline: none !important; /* REMOVE A LINHA AZUL */
+                    box-shadow: none !important;
+                    appearance: none;
+                    -webkit-appearance: none;
+                    max-width: 150px;
+                }
+                #bridge-instance-selector:focus, #bridge-instance-selector:active {
+                    outline: none !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                }
+            \`;
+            document.head.appendChild(styleTag);
+
             container.innerHTML = \`
                 <div style="display: flex; align-items: center; gap: 6px;">
                     <div style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div>
-                    <select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:700; color:\${CONFIG.theme.text}; cursor:pointer; outline:none; appearance:none; -webkit-appearance:none; max-width:150px;">
+                    <select id="bridge-instance-selector">
                         <option>...</option>
                     </select>
                 </div>\`;
@@ -98,14 +122,13 @@ try {
             actionBar.appendChild(container);
             const select = container.querySelector('select');
 
-            // --- Lógica de Mostrar/Esconder ---
-            select.addEventListener('mousedown', () => renderOptions(true)); // Mostra ao clicar
-            select.addEventListener('blur', () => renderOptions(false));      // Esconde ao sair
+            select.addEventListener('mousedown', () => renderOptions(true));
+            select.addEventListener('blur', () => renderOptions(false));
             
             select.addEventListener('change', async (e) => {
                 const phone = extractPhone();
                 const instanceName = state.instances.find(i => i.id === e.target.value)?.name || "";
-                renderOptions(false); // Esconde após selecionar
+                renderOptions(false);
                 
                 try {
                     await fetch(CONFIG.save_url, {
