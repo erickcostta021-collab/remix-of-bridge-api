@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.11.0 - Chat Notification with Overlay Fallback
-console.log('🚀 BRIDGE LOADER: v6.11.0 Iniciado');
+// 🚀 BRIDGE LOADER: v6.12.0 - Chat Message Style Notification
+console.log('🚀 BRIDGE LOADER: v6.12.0 Iniciado');
 
 try {
     (function() {
@@ -58,7 +58,6 @@ try {
                 '.messages-list',
                 '[data-testid="messages-container"]',
                 '.msg-list-container',
-                // Fallback: find any scrollable container that looks like a chat
                 '[class*="chat"] [class*="scroll"]',
                 '[class*="conversation"] [class*="scroll"]'
             ];
@@ -76,11 +75,9 @@ try {
             if (!chatContainer) {
                 console.log(LOG_PREFIX, '⚠️ Chat container not found, using overlay notification');
                 
-                // Remove existing overlay
                 const existingOverlay = document.getElementById('bridge-switch-overlay');
                 if (existingOverlay) existingOverlay.remove();
                 
-                // Create overlay notification
                 const overlay = document.createElement('div');
                 overlay.id = 'bridge-switch-overlay';
                 overlay.style.cssText = \`
@@ -89,28 +86,18 @@ try {
                     left: 50%;
                     transform: translateX(-50%);
                     z-index: 10001;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
                     padding: 10px 20px;
-                    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-                    border: 1px solid #86efac;
-                    border-radius: 20px;
+                    background: #1f2937;
+                    color: white;
+                    border-radius: 8px;
                     font-size: 13px;
                     font-weight: 600;
-                    color: #166534;
-                    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.25);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
                     animation: bridgeFadeIn 0.3s ease-out;
                 \`;
                 
-                overlay.innerHTML = \`
-                    <span style="margin-right: 8px;">🔄</span>
-                    <span style="color: #dc2626; font-weight: 700;">\${fromInstance}</span>
-                    <span style="margin: 0 10px; color: #9ca3af;">→</span>
-                    <span style="color: #16a34a; font-weight: 700;">\${toInstance}</span>
-                \`;
+                overlay.innerHTML = \`🔄 Instância alterada: <b>\${fromInstance}</b> → <b>\${toInstance}</b>\`;
                 
-                // Add animation keyframes
                 if (!document.getElementById('bridge-animation-styles')) {
                     const animStyle = document.createElement('style');
                     animStyle.id = 'bridge-animation-styles';
@@ -125,7 +112,6 @@ try {
                 
                 document.body.appendChild(overlay);
                 
-                // Auto-remove after 4 seconds
                 setTimeout(() => {
                     overlay.style.opacity = '0';
                     overlay.style.transition = 'opacity 0.3s';
@@ -139,31 +125,30 @@ try {
             // Remove any existing bridge notifications
             document.querySelectorAll('.bridge-switch-notification').forEach(el => el.remove());
 
-            // Create the notification element
+            // Create message that looks like it was sent by the GHL user (outgoing message style)
             const notification = document.createElement('div');
             notification.className = 'bridge-switch-notification';
             notification.style.cssText = \`
                 display: flex;
-                justify-content: center;
-                align-items: center;
-                padding: 8px 16px;
-                margin: 12px auto;
-                max-width: 300px;
-                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-                border: 1px solid #86efac;
-                border-radius: 20px;
-                font-size: 12px;
-                font-weight: 600;
-                color: #166534;
-                box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
+                justify-content: flex-end;
+                padding: 4px 16px;
+                margin: 8px 0;
                 animation: bridgeFadeIn 0.3s ease-out;
             \`;
             
+            // Inner bubble styled like an outgoing message
             notification.innerHTML = \`
-                <span style="margin-right: 6px;">🔄</span>
-                <span style="color: #dc2626; font-weight: 700;">\${fromInstance}</span>
-                <span style="margin: 0 8px; color: #9ca3af;">→</span>
-                <span style="color: #16a34a; font-weight: 700;">\${toInstance}</span>
+                <div style="
+                    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                    color: white;
+                    padding: 10px 14px;
+                    border-radius: 16px 16px 4px 16px;
+                    font-size: 13px;
+                    max-width: 280px;
+                    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+                ">
+                    🔄 Instância alterada: <b>\${fromInstance}</b> → <b>\${toInstance}</b>
+                </div>
             \`;
 
             // Add animation keyframes if not already present
