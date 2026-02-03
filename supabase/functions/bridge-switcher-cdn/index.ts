@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.8.4 - Clean View + Phone in Options Only
-console.log('🚀 BRIDGE LOADER: v6.8.4 Iniciado');
+// 🚀 BRIDGE LOADER: v6.8.5 - Restore v6.6.0 Visual + Smart Capture
+console.log('🚀 BRIDGE LOADER: v6.8.5 Iniciado');
 
 try {
     (function() {
@@ -58,26 +58,30 @@ try {
         function renderOptions(activeId) {
             const select = document.getElementById('bridge-instance-selector');
             if (!select) return;
-            
+            // O texto visível será o nome, o número aparece apenas ao clicar
             select.innerHTML = state.instances.map(i => 
                 \`<option value="\${i.id}" \${i.id === activeId ? 'selected' : ''}>
-                    \${i.name} \${i.phone ? ' - ' + i.phone : ''}
+                    \${i.name} \${i.phone ? ' (' + i.phone + ')' : ''}
                 </option>\`
             ).join('');
         }
 
         function inject() {
             if (document.getElementById('bridge-api-container')) return;
+            
+            // Local de injeção da v6.6.0
             const actionBar = document.querySelector('.msg-composer-actions') || document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
             if (!actionBar) return;
 
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
-            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 10px; padding: 0 8px; height: 32px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; max-width: 180px;';
+            
+            // ESTILO EXATO DA v6.6.0
+            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #fff; border: 1px solid #d1d5db; border-radius: 20px;';
             
             container.innerHTML = \`
-                <div style="width:7px; height:7px; background:#22c55e; border-radius:50%; margin-right:6px; flex-shrink:0;"></div>
-                <select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:700; outline:none !important; box-shadow:none !important; color:#374151; cursor:pointer; width:100%; overflow:hidden; text-overflow:ellipsis;">
+                <div style="width:8px; height:8px; background:#22c55e; border-radius:50%; margin-right:6px;"></div>
+                <select id="bridge-instance-selector" style="border:none; background:transparent; font-size:11px; font-weight:700; outline:none !important; box-shadow:none !important; color:#333; cursor:pointer; -webkit-appearance:none;">
                     <option>...</option>
                 </select>\`;
             
@@ -94,7 +98,7 @@ try {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ instanceId: e.target.value, locationId: locId, phone: phone })
                     });
-                    showNotification(\`Ativado: \${selectedText.split('-')[0].trim()} ✅\`);
+                    showNotification(\`Instância: \${selectedText.split('(')[0].trim()} ✅\`);
                 } catch (err) { console.error("Erro Save:", err); }
             });
 
