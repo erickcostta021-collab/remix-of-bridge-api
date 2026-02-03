@@ -47,7 +47,7 @@ async function findGroupByName(
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
     });
     
@@ -108,7 +108,7 @@ async function createGroup(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         subject: groupName,
@@ -132,7 +132,7 @@ async function createGroup(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "apikey": instanceToken,
+          "token": instanceToken,
         },
         body: JSON.stringify({
           groupId,
@@ -177,7 +177,7 @@ async function removeMember(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         groupId: group.id,
@@ -217,7 +217,7 @@ async function addMember(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         groupId: group.id,
@@ -257,7 +257,7 @@ async function promoteToAdmin(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         groupId: group.id,
@@ -297,7 +297,7 @@ async function demoteAdmin(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         groupId: group.id,
@@ -334,7 +334,7 @@ async function updateGroupPhoto(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         groupId: group.id,
@@ -371,7 +371,7 @@ async function updateGroupName(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         groupId: group.id,
@@ -408,7 +408,7 @@ async function updateGroupDescription(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         groupId: group.id,
@@ -446,7 +446,7 @@ async function updateGroupSettings(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         groupId: group.id,
@@ -491,7 +491,7 @@ async function getGroupLink(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
       body: JSON.stringify({
         groupId: group.id,
