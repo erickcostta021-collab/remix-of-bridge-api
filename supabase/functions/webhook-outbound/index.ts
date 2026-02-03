@@ -1215,135 +1215,133 @@ async function processGroupCommand(
         
         console.log("Getting invite link for group:", normalizedGroupId);
         
-        let inviteCode: string | null = null;
+        let inviteLink: string | null = null;
 
-        const extractInviteCodeBestEffort = (raw: string): string | null => {
-          // 1) Direct URL in any response
-          const urlMatch = raw.match(/https?:\/\/chat\.whatsapp\.com\/([A-Za-z0-9]{10,})/);
-          if (urlMatch?.[1]) return urlMatch[1];
-
-          // 2) Common JSON fields
-          try {
-            const data = JSON.parse(raw);
-            const candidates: unknown[] = [
-              data?.code,
-              data?.inviteCode,
-              data?.invite_link,
-              data?.inviteLink,
-              data?.inviteUrl,
-              data?.invite,
-              data?.data?.code,
-              data?.data?.inviteCode,
-              data?.data?.inviteLink,
-              data?.data?.inviteUrl,
-              data?.data?.invite,
-            ];
-
-            for (const c of candidates) {
-              if (typeof c !== "string") continue;
-              if (c.startsWith("https://chat.whatsapp.com/")) return c.replace("https://chat.whatsapp.com/", "");
-              if (c.length >= 10) return c;
-            }
-
-            // 3) Deep scan for any string containing chat.whatsapp.com
-            const stack: any[] = [data];
-            while (stack.length) {
-              const v = stack.pop();
-              if (!v) continue;
-              if (typeof v === "string") {
-                const m = v.match(/https?:\/\/chat\.whatsapp\.com\/([A-Za-z0-9]{10,})/);
-                if (m?.[1]) return m[1];
-              } else if (Array.isArray(v)) {
-                for (const x of v) stack.push(x);
-              } else if (typeof v === "object") {
-                for (const k of Object.keys(v)) stack.push(v[k]);
+        // PRIMARY: Use /group/info with getInviteLink (n8n confirmed working - returns invite_link field)
+        try {
+          console.log("Trying PRIMARY /group/info with getInviteLink:", {
+            url: `${baseUrl}/group/info`,
+            groupjid: normalizedGroupId,
+          });
+          
+          const infoResponse = await fetch(`${baseUrl}/group/info`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "token": instanceToken },
+            body: JSON.stringify({ 
+              groupjid: normalizedGroupId, 
+              getInviteLink: true,
+              getRequestsParticipants: false,
+              force: false 
+            }),
+          });
+          
+          const infoText = await infoResponse.text();
+          console.log("group/info response:", { status: infoResponse.status, body: infoText.substring(0, 800) });
+          
+          if (infoResponse.ok) {
+            try {
+              const infoData = JSON.parse(infoText);
+              // Handle array response (n8n shows it returns an array)
+              const groupData = Array.isArray(infoData) ? infoData[0] : infoData;
+              
+              // Extract invite_link directly from the response
+              if (groupData?.invite_link) {
+                inviteLink = groupData.invite_link;
+                console.log("Found invite_link in response:", inviteLink);
+              } else if (groupData?.inviteLink) {
+                inviteLink = groupData.inviteLink;
+                console.log("Found inviteLink in response:", inviteLink);
+              } else if (groupData?.inviteCode) {
+                inviteLink = `https://chat.whatsapp.com/${groupData.inviteCode}`;
+                console.log("Built link from inviteCode:", inviteLink);
               }
+            } catch (e) {
+              console.log("Failed to parse group/info response:", e);
             }
-          } catch {
-            // ignore
           }
-
-          // 4) Last resort: a long-ish token-like string (avoid matching phone numbers)
-          const tokenMatch = raw.match(/\b([A-Za-z0-9]{10,})\b/);
-          return tokenMatch?.[1] ?? null;
-        };
-
-        // PRIMARY: Try inviteCode endpoint with multiple method/path variants (some APIs return 405 on POST)
-        const inviteAttempts: Array<{
-          label: string;
-          url: string;
-          method: "GET" | "POST" | "PUT";
-          body?: unknown;
-        }> = [
-          { label: "inviteCode:POST", url: `${baseUrl}/group/inviteCode`, method: "POST", body: { groupjid: normalizedGroupId } },
-          { label: "inviteCode:PUT", url: `${baseUrl}/group/inviteCode`, method: "PUT", body: { groupjid: normalizedGroupId } },
-          { label: "inviteCode:GET?groupjid", url: `${baseUrl}/group/inviteCode?groupjid=${encodeURIComponent(normalizedGroupId)}`, method: "GET" },
-          { label: "inviteCode:GET?groupJid", url: `${baseUrl}/group/inviteCode?groupJid=${encodeURIComponent(normalizedGroupId)}`, method: "GET" },
-        ];
-
-        if (instanceName) {
-          inviteAttempts.push(
-            { label: "inviteCode:POST:instance", url: `${baseUrl}/group/inviteCode/${instanceName}`, method: "POST", body: { groupjid: normalizedGroupId } },
-            { label: "inviteCode:GET:instance", url: `${baseUrl}/group/inviteCode/${instanceName}?groupjid=${encodeURIComponent(normalizedGroupId)}`, method: "GET" },
-          );
+        } catch (e) {
+          console.log("group/info error:", e);
         }
+        
+        // FALLBACK: Try inviteCode endpoint with multiple method/path variants
+        if (!inviteLink) {
+          console.log("Primary failed, trying fallback inviteCode endpoints");
+          
+          const extractInviteCodeBestEffort = (raw: string): string | null => {
+            // 1) Direct URL in any response
+            const urlMatch = raw.match(/https?:\/\/chat\.whatsapp\.com\/([A-Za-z0-9]{10,})/);
+            if (urlMatch?.[0]) return urlMatch[0]; // Return full URL
 
-        for (const attempt of inviteAttempts) {
-          if (inviteCode) break;
-          try {
-            const res = await fetch(attempt.url, {
-              method: attempt.method,
-              headers: {
-                ...(attempt.method !== "GET" ? { "Content-Type": "application/json" } : {}),
-                token: instanceToken,
-              },
-              ...(attempt.method !== "GET" ? { body: JSON.stringify(attempt.body ?? {}) } : {}),
-            });
-            const text = await res.text();
-            console.log("Invite attempt response:", {
-              label: attempt.label,
-              status: res.status,
-              body: text.substring(0, 500),
-            });
-            if (res.ok) {
-              inviteCode = extractInviteCodeBestEffort(text);
+            // 2) Common JSON fields
+            try {
+              const data = JSON.parse(raw);
+              const candidates: unknown[] = [
+                data?.code,
+                data?.inviteCode,
+                data?.invite_link,
+                data?.inviteLink,
+                data?.inviteUrl,
+                data?.invite,
+                data?.data?.code,
+                data?.data?.inviteCode,
+                data?.data?.inviteLink,
+                data?.data?.inviteUrl,
+                data?.data?.invite,
+              ];
+
+              for (const c of candidates) {
+                if (typeof c !== "string") continue;
+                if (c.startsWith("https://chat.whatsapp.com/")) return c;
+                if (c.length >= 10) return `https://chat.whatsapp.com/${c}`;
+              }
+            } catch {
+              // ignore
             }
-          } catch (e) {
-            console.log("Invite attempt error:", { label: attempt.label, error: String(e) });
+
+            return null;
+          };
+
+          const inviteAttempts: Array<{
+            label: string;
+            url: string;
+            method: "GET" | "POST" | "PUT";
+            body?: unknown;
+          }> = [
+            { label: "inviteCode:POST", url: `${baseUrl}/group/inviteCode`, method: "POST", body: { groupjid: normalizedGroupId } },
+            { label: "inviteCode:PUT", url: `${baseUrl}/group/inviteCode`, method: "PUT", body: { groupjid: normalizedGroupId } },
+            { label: "inviteCode:GET?groupjid", url: `${baseUrl}/group/inviteCode?groupjid=${encodeURIComponent(normalizedGroupId)}`, method: "GET" },
+          ];
+
+          for (const attempt of inviteAttempts) {
+            if (inviteLink) break;
+            try {
+              const res = await fetch(attempt.url, {
+                method: attempt.method,
+                headers: {
+                  ...(attempt.method !== "GET" ? { "Content-Type": "application/json" } : {}),
+                  token: instanceToken,
+                },
+                ...(attempt.method !== "GET" ? { body: JSON.stringify(attempt.body ?? {}) } : {}),
+              });
+              const text = await res.text();
+              console.log("Invite attempt response:", {
+                label: attempt.label,
+                status: res.status,
+                body: text.substring(0, 500),
+              });
+              if (res.ok) {
+                inviteLink = extractInviteCodeBestEffort(text);
+              }
+            } catch (e) {
+              console.log("Invite attempt error:", { label: attempt.label, error: String(e) });
+            }
           }
         }
         
-        // FALLBACK: Try /group/info with getInviteLink if primary fails
-        if (!inviteCode || inviteCode.length < 10) {
-          console.log("Trying fallback /group/info with getInviteLink");
-          try {
-            const infoResponse = await fetch(`${baseUrl}/group/info`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "token": instanceToken },
-              body: JSON.stringify({ 
-                groupjid: normalizedGroupId, 
-                getInviteLink: true,
-                getRequestsParticipants: false,
-                force: false 
-              }),
-            });
-            
-            const infoText = await infoResponse.text();
-            console.log("group/info fallback response:", { status: infoResponse.status, body: infoText.substring(0, 500) });
-            
-            if (infoResponse.ok) {
-              inviteCode = extractInviteCodeBestEffort(infoText);
-            }
-          } catch (e) {
-            console.log("group/info fallback error:", e);
-          }
-        }
-        
-        if (!inviteCode || inviteCode.length < 10) {
+        if (!inviteLink) {
           return { isCommand: true, success: false, command, message: `Não foi possível obter o link do grupo` };
         }
         
-        const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
         const cleanPhone = phoneParam.replace(/\D/g, "");
         
         console.log("Sending invite link to:", cleanPhone, "link:", inviteLink);
