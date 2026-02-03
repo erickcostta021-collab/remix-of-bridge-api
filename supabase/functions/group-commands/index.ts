@@ -96,11 +96,10 @@ async function createGroup(
   console.log("Creating group:", { groupName, description, photoUrl, participants });
   
   try {
-    // Format participants as WhatsApp JIDs
-    const formattedParticipants = participants.map(p => {
-      const clean = p.replace(/\D/g, "");
-      return clean.includes("@") ? clean : `${clean}@s.whatsapp.net`;
-    });
+    // UAZAPI/Evolution expects just clean phone numbers without @s.whatsapp.net
+    const formattedParticipants = participants.map(p => p.replace(/\D/g, ""));
+    
+    console.log("Formatted participants:", formattedParticipants);
     
     // Create group
     const createUrl = `${baseUrl}/group/create`;
@@ -118,13 +117,15 @@ async function createGroup(
     });
     
     const createData = await createResponse.json();
-    console.log("Create group response:", createData);
+    console.log("Create group response:", JSON.stringify(createData));
     
     if (!createResponse.ok) {
       return { success: false, command: "criargrupo", message: `Erro ao criar grupo: ${createData.message || createResponse.status}` };
     }
     
-    const groupId = createData.id || createData.jid || createData.gid;
+    // Try multiple possible field names for the group ID
+    const groupId = createData.id || createData.jid || createData.gid || createData.groupId || createData.group?.id;
+    console.log("Group created with ID:", groupId);
     
     // Update group photo if provided
     if (photoUrl && groupId) {
@@ -140,8 +141,23 @@ async function createGroup(
         }),
       });
       
+      const photoData = await photoResponse.text();
+      console.log("Photo update response:", photoResponse.status, photoData);
+      
       if (!photoResponse.ok) {
-        console.error("Failed to set group photo:", await photoResponse.text());
+        // Try alternative endpoint
+        const altPhotoResponse = await fetch(`${baseUrl}/group/profilePicture`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "token": instanceToken,
+          },
+          body: JSON.stringify({
+            groupJid: groupId,
+            image: photoUrl,
+          }),
+        });
+        console.log("Alt photo update response:", altPhotoResponse.status, await altPhotoResponse.text());
       }
     }
     
