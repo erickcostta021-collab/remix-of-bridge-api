@@ -6,29 +6,19 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.8.8 - Pure v6.6.0 UI + Fixed Label (No Phone in Header)
-console.log('🚀 BRIDGE LOADER: v6.8.8 Iniciado');
+// 🚀 BRIDGE LOADER: v6.8.9 - Pure v6.6.0 UI + Dynamic Number Toggle
+console.log('🚀 BRIDGE LOADER: v6.8.9 Iniciado');
 
 try {
     (function() {
-        const VERSION = "6.8.8";
         const LOG_PREFIX = "[Bridge]";
-        
         const CONFIG = {
             api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
             save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
-            theme: {
-                primary: '#22c55e',
-                border: '#d1d5db',
-                text: '#374151'
-            }
+            theme: { primary: '#22c55e', border: '#d1d5db', text: '#374151' }
         };
 
-        let state = { 
-            instances: [], 
-            lastPhoneFound: null, 
-            currentLocationId: null
-        };
+        let state = { instances: [], lastPhoneFound: null, currentLocationId: null };
 
         function cleanPhone(raw) {
             if (!raw) return null;
@@ -45,22 +35,6 @@ try {
             return null;
         }
 
-        function injectStyles() {
-            if (document.getElementById('bridge-styles')) return;
-            const style = document.createElement('style');
-            style.id = 'bridge-styles';
-            style.textContent = \`
-                #bridge-instance-selector:focus { outline: none !important; box-shadow: none !important; border: none !important; }
-                #bridge-instance-selector {
-                    border: none; background: transparent; font-size: 12px; font-weight: 700;
-                    color: \${CONFIG.theme.text}; cursor: pointer; appearance: none; -webkit-appearance: none;
-                    padding-right: 4px; width: 100%; max-width: 160px; text-overflow: ellipsis;
-                    white-space: nowrap; overflow: hidden;
-                }
-            \`;
-            document.head.appendChild(style);
-        }
-
         function showNotification(instanceName) {
             const existing = document.getElementById('bridge-notify');
             if (existing) existing.remove();
@@ -72,40 +46,35 @@ try {
             setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
         }
 
+        function renderOptions(showPhone = false) {
+            const select = document.getElementById('bridge-instance-selector');
+            if (!select) return;
+            const currentVal = select.value;
+            
+            select.innerHTML = state.instances.map(i => {
+                const text = showPhone && i.phone ? \`\${i.name} (\${i.phone})\` : i.name;
+                return \`<option value="\${i.id}" \${i.id === currentVal ? 'selected' : ''}>\${text}</option>\`;
+            }).join('');
+        }
+
         async function loadInstances(phone) {
             const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
             if (!locId || !phone) return;
             state.currentLocationId = locId;
-
             try {
                 const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locId}&phone=\${phone}\`);
                 const data = await res.json();
                 if (data.instances) {
                     state.instances = data.instances;
-                    renderOptions(data.activeInstanceId || data.instances[0]?.id);
+                    const activeId = data.activeInstanceId || data.instances[0]?.id;
+                    const select = document.getElementById('bridge-instance-selector');
+                    if (select) {
+                        select.value = activeId;
+                        renderOptions(false); // Garante que carrega escondido
+                        select.value = activeId;
+                    }
                 }
             } catch (e) { console.error(LOG_PREFIX, e); }
-        }
-
-        // A MÁGICA PARA ESCONDER O NÚMERO NO TOPO ESTÁ AQUI
-        function renderOptions(activeId) {
-            const select = document.getElementById('bridge-instance-selector');
-            if (!select) return;
-            
-            select.innerHTML = ''; // Limpa
-            
-            state.instances.forEach(i => {
-                const opt = document.createElement('option');
-                opt.value = i.id;
-                opt.selected = (i.id === activeId);
-                
-                // O rótulo (label) é o que aparece na LISTA (com número)
-                // O texto (text) é o que aparece no TOPO (sem número)
-                opt.textContent = i.name; 
-                opt.label = i.phone ? \`\${i.name} (\${i.phone})\` : i.name;
-                
-                select.appendChild(opt);
-            });
         }
 
         function inject() {
@@ -114,8 +83,6 @@ try {
                               document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
             if (!actionBar) return;
 
-            injectStyles();
-
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
             container.style.cssText = \`display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid \${CONFIG.theme.border}; border-radius: 20px;\`;
@@ -123,26 +90,28 @@ try {
             container.innerHTML = \`
                 <div style="display: flex; align-items: center; gap: 6px;">
                     <div style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div>
-                    <select id="bridge-instance-selector">
+                    <select id="bridge-instance-selector" style="border:none; background:transparent; font-size:12px; font-weight:700; color:\${CONFIG.theme.text}; cursor:pointer; outline:none; appearance:none; -webkit-appearance:none; max-width:150px;">
                         <option>...</option>
                     </select>
                 </div>\`;
             
             actionBar.appendChild(container);
+            const select = container.querySelector('select');
 
-            container.querySelector('select').addEventListener('change', async (e) => {
+            // --- Lógica de Mostrar/Esconder ---
+            select.addEventListener('mousedown', () => renderOptions(true)); // Mostra ao clicar
+            select.addEventListener('blur', () => renderOptions(false));      // Esconde ao sair
+            
+            select.addEventListener('change', async (e) => {
                 const phone = extractPhone();
-                const instanceName = e.target.options[e.target.selectedIndex].text; // Pega o nome sem número
-
+                const instanceName = state.instances.find(i => i.id === e.target.value)?.name || "";
+                renderOptions(false); // Esconde após selecionar
+                
                 try {
                     await fetch(CONFIG.save_url, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            instanceId: e.target.value, 
-                            locationId: state.currentLocationId, 
-                            phone: phone 
-                        })
+                        body: JSON.stringify({ instanceId: e.target.value, locationId: state.currentLocationId, phone: phone })
                     });
                     showNotification(instanceName);
                 } catch (err) { console.error("Erro Save:", err); }
