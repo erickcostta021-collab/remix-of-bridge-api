@@ -336,7 +336,7 @@ async function findGroupByName(
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        "apikey": instanceToken,
+        "token": instanceToken,
       },
     });
     
@@ -403,7 +403,7 @@ async function processGroupCommand(
         
         const createResponse = await fetch(`${baseUrl}/group/create`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ subject: name, participants: formattedParticipants, description }),
         });
         
@@ -416,7 +416,7 @@ async function processGroupCommand(
         if (photoUrl && groupId) {
           await fetch(`${baseUrl}/group/updatePicture`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", "apikey": instanceToken },
+            headers: { "Content-Type": "application/json", "token": instanceToken },
             body: JSON.stringify({ groupId, image: photoUrl }),
           });
         }
@@ -434,7 +434,7 @@ async function processGroupCommand(
         const cleanPhone = params[1].replace(/\D/g, "");
         await fetch(`${baseUrl}/group/removeParticipant`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, participants: [`${cleanPhone}@s.whatsapp.net`] }),
         });
         
@@ -451,7 +451,7 @@ async function processGroupCommand(
         const cleanPhone = params[1].replace(/\D/g, "");
         await fetch(`${baseUrl}/group/addParticipant`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, participants: [`${cleanPhone}@s.whatsapp.net`] }),
         });
         
@@ -468,7 +468,7 @@ async function processGroupCommand(
         const cleanPhone = params[1].replace(/\D/g, "");
         await fetch(`${baseUrl}/group/promoteParticipant`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, participants: [`${cleanPhone}@s.whatsapp.net`] }),
         });
         
@@ -485,7 +485,7 @@ async function processGroupCommand(
         const cleanPhone = params[1].replace(/\D/g, "");
         await fetch(`${baseUrl}/group/demoteParticipant`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, participants: [`${cleanPhone}@s.whatsapp.net`] }),
         });
         
@@ -501,7 +501,7 @@ async function processGroupCommand(
         
         await fetch(`${baseUrl}/group/updatePicture`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, image: params[1] }),
         });
         
@@ -517,7 +517,7 @@ async function processGroupCommand(
         
         await fetch(`${baseUrl}/group/updateSubject`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, subject: params[1] }),
         });
         
@@ -533,7 +533,7 @@ async function processGroupCommand(
         
         await fetch(`${baseUrl}/group/updateDescription`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, description: params[1] }),
         });
         
@@ -549,7 +549,7 @@ async function processGroupCommand(
         
         await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, action: "announcement" }),
         });
         
@@ -565,7 +565,7 @@ async function processGroupCommand(
         
         await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, action: "not_announcement" }),
         });
         
@@ -581,7 +581,7 @@ async function processGroupCommand(
         
         await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, action: "locked" }),
         });
         
@@ -597,7 +597,7 @@ async function processGroupCommand(
         
         await fetch(`${baseUrl}/group/updateSetting`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id, action: "unlocked" }),
         });
         
@@ -613,7 +613,7 @@ async function processGroupCommand(
         
         const inviteResponse = await fetch(`${baseUrl}/group/inviteCode`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": instanceToken },
+          headers: { "Content-Type": "application/json", "token": instanceToken },
           body: JSON.stringify({ groupId: group.id }),
         });
         
