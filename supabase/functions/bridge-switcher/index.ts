@@ -394,11 +394,11 @@ Deno.serve(async (req) => {
                   
                   const conversationProviderId = userSettings?.ghl_conversation_provider_id;
                   
+                  const messageContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
+                  let shouldCreateNote = true;
+
+                  // 1) Try Custom message (requires valid conversationProviderId)
                   if (conversationProviderId) {
-                    // Create Custom message via GHL API - this logs as outbound but does NOT send
-                    // Using contactId in body, not conversationId in URL
-                    const messageContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
-                    
                     const ghlResponse = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
                       method: "POST",
                       headers: {
@@ -411,18 +411,62 @@ Deno.serve(async (req) => {
                         type: "Custom",
                         contactId: contactIdFromConv,
                         message: messageContent,
-                        conversationProviderId: conversationProviderId
-                      })
+                        conversationProviderId,
+                      }),
                     });
-                    
+
                     if (ghlResponse.ok) {
                       console.log("GHL Custom outbound message created successfully");
-                    } else {
+                      shouldCreateNote = false;
+                    }
+
+                    if (!ghlResponse.ok) {
                       const errorText = await ghlResponse.text();
                       console.error("Failed to create GHL Custom message:", ghlResponse.status, errorText);
+
+                      // If provider is invalid/not installed, fall back to internal note in conversation.
+                      // Otherwise, don't try any other strategy (avoid accidental sends).
+                      const providerNotFound =
+                        ghlResponse.status === 404 &&
+                        (errorText.includes("No conversation provider found") ||
+                          errorText.toLowerCase().includes("conversation provider"));
+
+                      if (!providerNotFound) {
+                        shouldCreateNote = false;
+                      } else {
+                        console.log(
+                          "Conversation provider not found/invalid for this location. Falling back to conversation note."
+                        );
+                      }
                     }
                   } else {
-                    console.log("No conversation provider ID configured, skipping message creation");
+                    console.log("No conversation provider ID configured. Falling back to conversation note.");
+                  }
+
+                  // 2) Fallback: create internal note in conversation (does not send to contact)
+                  // NOTE: This renders as an internal note (not outbound bubble), but it's safe.
+                  if (shouldCreateNote) {
+                    const noteRes = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+                      method: "POST",
+                      headers: {
+                        "Authorization": `Bearer ${subaccount.ghl_access_token}`,
+                        "Content-Type": "application/json",
+                        "Version": "2021-04-15",
+                        "Accept": "application/json",
+                      },
+                      body: JSON.stringify({
+                        type: "note",
+                        contactId: contactIdFromConv,
+                        message: messageContent,
+                      }),
+                    });
+
+                    if (noteRes.ok) {
+                      console.log("GHL conversation note created successfully");
+                    } else {
+                      const errorText = await noteRes.text();
+                      console.error("Failed to create GHL conversation note:", noteRes.status, errorText);
+                    }
                   }
                 } else {
                   console.log("Could not get contactId from conversation:", conversationId);
