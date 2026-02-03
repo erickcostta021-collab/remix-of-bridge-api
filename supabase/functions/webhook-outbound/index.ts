@@ -1110,15 +1110,15 @@ async function processGroupCommand(
       
       case "#somenteadminedit": {
         // Formato: #somenteadminedit (enviado dentro do grupo)
-        // Try updateSetting with locked, fallback to other endpoints
-        console.log("Executing #somenteadminedit");
-        const lockRes = await fetch(`${baseUrl}/group/updateSetting`, {
+        // UAZAPI v2: POST /group/updateLocked with { groupjid, locked: true }
+        console.log("Executing #somenteadminedit with updateLocked endpoint");
+        const lockRes = await fetch(`${baseUrl}/group/updateLocked`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupjid: currentGroupJid, action: "locked" }),
+          body: JSON.stringify({ groupjid: currentGroupJid, locked: true }),
         });
         const lockText = await lockRes.text();
-        console.log("updateSetting locked response:", { status: lockRes.status, body: lockText.substring(0, 200) });
+        console.log("updateLocked response:", { status: lockRes.status, body: lockText.substring(0, 200) });
         if (lockRes.ok) {
           return { isCommand: true, success: true, command, message: `Apenas admins podem editar este grupo` };
         } else {
@@ -1128,14 +1128,15 @@ async function processGroupCommand(
       
       case "#editliberado": {
         // Formato: #editliberado (enviado dentro do grupo)
-        console.log("Executing #editliberado");
-        const unlockRes = await fetch(`${baseUrl}/group/updateSetting`, {
+        // UAZAPI v2: POST /group/updateLocked with { groupjid, locked: false }
+        console.log("Executing #editliberado with updateLocked endpoint");
+        const unlockRes = await fetch(`${baseUrl}/group/updateLocked`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupjid: currentGroupJid, action: "unlocked" }),
+          body: JSON.stringify({ groupjid: currentGroupJid, locked: false }),
         });
         const unlockText = await unlockRes.text();
-        console.log("updateSetting unlocked response:", { status: unlockRes.status, body: unlockText.substring(0, 200) });
+        console.log("updateLocked response:", { status: unlockRes.status, body: unlockText.substring(0, 200) });
         if (unlockRes.ok) {
           return { isCommand: true, success: true, command, message: `Todos podem editar este grupo` };
         } else {
