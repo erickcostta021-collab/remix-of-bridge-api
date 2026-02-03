@@ -348,10 +348,10 @@ Deno.serve(async (req) => {
 
       console.log("Preference saved successfully:", { contactId, instanceId, leadPhone });
 
-      // Create GHL internal note (visible only to agents, NOT sent to contact)
-      // Using type: "note" ensures the message stays internal with yellow background
+      // Create GHL contact note (visible only to agents, NOT sent to contact)
+      // Using POST /contacts/:contactId/notes endpoint
       if (conversationId && previousInstanceName && newInstanceName && previousInstanceName !== newInstanceName) {
-        console.log("Creating GHL internal note for conversation:", conversationId);
+        console.log("Creating GHL contact note for conversation:", conversationId);
         
         try {
           // Get the GHL access token for this location
@@ -369,27 +369,48 @@ Deno.serve(async (req) => {
             if (needsRefresh) {
               console.log("Token needs refresh, skipping note creation");
             } else {
-              // Create internal note via GHL API - this does NOT send to the contact
-              const noteContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
-              
-              const ghlResponse = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}/messages`, {
-                method: "POST",
+              // First, get the contactId from the conversation
+              const convResponse = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}`, {
                 headers: {
                   "Authorization": `Bearer ${subaccount.ghl_access_token}`,
-                  "Content-Type": "application/json",
-                  "Version": "2021-04-15"
-                },
-                body: JSON.stringify({
-                  type: "note",
-                  message: noteContent
-                })
+                  "Version": "2021-04-15",
+                  "Accept": "application/json",
+                }
               });
               
-              if (ghlResponse.ok) {
-                console.log("GHL internal note created successfully");
+              if (convResponse.ok) {
+                const convData = await convResponse.json();
+                const contactIdFromConv = convData.conversation?.contactId || convData.contactId;
+                
+                if (contactIdFromConv) {
+                  // Create contact note via GHL API - this does NOT send to the contact
+                  // Endpoint: POST /contacts/:contactId/notes
+                  const noteContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
+                  
+                  const ghlResponse = await fetch(`https://services.leadconnectorhq.com/contacts/${contactIdFromConv}/notes`, {
+                    method: "POST",
+                    headers: {
+                      "Authorization": `Bearer ${subaccount.ghl_access_token}`,
+                      "Content-Type": "application/json",
+                      "Version": "2021-07-28"
+                    },
+                    body: JSON.stringify({
+                      body: noteContent
+                    })
+                  });
+                  
+                  if (ghlResponse.ok) {
+                    console.log("GHL contact note created successfully for contact:", contactIdFromConv);
+                  } else {
+                    const errorText = await ghlResponse.text();
+                    console.error("Failed to create GHL contact note:", ghlResponse.status, errorText);
+                  }
+                } else {
+                  console.log("Could not get contactId from conversation:", conversationId);
+                }
               } else {
-                const errorText = await ghlResponse.text();
-                console.error("Failed to create GHL note:", ghlResponse.status, errorText);
+                const errorText = await convResponse.text();
+                console.error("Failed to get conversation details:", convResponse.status, errorText);
               }
             }
           } else {
