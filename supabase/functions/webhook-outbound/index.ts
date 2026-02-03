@@ -790,12 +790,33 @@ async function processGroupCommand(
         if (params.length < 1) {
           return { isCommand: true, success: false, command, message: "Formato: #removerdogrupo telefone (envie dentro do grupo)" };
         }
-        const cleanPhone = params[0].replace(/\D/g, "");
-        await fetch(`${baseUrl}/group/removeParticipant`, {
+        const cleanPhoneRemove = params[0].replace(/\D/g, "");
+        const groupForRemove = currentGroupJid?.includes("@g.us")
+          ? currentGroupJid
+          : `${currentGroupJid}@g.us`;
+        
+        console.log("Removing participant from group:", {
+          url: `${baseUrl}/group/updateParticipants`,
+          groupjid: groupForRemove,
+          action: "remove",
+          participants: [cleanPhoneRemove],
+        });
+        
+        const removeRes = await fetch(`${baseUrl}/group/updateParticipants`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: currentGroupJid, participants: [`${cleanPhone}@s.whatsapp.net`] }),
+          body: JSON.stringify({ 
+            groupjid: groupForRemove, 
+            action: "remove",
+            participants: [cleanPhoneRemove] 
+          }),
         });
+        const removeText = await removeRes.text();
+        console.log("Remove participant response:", { status: removeRes.status, body: removeText.substring(0, 500) });
+        
+        if (!removeRes.ok) {
+          return { isCommand: true, success: false, command, message: `Erro ao remover membro: ${removeText.substring(0, 100)}` };
+        }
         
         return { isCommand: true, success: true, command, message: `Membro ${params[0]} removido do grupo` };
       }
@@ -805,12 +826,33 @@ async function processGroupCommand(
         if (params.length < 1) {
           return { isCommand: true, success: false, command, message: "Formato: #addnogrupo telefone (envie dentro do grupo)" };
         }
-        const cleanPhone = params[0].replace(/\D/g, "");
-        await fetch(`${baseUrl}/group/addParticipant`, {
+        const cleanPhoneAdd = params[0].replace(/\D/g, "");
+        const groupForAdd = currentGroupJid?.includes("@g.us")
+          ? currentGroupJid
+          : `${currentGroupJid}@g.us`;
+        
+        console.log("Adding participant to group:", {
+          url: `${baseUrl}/group/updateParticipants`,
+          groupjid: groupForAdd,
+          action: "add",
+          participants: [cleanPhoneAdd],
+        });
+        
+        const addRes = await fetch(`${baseUrl}/group/updateParticipants`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "token": instanceToken },
-          body: JSON.stringify({ groupId: currentGroupJid, participants: [`${cleanPhone}@s.whatsapp.net`] }),
+          body: JSON.stringify({ 
+            groupjid: groupForAdd, 
+            action: "add",
+            participants: [cleanPhoneAdd] 
+          }),
         });
+        const addText = await addRes.text();
+        console.log("Add participant response:", { status: addRes.status, body: addText.substring(0, 500) });
+        
+        if (!addRes.ok) {
+          return { isCommand: true, success: false, command, message: `Erro ao adicionar membro: ${addText.substring(0, 100)}` };
+        }
         
         return { isCommand: true, success: true, command, message: `Membro ${params[0]} adicionado ao grupo` };
       }
