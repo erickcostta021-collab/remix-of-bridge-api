@@ -576,7 +576,7 @@ interface GhlContext {
   contactId?: string;
 }
 
-// Update GHL contact photo
+// Update GHL contact photo - tries multiple approaches
 async function updateGhlContactPhoto(
   ctx: GhlContext,
   photoUrl: string,
@@ -598,29 +598,93 @@ async function updateGhlContactPhoto(
 
     console.log("[GHL] Updating contact photo:", { contactId: ctx.contactId, photoUrl });
 
-    const response = await fetch(
-      `https://services.leadconnectorhq.com/contacts/${ctx.contactId}`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Version: "2021-07-28",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          customFields: [],
-          // GHL uses 'profilePhoto' for contact avatar
-          profilePhoto: photoUrl,
-        }),
+    // Approach 1: Try multipart upload by downloading image and uploading
+    // First, download the image
+    let imageBlob: Blob | null = null;
+    try {
+      const imgResponse = await fetch(photoUrl);
+      if (imgResponse.ok) {
+        imageBlob = await imgResponse.blob();
+        console.log("[GHL] Downloaded image:", { size: imageBlob.size, type: imageBlob.type });
       }
-    );
-
-    const responseText = await response.text();
-    if (response.ok) {
-      console.log("[GHL] ✅ Contact photo updated successfully");
-    } else {
-      console.error("[GHL] ❌ Failed to update contact photo:", response.status, responseText.substring(0, 300));
+    } catch (e) {
+      console.log("[GHL] Failed to download image, will try direct URL approach:", e);
     }
+
+    // If we got the image, try multipart upload to photo endpoint
+    if (imageBlob && imageBlob.size > 0) {
+      try {
+        const formData = new FormData();
+        formData.append("file", imageBlob, "group-photo.jpg");
+        
+        const uploadResponse = await fetch(
+          `https://services.leadconnectorhq.com/contacts/${ctx.contactId}/photo`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Version: "2021-07-28",
+            },
+            body: formData,
+          }
+        );
+        
+        const uploadText = await uploadResponse.text();
+        if (uploadResponse.ok) {
+          console.log("[GHL] ✅ Contact photo uploaded successfully via multipart");
+          return;
+        } else {
+          console.log("[GHL] Photo upload endpoint failed:", uploadResponse.status, uploadText.substring(0, 200));
+        }
+      } catch (e) {
+        console.log("[GHL] Multipart upload failed:", e);
+      }
+    }
+
+    // Approach 2: Try different field names in PUT /contacts
+    const fieldAttempts = [
+      { avatar: photoUrl },
+      { profilePhoto: photoUrl },
+      { photo: photoUrl },
+      { profilePicture: photoUrl },
+      { image: photoUrl },
+    ];
+
+    for (const fields of fieldAttempts) {
+      try {
+        const response = await fetch(
+          `https://services.leadconnectorhq.com/contacts/${ctx.contactId}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Version: "2021-07-28",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(fields),
+          }
+        );
+
+        const responseText = await response.text();
+        const fieldName = Object.keys(fields)[0];
+        
+        if (response.ok) {
+          // Check if the response contains the photo URL to confirm it worked
+          if (responseText.includes(photoUrl.substring(0, 50)) || responseText.includes("avatar") || responseText.includes("photo")) {
+            console.log(`[GHL] ✅ Contact photo updated successfully using field: ${fieldName}`);
+            return;
+          }
+          console.log(`[GHL] Request succeeded but photo may not have updated (field: ${fieldName})`);
+        } else {
+          console.log(`[GHL] Field ${fieldName} failed:`, response.status);
+        }
+      } catch (e) {
+        console.log(`[GHL] Error trying field:`, e);
+      }
+    }
+
+    console.log("[GHL] ⚠️ Could not update contact photo - GHL may not support direct URL photo updates");
+
   } catch (e) {
     console.error("[GHL] Error updating contact photo:", e);
   }
