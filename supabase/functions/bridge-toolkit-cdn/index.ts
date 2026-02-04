@@ -28,21 +28,30 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     const sendAction = async (action, ghlId, extra = {}) => {
-        console.log(\`📡 Ação: \${action} | GHL ID: \${ghlId}\`, extra);
+        console.log(\`📡 Bridge Toolkit - Ação: \${action} | GHL ID: \${ghlId}\`, extra);
         try {
-            const response = await fetch(BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint, {
+            const url = BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint;
+            console.log("📤 Enviando para:", url);
+            
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action, ghl_id: ghlId, ...extra })
             });
+            
+            console.log("📥 Response status:", response.status);
             const data = await response.json();
+            console.log("📥 Response data:", data);
+            
             if (data.success) {
-                console.log("✅ Ação executada:", data);
+                console.log("✅ Ação executada com sucesso:", action);
                 return data;
             } else {
                 console.error("❌ Erro na ação:", data.error);
                 if (data.error === "Message not found") {
                     showToast("Mensagem não mapeada. Envie uma nova mensagem primeiro.", true);
+                } else if (data.error && data.error.includes("15 minutes")) {
+                    showToast("Não é possível editar mensagens com mais de 15 minutos.", true);
                 } else {
                     showToast("Erro: " + (data.error || "Falha na operação"), true);
                 }
@@ -50,7 +59,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             }
         } catch (e) {
             console.error("❌ Erro de conexão:", e);
-            showToast("Erro de conexão", true);
+            showToast("Erro de conexão: " + e.message, true);
             return null;
         }
     };
