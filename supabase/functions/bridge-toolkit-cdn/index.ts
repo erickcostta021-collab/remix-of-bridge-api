@@ -100,15 +100,70 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         inputArea.focus();
     };
     
+    // Ensure chat panel is open before showing banners
+    const ensureChatOpen = () => {
+        // Look for closed chat indicators or expand buttons
+        const expandButtons = document.querySelectorAll('[data-testid*="expand"], [aria-label*="expand"], [aria-label*="abrir"], [aria-label*="open"]');
+        const chatInput = findMessageInput();
+        
+        // If no input is visible, try to click on conversation or expand chat
+        if (!chatInput || chatInput.offsetParent === null) {
+            console.log("🔍 Bridge: Chat appears closed, trying to open...");
+            
+            // Try to find and click on the conversation row or expand button
+            const conversationRow = document.querySelector('.hl_conversations--conversation-card.active, [class*="conversation"][class*="active"], [class*="selected"]');
+            if (conversationRow) {
+                console.log("📱 Bridge: Clicking conversation row to open chat...");
+                conversationRow.click();
+                return true; // Will need to wait
+            }
+            
+            // Try expand buttons
+            for (const btn of expandButtons) {
+                if (btn.offsetParent !== null) {
+                    console.log("📱 Bridge: Clicking expand button...");
+                    btn.click();
+                    return true;
+                }
+            }
+            
+            // Look for any clickable element in conversation list
+            const conversationItem = document.querySelector('[class*="conversation-card"], [class*="ConversationItem"]');
+            if (conversationItem) {
+                console.log("📱 Bridge: Clicking conversation item...");
+                conversationItem.click();
+                return true;
+            }
+            
+            return false; // Could not find way to open
+        }
+        
+        return false; // Chat already open
+    };
+    
     // Show edit banner in input area (same pattern as reply)
-    const showEditBanner = (msgText, ghlId) => {
+    const showEditBanner = async (msgText, ghlId) => {
         clearReplyContext(); // Clear reply if switching to edit
         const existingBanner = document.getElementById('bridge-edit-banner');
         if (existingBanner) existingBanner.remove();
         
-        const inputArea = findMessageInput();
-        if (!inputArea) {
-            showToast("Campo de texto não encontrado", true);
+        // Try to open chat if closed
+        const needsWait = ensureChatOpen();
+        if (needsWait) {
+            // Wait for chat to open
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+        
+        let inputArea = findMessageInput();
+        
+        // Retry finding input after potential open
+        if (!inputArea || inputArea.offsetParent === null) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            inputArea = findMessageInput();
+        }
+        
+        if (!inputArea || inputArea.offsetParent === null) {
+            showToast("Abra o chat para editar a mensagem", true);
             return;
         }
         
@@ -611,7 +666,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 }
                 
                 if (act === 'edit') {
-                    showEditBanner(msgText, ghlId);
+                    await showEditBanner(msgText, ghlId);
                     showToast("Edite o texto e envie normalmente");
                     return;
                 }
