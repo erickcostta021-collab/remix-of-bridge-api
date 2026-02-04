@@ -66,13 +66,29 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     // Show reply banner in input area
-    const showReplyBanner = (msgText, ghlId, locationId) => {
+    const showReplyBanner = async (msgText, ghlId, locationId) => {
         clearEditContext(); // Clear edit if switching to reply
         const existingBanner = document.getElementById('bridge-reply-banner');
         if (existingBanner) existingBanner.remove();
         
-        const inputArea = document.querySelector('textarea, [contenteditable="true"]');
-        if (!inputArea) return;
+        // Try to open chat if closed
+        const needsWait = ensureChatOpen();
+        if (needsWait) {
+            await new Promise(resolve => setTimeout(resolve, 150));
+        }
+        
+        let inputArea = findMessageInput();
+        
+        // Retry finding input after potential open
+        if (!inputArea || inputArea.offsetParent === null) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            inputArea = findMessageInput();
+        }
+        
+        if (!inputArea || inputArea.offsetParent === null) {
+            showToast("Abra o chat para responder a mensagem", true);
+            return;
+        }
         
         const banner = document.createElement('div');
         banner.id = 'bridge-reply-banner';
@@ -681,7 +697,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         return;
                     }
                     
-                    showReplyBanner(msgText, ghlId, locationId);
+                    await showReplyBanner(msgText, ghlId, locationId);
                     showToast("Digite sua resposta e envie normalmente");
                     return;
                 }
