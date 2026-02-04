@@ -1213,6 +1213,7 @@ serve(async (req) => {
             attachments: [publicMediaUrl],
             status: "delivered",
             direction: "outbound", // Critical: marks as outbound but won't trigger webhooks
+            ...(instance.ghl_user_id && { userId: instance.ghl_user_id }), // Show message as sent by assigned user
           }),
         });
         const bodyText = await res.text();
@@ -1243,6 +1244,7 @@ serve(async (req) => {
             message: textMessage,
             status: "delivered",
             direction: "outbound", // Critical: marks as outbound but won't trigger webhooks
+            ...(instance.ghl_user_id && { userId: instance.ghl_user_id }), // Show message as sent by assigned user
           }),
         });
         const bodyText = await res.text();
