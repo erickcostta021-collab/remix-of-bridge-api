@@ -134,13 +134,16 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         \`;
 
         const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+        const moreEmojis = ['🔥', '👏', '🎉', '💯', '🤔', '😍', '😭', '🙄', '😡', '👎', '✅', '❌', '⭐', '💪', '🤝', '💀', '🥳', '😅'];
         
         menu.innerHTML = \`
             <div id="emoji-quick" style="display:flex; justify-content:space-around; align-items:center; padding:12px; border-bottom:1px solid #f0f0f0;">
                 \${quickEmojis.map(em => \`<span class="em-btn" style="cursor:pointer; font-size:22px; transition:transform 0.1s;" title="Reagir com \${em}">\${em}</span>\`).join('')}
                 <span id="emoji-expand" style="cursor:pointer; font-size:18px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:#f0f0f0; border-radius:50%; transition:background 0.2s;" title="Mais emojis">➕</span>
             </div>
-            <input type="text" id="emoji-native-input" style="position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;" />
+            <div id="emoji-more" style="display:none; flex-wrap:wrap; justify-content:center; gap:8px; padding:12px; border-bottom:1px solid #f0f0f0; max-height:120px; overflow-y:auto;">
+                \${moreEmojis.map(em => \`<span class="em-btn" style="cursor:pointer; font-size:22px; transition:transform 0.1s;" title="Reagir com \${em}">\${em}</span>\`).join('')}
+            </div>
             <div class="menu-opt" data-act="reply" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>↩️</span> Responder</div>
             <div class="menu-opt" data-act="copy" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>📋</span> Copiar</div>
             <div class="menu-opt" data-act="edit" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>✏️</span> Editar</div>
@@ -155,31 +158,18 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             opt.addEventListener('mouseleave', () => opt.style.background = 'transparent');
         });
 
-        // Native emoji picker via hidden input
+        // Expand emoji button
         const expandBtn = menu.querySelector('#emoji-expand');
-        const nativeInput = menu.querySelector('#emoji-native-input');
+        const morePanel = menu.querySelector('#emoji-more');
+        let emojiExpanded = false;
         
-        if (expandBtn && nativeInput) {
-            expandBtn.onclick = async (e) => {
+        if (expandBtn && morePanel) {
+            expandBtn.onclick = (e) => {
                 e.stopPropagation();
-                nativeInput.value = '';
-                nativeInput.focus();
-                
-                // Try to trigger native emoji picker (works on some browsers)
-                if ('showPicker' in HTMLInputElement.prototype) {
-                    try { nativeInput.showPicker(); } catch(err) {}
-                }
-                
-                showToast("Pressione Win+. ou Cmd+Ctrl+Space para emojis", false);
-            };
-            
-            nativeInput.oninput = async () => {
-                const emoji = nativeInput.value.trim();
-                if (emoji) {
-                    menu.remove();
-                    const result = await sendAction('react', ghlId, { emoji });
-                    if (result) showToast(\`Reagiu com \${emoji}\`);
-                }
+                emojiExpanded = !emojiExpanded;
+                morePanel.style.display = emojiExpanded ? 'flex' : 'none';
+                expandBtn.innerText = emojiExpanded ? '➖' : '➕';
+                expandBtn.style.background = emojiExpanded ? '#e0e0e0' : '#f0f0f0';
             };
         }
 
