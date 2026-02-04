@@ -37,3 +37,6 @@ verify_jwt = false
 
 [functions.map-messages]
 verify_jwt = false
+
+[functions.bridge-toolkit-cdn]
+verify_jwt = false
