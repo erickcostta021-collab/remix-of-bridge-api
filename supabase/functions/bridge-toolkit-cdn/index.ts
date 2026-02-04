@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v13: Iniciando...");
+    console.log("🚀 Bridge Toolkit v15: Iniciando...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
@@ -64,45 +64,15 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         }
     };
 
-    // Show reply banner in input area
-    const showReplyBanner = (msgText, ghlId, locationId) => {
-        const existingBanner = document.getElementById('bridge-reply-banner');
-        if (existingBanner) existingBanner.remove();
+    // Send reply action to backend (uses prompt like edit)
+    const sendReplyWithPrompt = async (ghlId, originalText, locationId) => {
+        const replyText = prompt("Digite sua resposta:", "");
         
-        const inputArea = document.querySelector('textarea, [contenteditable="true"]');
-        if (!inputArea) return;
+        if (!replyText || !replyText.trim()) {
+            console.log("↩️ Reply cancelled - no text");
+            return null;
+        }
         
-        const banner = document.createElement('div');
-        banner.id = 'bridge-reply-banner';
-        banner.style.cssText = \`
-            background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 8px 12px;
-            margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between;
-            align-items: center; font-family: sans-serif; font-size: 13px;
-        \`;
-        banner.innerHTML = \`
-            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%;">
-                <span style="color:#0ea5e9; font-weight:600;">↩️ Respondendo:</span>
-                <span style="color:#666; margin-left:8px;">\${msgText.substring(0, 50)}\${msgText.length > 50 ? '...' : ''}</span>
-            </div>
-            <span id="cancel-reply" style="cursor:pointer; color:#999; font-size:18px;">✕</span>
-        \`;
-        
-        inputArea.parentElement.insertBefore(banner, inputArea);
-        
-        document.getElementById('cancel-reply').onclick = () => {
-            banner.remove();
-            replyContext = null;
-        };
-        
-        replyContext = { ghlId, text: msgText, locationId };
-        inputArea.focus();
-    };
-
-    // Send reply action to backend
-    const sendReply = async (replyText) => {
-        if (!replyContext) return null;
-        
-        const { ghlId, locationId } = replyContext;
         console.log(\`↩️ Sending reply to \${ghlId} with text: \${replyText.substring(0, 50)}...\`);
         
         try {
@@ -113,7 +83,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 body: JSON.stringify({ 
                     action: 'reply', 
                     ghl_id: ghlId, 
-                    text: replyText,
+                    text: replyText.trim(),
                     location_id: locationId
                 })
             });
@@ -133,97 +103,6 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             showToast("Erro de conexão: " + e.message, true);
             return null;
         }
-    };
-
-    // Intercept keyboard Enter and send buttons to handle replies
-    const interceptSendActions = () => {
-        // Use document-level capture to intercept before GHL
-        if (!window.bridgeDocumentInterceptorAttached) {
-            window.bridgeDocumentInterceptorAttached = true;
-            
-            // Capture Enter key at document level
-            document.addEventListener('keydown', async (e) => {
-                if (e.key !== 'Enter' || e.shiftKey) return;
-                if (!replyContext) return;
-                
-                const inputArea = document.activeElement;
-                if (!inputArea || (inputArea.tagName !== 'TEXTAREA' && !inputArea.isContentEditable && inputArea.type !== 'text')) return;
-                
-                const text = inputArea.value || inputArea.innerText || '';
-                console.log("🔑 Bridge: Enter detected with reply context, text:", text.substring(0, 30));
-                
-                if (text.trim()) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    
-                    console.log("📤 Bridge: Sending reply to WhatsApp...");
-                    const result = await sendReply(text.trim());
-                    
-                    if (result) {
-                        console.log("✅ Bridge: Reply sent successfully");
-                        // Clear the input
-                        if (inputArea.value !== undefined) {
-                            inputArea.value = '';
-                        } else {
-                            inputArea.innerText = '';
-                        }
-                        inputArea.dispatchEvent(new Event('input', { bubbles: true }));
-                        clearReplyContext();
-                    }
-                }
-            }, true); // Capture phase
-            
-            // Also capture clicks on send buttons
-            document.addEventListener('click', async (e) => {
-                if (!replyContext) return;
-                
-                const btn = e.target.closest('button, [role="button"]');
-                if (!btn) return;
-                
-                // Check if it's a send button (has send/arrow icon or is submit type)
-                const hasSendIcon = btn.querySelector('svg');
-                const isInChatArea = btn.closest('form') || btn.closest('[class*="input"]') || btn.closest('[class*="message"]') || btn.closest('[class*="chat"]');
-                
-                if (!hasSendIcon || !isInChatArea) return;
-                
-                const inputArea = document.querySelector('textarea, [contenteditable="true"]');
-                const text = inputArea?.value || inputArea?.innerText || '';
-                
-                console.log("🖱️ Bridge: Send button clicked with reply context, text:", text.substring(0, 30));
-                
-                if (text.trim()) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    
-                    console.log("📤 Bridge: Sending reply via button...");
-                    const result = await sendReply(text.trim());
-                    
-                    if (result) {
-                        console.log("✅ Bridge: Reply sent successfully via button");
-                        if (inputArea.value !== undefined) {
-                            inputArea.value = '';
-                        } else {
-                            inputArea.innerText = '';
-                        }
-                        inputArea.dispatchEvent(new Event('input', { bubbles: true }));
-                        clearReplyContext();
-                    }
-                }
-            }, true); // Capture phase
-            
-            console.log("🎯 Bridge: Document-level interceptors attached");
-        }
-    };
-    
-    // Helper to clear reply context and banner
-    const clearReplyContext = () => {
-        const banner = document.getElementById('bridge-reply-banner');
-        if (banner) banner.remove();
-        replyContext = null;
-        console.log("🧹 Bridge: Reply context cleared");
-        console.log("✅ Reply context cleared");
     };
 
     window.openBridgeMenu = (e, triggerEl) => {
@@ -404,8 +283,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         return;
                     }
                     
-                    showReplyBanner(msgText, ghlId, locationId);
-                    showToast("Digite sua resposta e envie normalmente");
+                    // Use prompt approach like edit (works reliably)
+                    await sendReplyWithPrompt(ghlId, msgText, locationId);
                     return;
                 }
                 
@@ -472,21 +351,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             btn.onclick = (e) => window.openBridgeMenu(e, btn);
             msg.appendChild(btn);
         });
-        // Also intercept send buttons and keys for replies
-        interceptSendActions();
-    };
-
-    // Expose reply context for send button integration
-    window.getBridgeReplyContext = () => {
-        const ctx = replyContext;
-        replyContext = null;
-        const banner = document.getElementById('bridge-reply-banner');
-        if (banner) banner.remove();
-        return ctx;
-    };
-
     setInterval(inject, 1000);
-    console.log("✅ Bridge Toolkit v14 carregado (com Reply WhatsApp)!");
+    console.log("✅ Bridge Toolkit v15 carregado (Reply via prompt)!");
 })();
 `;
 
