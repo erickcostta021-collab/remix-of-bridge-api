@@ -383,6 +383,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_old_message_mappings: { Args: never; Returns: undefined }
       cleanup_old_phone_mappings: { Args: never; Returns: undefined }
       cleanup_old_processed_messages: { Args: never; Returns: undefined }
       generate_embed_token: { Args: never; Returns: string }
