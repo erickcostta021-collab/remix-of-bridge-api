@@ -14,6 +14,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     let replyContext = null; // Stores message being replied to
+    let editContext = null;  // Stores message being edited
 
     const showToast = (msg, isError = false) => {
         const toast = document.createElement('div');
@@ -66,6 +67,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
 
     // Show reply banner in input area
     const showReplyBanner = (msgText, ghlId, locationId) => {
+        clearEditContext(); // Clear edit if switching to reply
         const existingBanner = document.getElementById('bridge-reply-banner');
         if (existingBanner) existingBanner.remove();
         
@@ -96,6 +98,66 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         
         replyContext = { ghlId, text: msgText, locationId };
         inputArea.focus();
+    };
+    
+    // Show edit banner in input area (same pattern as reply)
+    const showEditBanner = (msgText, ghlId) => {
+        clearReplyContext(); // Clear reply if switching to edit
+        const existingBanner = document.getElementById('bridge-edit-banner');
+        if (existingBanner) existingBanner.remove();
+        
+        const inputArea = findMessageInput();
+        if (!inputArea) {
+            showToast("Campo de texto não encontrado", true);
+            return;
+        }
+        
+        const banner = document.createElement('div');
+        banner.id = 'bridge-edit-banner';
+        banner.style.cssText = \`
+            background: #fefce8; border-left: 4px solid #eab308; padding: 8px 12px;
+            margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between;
+            align-items: center; font-family: sans-serif; font-size: 13px;
+        \`;
+        banner.innerHTML = \`
+            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%;">
+                <span style="color:#ca8a04; font-weight:600;">✏️ Editando:</span>
+                <span style="color:#666; margin-left:8px;">\${msgText.substring(0, 50)}\${msgText.length > 50 ? '...' : ''}</span>
+            </div>
+            <span id="cancel-edit" style="cursor:pointer; color:#999; font-size:18px;">✕</span>
+        \`;
+        
+        inputArea.parentElement.insertBefore(banner, inputArea);
+        
+        document.getElementById('cancel-edit').onclick = () => {
+            banner.remove();
+            editContext = null;
+            clearInput(inputArea);
+        };
+        
+        editContext = { ghlId, originalText: msgText };
+        
+        // Pre-fill input with original text
+        if (inputArea.value !== undefined) {
+            inputArea.value = msgText;
+        } else if (inputArea.innerText !== undefined) {
+            inputArea.innerText = msgText;
+        }
+        inputArea.dispatchEvent(new Event('input', { bubbles: true }));
+        inputArea.focus();
+        
+        // Move cursor to end
+        if (inputArea.setSelectionRange) {
+            inputArea.setSelectionRange(msgText.length, msgText.length);
+        }
+    };
+    
+    // Clear edit context and banner
+    const clearEditContext = () => {
+        const banner = document.getElementById('bridge-edit-banner');
+        if (banner) banner.remove();
+        editContext = null;
+        console.log("🧹 Bridge: Edit context cleared");
     };
 
     // Send reply action to backend
@@ -191,9 +253,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             // Only intercept Enter (not Shift+Enter)
             if (e.key !== 'Enter' || e.shiftKey) return;
             
-            // Only if we have a reply context
-            if (!replyContext) {
-                console.log("⏭️ Bridge: Enter pressed but no reply context, skipping");
+            // Only if we have a reply or edit context
+            if (!replyContext && !editContext) {
                 return;
             }
             
@@ -202,9 +263,9 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             
             console.log("🔑 Bridge: Enter detected!", { 
                 hasReplyContext: !!replyContext, 
+                hasEditContext: !!editContext,
                 text: text.substring(0, 50),
-                inputTag: inputArea?.tagName,
-                activeElement: document.activeElement?.tagName
+                inputTag: inputArea?.tagName
             });
             
             if (text.trim()) {
@@ -213,25 +274,43 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 e.stopPropagation();
                 e.stopImmediatePropagation();
                 
-                console.log("📤 Bridge: Intercepted! Sending reply to WhatsApp...");
-                showToast("Enviando resposta...");
-                
-                const result = await sendReply(text.trim());
-                
-                if (result) {
-                    console.log("✅ Bridge: Reply sent successfully");
-                    clearInput(inputArea);
-                    clearReplyContext();
-                } else {
-                    console.log("❌ Bridge: Reply failed");
+                if (editContext) {
+                    // Handle edit
+                    console.log("✏️ Bridge: Intercepted! Sending edit to WhatsApp...");
+                    showToast("Editando mensagem...");
+                    
+                    const result = await sendAction('edit', editContext.ghlId, { new_text: text.trim() });
+                    
+                    if (result) {
+                        console.log("✅ Bridge: Edit sent successfully");
+                        showToast("Mensagem editada!");
+                        clearInput(inputArea);
+                        clearEditContext();
+                    } else {
+                        console.log("❌ Bridge: Edit failed");
+                    }
+                } else if (replyContext) {
+                    // Handle reply
+                    console.log("📤 Bridge: Intercepted! Sending reply to WhatsApp...");
+                    showToast("Enviando resposta...");
+                    
+                    const result = await sendReply(text.trim());
+                    
+                    if (result) {
+                        console.log("✅ Bridge: Reply sent successfully");
+                        clearInput(inputArea);
+                        clearReplyContext();
+                    } else {
+                        console.log("❌ Bridge: Reply failed");
+                    }
                 }
             }
         }, true); // Capture phase - runs BEFORE bubbling
         
         // Also capture clicks on send buttons - more aggressive detection
         document.addEventListener('click', async (e) => {
-            // Only if we have a reply context
-            if (!replyContext) return;
+            // Only if we have a reply or edit context
+            if (!replyContext && !editContext) return;
             
             const target = e.target;
             
@@ -290,6 +369,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             
             console.log("🖱️ Bridge: Send button clicked!", { 
                 hasReplyContext: !!replyContext, 
+                hasEditContext: !!editContext,
                 text: text.substring(0, 50),
                 buttonClass: clickedElement?.className || 'unknown',
                 isNearInput
@@ -300,15 +380,31 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 e.stopPropagation();
                 e.stopImmediatePropagation();
                 
-                console.log("📤 Bridge: Sending reply via button...");
-                showToast("Enviando resposta...");
-                
-                const result = await sendReply(text.trim());
-                
-                if (result) {
-                    console.log("✅ Bridge: Reply sent successfully via button");
-                    clearInput(inputArea);
-                    clearReplyContext();
+                if (editContext) {
+                    // Handle edit via button
+                    console.log("✏️ Bridge: Sending edit via button...");
+                    showToast("Editando mensagem...");
+                    
+                    const result = await sendAction('edit', editContext.ghlId, { new_text: text.trim() });
+                    
+                    if (result) {
+                        console.log("✅ Bridge: Edit sent successfully via button");
+                        showToast("Mensagem editada!");
+                        clearInput(inputArea);
+                        clearEditContext();
+                    }
+                } else if (replyContext) {
+                    // Handle reply via button
+                    console.log("📤 Bridge: Sending reply via button...");
+                    showToast("Enviando resposta...");
+                    
+                    const result = await sendReply(text.trim());
+                    
+                    if (result) {
+                        console.log("✅ Bridge: Reply sent successfully via button");
+                        clearInput(inputArea);
+                        clearReplyContext();
+                    }
                 }
             }
         }, true); // Capture phase
@@ -515,11 +611,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 }
                 
                 if (act === 'edit') {
-                    const newText = prompt("Editar mensagem:", msgText);
-                    if (newText && newText !== msgText) {
-                        const result = await sendAction('edit', ghlId, { new_text: newText });
-                        if (result) showToast("Mensagem editada!");
-                    }
+                    showEditBanner(msgText, ghlId);
+                    showToast("Edite o texto e envie normalmente");
                     return;
                 }
                 
