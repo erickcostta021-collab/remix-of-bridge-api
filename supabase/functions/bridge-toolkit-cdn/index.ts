@@ -1002,12 +1002,114 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         realtimeChannel = ws;
     };
 
+    // ========== PERSISTENCE: Load states on page load ==========
+    
+    // Collect all GHL message IDs visible in the current page
+    const collectVisibleMessageIds = () => {
+        const messageElements = document.querySelectorAll('[data-message-id]');
+        const ids = [];
+        messageElements.forEach(el => {
+            const id = el.getAttribute('data-message-id');
+            if (id) ids.push(id);
+        });
+        return ids;
+    };
+    
+    // Load persisted states from backend and render them
+    const loadPersistedStates = async () => {
+        const ghlIds = collectVisibleMessageIds();
+        if (ghlIds.length === 0) {
+            console.log("📋 Bridge: No messages visible yet, will retry...");
+            return false;
+        }
+        
+        console.log("📋 Bridge: Loading persisted states for", ghlIds.length, "messages");
+        
+        try {
+            const url = BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'list-states', ghl_ids: ghlIds })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.states) {
+                console.log("📋 Bridge: Received", data.states.length, "modified message states");
+                
+                data.states.forEach(state => {
+                    if (state.is_deleted) {
+                        renderDeletedState(state.ghl_id);
+                    } else if (state.is_edited && state.text) {
+                        // For edited, we show the current text without original (not available from DB)
+                        renderEditedState(state.ghl_id, state.text, '(texto original)');
+                    }
+                    
+                    // Render reactions if any
+                    if (state.reactions && state.reactions.length > 0) {
+                        const lastReaction = state.reactions[state.reactions.length - 1];
+                        const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
+                        if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
+                            const badge = document.createElement('span');
+                            badge.className = 'bridge-reaction-badge';
+                            badge.style.cssText = 'position: absolute; bottom: -8px; right: 8px; background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);';
+                            badge.innerText = state.reactions.length > 1 ? \`\${lastReaction} +\${state.reactions.length - 1}\` : lastReaction;
+                            msgEl.style.position = 'relative';
+                            msgEl.appendChild(badge);
+                        }
+                    }
+                });
+                
+                return true;
+            }
+        } catch (e) {
+            console.error("❌ Bridge: Failed to load persisted states:", e);
+        }
+        
+        return false;
+    };
+    
+    // Retry loading states until messages are visible
+    const initPersistence = async () => {
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        const tryLoad = async () => {
+            attempts++;
+            const success = await loadPersistedStates();
+            
+            if (!success && attempts < maxAttempts) {
+                setTimeout(tryLoad, 1000);
+            } else if (success) {
+                console.log("✅ Bridge: Persisted states loaded successfully");
+            }
+        };
+        
+        // Start after a delay to let the page render
+        setTimeout(tryLoad, 1500);
+        
+        // Also reload when URL changes (conversation switch)
+        let lastUrl = location.href;
+        setInterval(() => {
+            if (location.href !== lastUrl) {
+                lastUrl = location.href;
+                console.log("🔄 Bridge: URL changed, reloading states...");
+                attempts = 0;
+                setTimeout(tryLoad, 1000);
+            }
+        }, 500);
+    };
+
     setInterval(inject, 1000);
     
     // Initialize Realtime after a short delay
     setTimeout(initRealtime, 2000);
     
-    console.log("✅ Bridge Toolkit v15 carregado (com Reply WhatsApp + Realtime UI)!");
+    // Initialize persistence (load states on page load)
+    initPersistence();
+    
+    console.log("✅ Bridge Toolkit v16 carregado (com Persistência de Estados)!");
 })();
 `;
 
