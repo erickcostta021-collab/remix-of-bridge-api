@@ -421,21 +421,24 @@ async function sendMessageToGHL(contactId: string, message: string, token: strin
 }
 
 // Helper to send outbound text message to GHL (render what WE sent)
-// Docs: POST /conversations/messages requires contactId (and returns conversationId)
+// Uses the INBOUND endpoint with direction=outbound to avoid triggering GHL webhooks
+// This matches the n8n workflow approach that doesn't cause webhook loops
 async function sendOutboundMessageToGHL(contactId: string, message: string, token: string): Promise<void> {
   const payload: Record<string, unknown> = {
     type: "SMS",
     contactId,
     message,
     status: "delivered",
+    direction: "outbound",
   };
 
-  console.log("Sending outbound message to GHL API:", {
+  console.log("Sending outbound message to GHL API (inbound endpoint):", {
     contactId,
     messagePreview: message?.substring(0, 30),
   });
 
-  const response = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+  // Use /inbound endpoint with direction=outbound - this renders the message without triggering webhooks
+  const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -452,7 +455,7 @@ async function sendOutboundMessageToGHL(contactId: string, message: string, toke
     throw new Error("Failed to send outbound message to GHL");
   }
 
-  console.log("✅ Outbound message sent successfully to GHL:", responseText.substring(0, 300));
+  console.log("✅ Outbound message sent successfully to GHL (no webhook triggered):", responseText.substring(0, 300));
 }
 
 // Helper to get or create conversation for a contact
