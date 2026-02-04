@@ -640,6 +640,181 @@ serve(async (req) => {
     // EventType is a string, but event can be an object
     const eventType = body.EventType || body.type || "";
     
+    // Extract message data early for special event handling
+    const messageDataForEvents = body.message || body.data || {};
+    
+    // === HANDLE MESSAGE EDIT EVENTS ===
+    // UAZAPI sends edited messages with "edited" field or specific event type
+    if (messageDataForEvents.edited || eventType === "messages.edit" || eventType === "message.edit") {
+      console.log("Processing message EDIT event:", { 
+        eventType, 
+        messageId: messageDataForEvents.messageid || messageDataForEvents.id,
+        editedData: messageDataForEvents.edited 
+      });
+      
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      const uazapiMsgId = messageDataForEvents.messageid || messageDataForEvents.id || "";
+      const newText = messageDataForEvents.edited?.text || messageDataForEvents.text || messageDataForEvents.content || "";
+      
+      if (uazapiMsgId) {
+        // Find mapping by UAZAPI ID
+        const { data: mapping } = await supabase
+          .from("message_map")
+          .select("*")
+          .eq("uazapi_message_id", uazapiMsgId)
+          .maybeSingle();
+        
+        if (mapping) {
+          // Update in database
+          await supabase
+            .from("message_map")
+            .update({ message_text: newText, is_edited: true })
+            .eq("id", mapping.id);
+          
+          // Broadcast to frontend
+          await supabase.channel("ghl_updates").send({
+            type: "broadcast",
+            event: "msg_update",
+            payload: {
+              ghl_id: mapping.ghl_message_id,
+              type: "edit",
+              new_text: newText,
+              location_id: mapping.location_id,
+              fromMe: mapping.from_me,
+            },
+          });
+          
+          console.log("Edit event broadcasted:", { ghl_id: mapping.ghl_message_id, new_text: newText?.substring(0, 30) });
+        } else {
+          console.log("No mapping found for edited message:", uazapiMsgId);
+        }
+      }
+      
+      return new Response(
+        JSON.stringify({ received: true, processed: true, type: "edit" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // === HANDLE MESSAGE REACTION EVENTS ===
+    if (messageDataForEvents.reaction || eventType === "messages.reaction" || eventType === "message.reaction") {
+      console.log("Processing message REACTION event:", { 
+        eventType, 
+        messageId: messageDataForEvents.messageid || messageDataForEvents.id,
+        reaction: messageDataForEvents.reaction 
+      });
+      
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      // Reaction can be on a different message - get the referenced message ID
+      const reactionData = messageDataForEvents.reaction || {};
+      const targetMsgId = reactionData.key?.id || reactionData.messageId || messageDataForEvents.messageid || messageDataForEvents.id || "";
+      const emoji = reactionData.text || reactionData.emoji || "";
+      const fromMe = reactionData.key?.fromMe ?? messageDataForEvents.fromMe ?? false;
+      
+      if (targetMsgId && emoji) {
+        // Find mapping by UAZAPI ID
+        const { data: mapping } = await supabase
+          .from("message_map")
+          .select("*")
+          .eq("uazapi_message_id", targetMsgId)
+          .maybeSingle();
+        
+        if (mapping) {
+          // Update reactions in database
+          const currentReactions = (mapping.reactions as string[]) || [];
+          const updatedReactions = [...currentReactions, emoji];
+          
+          await supabase
+            .from("message_map")
+            .update({ reactions: updatedReactions })
+            .eq("id", mapping.id);
+          
+          // Broadcast to frontend
+          await supabase.channel("ghl_updates").send({
+            type: "broadcast",
+            event: "msg_update",
+            payload: {
+              ghl_id: mapping.ghl_message_id,
+              type: "react",
+              emoji,
+              fromMe,
+              location_id: mapping.location_id,
+            },
+          });
+          
+          console.log("Reaction event broadcasted:", { ghl_id: mapping.ghl_message_id, emoji });
+        } else {
+          console.log("No mapping found for reaction target message:", targetMsgId);
+        }
+      }
+      
+      return new Response(
+        JSON.stringify({ received: true, processed: true, type: "reaction" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // === HANDLE MESSAGE DELETE/REVOKE EVENTS ===
+    if (eventType === "messages.delete" || eventType === "message.delete" || 
+        eventType === "messages.revoke" || eventType === "message.revoke" ||
+        messageDataForEvents.deleted || messageDataForEvents.revoked) {
+      console.log("Processing message DELETE/REVOKE event:", { 
+        eventType, 
+        messageId: messageDataForEvents.messageid || messageDataForEvents.id 
+      });
+      
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      const uazapiMsgId = messageDataForEvents.messageid || messageDataForEvents.id || "";
+      const fromMe = messageDataForEvents.fromMe ?? false;
+      
+      if (uazapiMsgId) {
+        // Find mapping by UAZAPI ID
+        const { data: mapping } = await supabase
+          .from("message_map")
+          .select("*")
+          .eq("uazapi_message_id", uazapiMsgId)
+          .maybeSingle();
+        
+        if (mapping) {
+          // Mark as deleted in database
+          await supabase
+            .from("message_map")
+            .update({ is_deleted: true })
+            .eq("id", mapping.id);
+          
+          // Broadcast to frontend
+          await supabase.channel("ghl_updates").send({
+            type: "broadcast",
+            event: "msg_update",
+            payload: {
+              ghl_id: mapping.ghl_message_id,
+              type: "delete",
+              fromMe,
+              location_id: mapping.location_id,
+            },
+          });
+          
+          console.log("Delete event broadcasted:", { ghl_id: mapping.ghl_message_id, fromMe });
+        } else {
+          console.log("No mapping found for deleted message:", uazapiMsgId);
+        }
+      }
+      
+      return new Response(
+        JSON.stringify({ received: true, processed: true, type: "delete" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     // Check if it's a message event (string check)
     const isMessageEvent = typeof eventType === "string" && eventType.toLowerCase().includes("message");
     
@@ -756,6 +931,16 @@ serve(async (req) => {
       textMessage = messageData.conversation;
     }
 
+    // Extract quoted message data (for replies)
+    const quotedData = messageData.quoted || messageData.quotedMessage || null;
+    let quotedText = "";
+    let quotedMessageId = "";
+    if (quotedData) {
+      quotedText = quotedData.text || quotedData.content || quotedData.conversation || "";
+      quotedMessageId = quotedData.id || quotedData.messageid || quotedData.stanzaId || "";
+      console.log("Message is a REPLY to:", { quotedText: quotedText?.substring(0, 50), quotedMessageId });
+    }
+
     console.log("Extracted data:", { 
       from, 
       textMessage: textMessage?.substring(0, 50), 
@@ -766,6 +951,7 @@ serve(async (req) => {
       isFromMe,
       trackId,
       isSticker,
+      hasQuoted: !!quotedData,
       instanceToken: instanceToken?.substring(0, 20) + "..." 
     });
 
@@ -1222,7 +1408,22 @@ serve(async (req) => {
         try {
           const parsed = JSON.parse(bodyText);
           const ghlMessageId = String(parsed?.messageId || "");
-          if (ghlMessageId) await markIfNew(supabase, `ghl:${ghlMessageId}`);
+          if (ghlMessageId) {
+            await markIfNew(supabase, `ghl:${ghlMessageId}`);
+            // Save message mapping for edit/react/delete functionality
+            const uazapiMsgId = messageData.messageid || messageData.id || "";
+            await supabase.from("message_map").upsert({
+              ghl_message_id: ghlMessageId,
+              uazapi_message_id: uazapiMsgId || null,
+              location_id: subaccount.location_id,
+              contact_id: contact.id,
+              message_text: textMessage || "",
+              message_type: "media",
+              from_me: true,
+              original_timestamp: new Date().toISOString(),
+            }, { onConflict: "ghl_message_id" });
+            console.log("Message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+          }
         } catch {
           // ignore
         }
@@ -1253,7 +1454,22 @@ serve(async (req) => {
         try {
           const parsed = JSON.parse(bodyText);
           const ghlMessageId = String(parsed?.messageId || "");
-          if (ghlMessageId) await markIfNew(supabase, `ghl:${ghlMessageId}`);
+          if (ghlMessageId) {
+            await markIfNew(supabase, `ghl:${ghlMessageId}`);
+            // Save message mapping for edit/react/delete functionality
+            const uazapiMsgId = messageData.messageid || messageData.id || "";
+            await supabase.from("message_map").upsert({
+              ghl_message_id: ghlMessageId,
+              uazapi_message_id: uazapiMsgId || null,
+              location_id: subaccount.location_id,
+              contact_id: contact.id,
+              message_text: textMessage,
+              message_type: "text",
+              from_me: true,
+              original_timestamp: new Date().toISOString(),
+            }, { onConflict: "ghl_message_id" });
+            console.log("Message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+          }
         } catch {
           // ignore
         }
@@ -1270,9 +1486,47 @@ serve(async (req) => {
       let formattedMessage = textMessage;
       let formattedCaption = textMessage || undefined;
       
+      // If this is a REPLY, try to get the original message from database and add context
+      if (quotedMessageId || quotedText) {
+        let originalText = quotedText;
+        
+        // Try to find the original message in our mapping for richer context
+        if (quotedMessageId) {
+          const { data: originalMapping } = await supabase
+            .from("message_map")
+            .select("message_text")
+            .eq("uazapi_message_id", quotedMessageId)
+            .maybeSingle();
+          
+          if (originalMapping?.message_text) {
+            originalText = originalMapping.message_text;
+          }
+        }
+        
+        // Add reply context prefix
+        if (originalText) {
+          const replyPrefix = `↩️ Respondendo a: "${originalText.substring(0, 100)}${originalText.length > 100 ? '...' : ''}"\n\n`;
+          formattedMessage = replyPrefix + (formattedMessage || "");
+          if (formattedCaption) {
+            formattedCaption = replyPrefix + formattedCaption;
+          }
+          
+          // Broadcast reply event for UI update
+          await supabase.channel("ghl_updates").send({
+            type: "broadcast",
+            event: "msg_update",
+            payload: {
+              type: "reply",
+              replyData: { text: originalText.substring(0, 200) },
+              location_id: subaccount.location_id,
+            },
+          });
+        }
+      }
+      
       // Apply member prefix to text messages
-      if (memberPrefix && textMessage) {
-        formattedMessage = `${memberPrefix}${textMessage}`;
+      if (memberPrefix && formattedMessage) {
+        formattedMessage = `${memberPrefix}${formattedMessage}`;
       }
       
       // Apply member prefix to captions

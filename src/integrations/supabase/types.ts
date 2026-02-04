@@ -210,6 +210,57 @@ export type Database = {
           },
         ]
       }
+      message_map: {
+        Row: {
+          contact_id: string | null
+          created_at: string
+          from_me: boolean | null
+          ghl_message_id: string
+          id: string
+          is_deleted: boolean | null
+          is_edited: boolean | null
+          location_id: string
+          message_text: string | null
+          message_type: string | null
+          original_timestamp: string
+          reactions: Json | null
+          uazapi_message_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string
+          from_me?: boolean | null
+          ghl_message_id: string
+          id?: string
+          is_deleted?: boolean | null
+          is_edited?: boolean | null
+          location_id: string
+          message_text?: string | null
+          message_type?: string | null
+          original_timestamp?: string
+          reactions?: Json | null
+          uazapi_message_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string
+          from_me?: boolean | null
+          ghl_message_id?: string
+          id?: string
+          is_deleted?: boolean | null
+          is_edited?: boolean | null
+          location_id?: string
+          message_text?: string | null
+          message_type?: string | null
+          original_timestamp?: string
+          reactions?: Json | null
+          uazapi_message_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
