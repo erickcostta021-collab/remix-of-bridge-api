@@ -254,24 +254,42 @@ const BRIDGE_TOOLKIT_SCRIPT = `
 
     // Find the active message input (GHL uses various input types)
     const findMessageInput = () => {
-        // Try multiple selectors used by GHL
+        // Try multiple selectors used by GHL - prioritize specific GHL selectors
         const selectors = [
+            // GHL specific composer input (most reliable)
+            'input[id^="composer-input"]',
+            'input[placeholder*="Digite"]',
+            'input[placeholder*="mensagem"]',
+            // Generic message inputs
             'textarea[placeholder*="Type"]',
             'textarea[placeholder*="type"]',
             'textarea[placeholder*="Message"]',
             'textarea[placeholder*="message"]',
+            'textarea[placeholder*="Digite"]',
             'textarea',
             '[contenteditable="true"]',
-            'input[type="text"]'
+            'input[type="text"][placeholder*="message"]',
+            'input[type="text"][placeholder*="Message"]'
         ];
         
         for (const sel of selectors) {
             const el = document.querySelector(sel);
             if (el && (el.offsetParent !== null)) { // visible
+                console.log("🎯 Bridge: Found input with selector:", sel);
                 return el;
             }
         }
-        return document.activeElement;
+        
+        // Last resort: return any visible text input
+        const allInputs = document.querySelectorAll('input[type="text"], textarea');
+        for (const el of allInputs) {
+            if (el.offsetParent !== null) {
+                console.log("🎯 Bridge: Found fallback input");
+                return el;
+            }
+        }
+        
+        return null;
     };
     
     // Get text from input element
