@@ -6,15 +6,20 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v13: Iniciando...");
+    console.log("🚀 Bridge Toolkit v15: Iniciando...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
+        supabase_anon_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzdXB2cHJ1ZHl4eWl5eHdxeHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MzMwNDAsImV4cCI6MjA4NDUwOTA0MH0._Ge7hb5CHCE6mchtjGLbWXx5Q9i_D7P0dn7OlMYlvyM',
         endpoint: '/functions/v1/map-messages'
     };
 
     let replyContext = null; // Stores message being replied to
     let editContext = null;  // Stores message being edited
+    let realtimeChannel = null; // Supabase Realtime channel
+    
+    // Track rendered states to avoid re-rendering
+    const renderedStates = new Map(); // ghlId -> { deleted, edited, replied }
 
     const showToast = (msg, isError = false) => {
         const toast = document.createElement('div');
@@ -775,8 +780,234 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         return ctx;
     };
 
+    // ========== REALTIME: Message State Rendering ==========
+    
+    // Render deleted state on a message
+    const renderDeletedState = (ghlId) => {
+        const msgElement = document.querySelector(\`[data-message-id="\${ghlId}"]\`);
+        if (!msgElement) return false;
+        
+        // Check if already rendered
+        if (msgElement.querySelector('.bridge-deleted-overlay')) return true;
+        
+        const textContainer = msgElement.querySelector('.text-\\\\[14px\\\\]') || 
+                              msgElement.querySelector('[class*="text-"]') ||
+                              msgElement.querySelector('.message-content');
+        
+        if (!textContainer) return false;
+        
+        // Store original content
+        const originalText = textContainer.innerText;
+        
+        // Create overlay structure
+        const wrapper = document.createElement('div');
+        wrapper.className = 'bridge-deleted-overlay';
+        wrapper.style.cssText = \`
+            background: #fef2f2; border: 1px solid #fee2e2; border-radius: 8px;
+            padding: 8px 12px; font-family: sans-serif;
+        \`;
+        wrapper.innerHTML = \`
+            <div style="color: #dc2626; font-size: 13px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                <span>❌</span> Essa mensagem foi apagada
+            </div>
+            <div style="border-top: 1px solid #fee2e2; padding-top: 8px; margin-top: 4px;">
+                <span style="color: #9ca3af; text-decoration: line-through; font-size: 14px;">\${originalText}</span>
+            </div>
+        \`;
+        
+        // Replace content
+        textContainer.innerHTML = '';
+        textContainer.appendChild(wrapper);
+        
+        console.log("🗑️ Bridge: Rendered deleted state for", ghlId);
+        return true;
+    };
+    
+    // Render edited state on a message
+    const renderEditedState = (ghlId, newText, originalText) => {
+        const msgElement = document.querySelector(\`[data-message-id="\${ghlId}"]\`);
+        if (!msgElement) return false;
+        
+        // Check if already rendered with same text
+        const existing = msgElement.querySelector('.bridge-edited-overlay');
+        if (existing && existing.dataset.newText === newText) return true;
+        
+        const textContainer = msgElement.querySelector('.text-\\\\[14px\\\\]') || 
+                              msgElement.querySelector('[class*="text-"]') ||
+                              msgElement.querySelector('.message-content');
+        
+        if (!textContainer) return false;
+        
+        // Get original text if not provided
+        const origText = originalText || textContainer.innerText;
+        
+        // Create overlay structure
+        const wrapper = document.createElement('div');
+        wrapper.className = 'bridge-edited-overlay';
+        wrapper.dataset.newText = newText;
+        wrapper.style.cssText = \`
+            background: #fefce8; border: 1px solid #fef08a; border-radius: 8px;
+            padding: 8px 12px; font-family: sans-serif;
+        \`;
+        wrapper.innerHTML = \`
+            <div style="color: #374151; font-size: 14px; margin-bottom: 4px;">\${newText}</div>
+            <div style="border-top: 1px solid #fef08a; padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between; align-items: flex-end;">
+                <span style="color: #9ca3af; font-size: 13px; font-style: italic;">\${origText}</span>
+                <span style="color: #ca8a04; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                    <span>✏️</span> editado
+                </span>
+            </div>
+        \`;
+        
+        // Replace content
+        textContainer.innerHTML = '';
+        textContainer.appendChild(wrapper);
+        
+        console.log("✏️ Bridge: Rendered edited state for", ghlId);
+        return true;
+    };
+    
+    // Render replied state on a message (quote context)
+    const renderRepliedState = (ghlId, quotedText, replyText) => {
+        const msgElement = document.querySelector(\`[data-message-id="\${ghlId}"]\`);
+        if (!msgElement) return false;
+        
+        // Check if already rendered
+        if (msgElement.querySelector('.bridge-replied-overlay')) return true;
+        
+        const textContainer = msgElement.querySelector('.text-\\\\[14px\\\\]') || 
+                              msgElement.querySelector('[class*="text-"]') ||
+                              msgElement.querySelector('.message-content');
+        
+        if (!textContainer) return false;
+        
+        // Get current text as reply text if not provided
+        const reply = replyText || textContainer.innerText;
+        
+        // Create overlay structure
+        const wrapper = document.createElement('div');
+        wrapper.className = 'bridge-replied-overlay';
+        wrapper.style.cssText = \`
+            background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;
+            padding: 8px 12px; font-family: sans-serif;
+        \`;
+        wrapper.innerHTML = \`
+            <div style="color: #0369a1; font-size: 13px; font-style: italic; margin-bottom: 4px; padding: 6px; background: #e0f2fe; border-radius: 4px; border-left: 3px solid #0ea5e9;">\${quotedText}</div>
+            <div style="border-top: 1px solid #bae6fd; padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between; align-items: flex-end;">
+                <span style="color: #374151; font-size: 14px;">\${reply}</span>
+                <span style="color: #0ea5e9; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                    <span>↩️</span> Respondido
+                </span>
+            </div>
+        \`;
+        
+        // Replace content
+        textContainer.innerHTML = '';
+        textContainer.appendChild(wrapper);
+        
+        console.log("↩️ Bridge: Rendered replied state for", ghlId);
+        return true;
+    };
+    
+    // Handle incoming realtime message updates
+    const handleRealtimeUpdate = (payload) => {
+        console.log("📡 Bridge Realtime:", payload);
+        
+        const { ghl_id, type, new_text, emoji, quoted_text, reply_text, fromMe } = payload;
+        
+        if (!ghl_id) return;
+        
+        if (type === 'delete') {
+            renderDeletedState(ghl_id);
+        } else if (type === 'edit') {
+            // Get original text from current DOM before update
+            const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
+            const origText = msgEl?.querySelector('.text-\\\\[14px\\\\]')?.innerText || '';
+            renderEditedState(ghl_id, new_text, origText);
+        } else if (type === 'reply' && quoted_text) {
+            renderRepliedState(ghl_id, quoted_text, reply_text);
+        } else if (type === 'react' && emoji) {
+            // Optional: render reaction badge on message
+            const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
+            if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
+                const badge = document.createElement('span');
+                badge.className = 'bridge-reaction-badge';
+                badge.style.cssText = 'position: absolute; bottom: -8px; right: 8px; background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);';
+                badge.innerText = emoji;
+                msgEl.style.position = 'relative';
+                msgEl.appendChild(badge);
+            }
+        }
+    };
+    
+    // Initialize Supabase Realtime connection
+    const initRealtime = () => {
+        if (realtimeChannel) return; // Already connected
+        
+        // Create a simple Realtime connection using native WebSocket
+        // Supabase Realtime uses Phoenix protocol
+        const wsUrl = BRIDGE_CONFIG.supabase_url.replace('https://', 'wss://') + 
+                      '/realtime/v1/websocket?apikey=' + BRIDGE_CONFIG.supabase_anon_key + 
+                      '&vsn=1.0.0';
+        
+        console.log("🔌 Bridge: Connecting to Realtime...");
+        
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+            console.log("✅ Bridge Realtime: Connected");
+            
+            // Join the ghl_updates channel
+            const joinMsg = {
+                topic: 'realtime:ghl_updates',
+                event: 'phx_join',
+                payload: {},
+                ref: '1'
+            };
+            ws.send(JSON.stringify(joinMsg));
+            
+            // Heartbeat to keep connection alive
+            setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: Date.now().toString() }));
+                }
+            }, 30000);
+        };
+        
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                
+                // Handle broadcast messages on ghl_updates channel
+                if (msg.topic === 'realtime:ghl_updates' && msg.event === 'broadcast') {
+                    if (msg.payload?.payload) {
+                        handleRealtimeUpdate(msg.payload.payload);
+                    }
+                }
+            } catch (e) {
+                console.error("❌ Bridge Realtime parse error:", e);
+            }
+        };
+        
+        ws.onerror = (err) => {
+            console.error("❌ Bridge Realtime error:", err);
+        };
+        
+        ws.onclose = () => {
+            console.log("🔌 Bridge Realtime: Disconnected, reconnecting in 5s...");
+            realtimeChannel = null;
+            setTimeout(initRealtime, 5000);
+        };
+        
+        realtimeChannel = ws;
+    };
+
     setInterval(inject, 1000);
-    console.log("✅ Bridge Toolkit v14 carregado (com Reply WhatsApp)!");
+    
+    // Initialize Realtime after a short delay
+    setTimeout(initRealtime, 2000);
+    
+    console.log("✅ Bridge Toolkit v15 carregado (com Reply WhatsApp + Realtime UI)!");
 })();
 `;
 
