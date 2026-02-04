@@ -397,7 +397,8 @@ async function assignContactToUser(contactId: string, userId: string, token: str
 }
 
 // Helper to send text message to GHL (inbound = from lead)
-async function sendMessageToGHL(contactId: string, message: string, token: string): Promise<void> {
+// Returns the GHL messageId if available
+async function sendMessageToGHL(contactId: string, message: string, token: string): Promise<string | null> {
   const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
     headers: {
@@ -413,10 +414,18 @@ async function sendMessageToGHL(contactId: string, message: string, token: strin
     }),
   });
 
+  const responseText = await response.text();
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Failed to send message to GHL:", errorText);
+    console.error("Failed to send message to GHL:", responseText);
     throw new Error("Failed to send message to GHL");
+  }
+
+  // Extract messageId from response
+  try {
+    const parsed = JSON.parse(responseText);
+    return parsed?.messageId || parsed?.id || null;
+  } catch {
+    return null;
   }
 }
 
@@ -505,7 +514,8 @@ async function getOrCreateConversation(contactId: string, locationId: string, to
 }
 
 // Helper to send media message to GHL with attachments (inbound = from lead)
-async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token: string, caption?: string): Promise<void> {
+// Returns the GHL messageId if available
+async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token: string, caption?: string): Promise<string | null> {
   const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
     headers: {
@@ -522,10 +532,18 @@ async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token
     }),
   });
 
+  const responseText = await response.text();
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Failed to send media to GHL:", errorText);
+    console.error("Failed to send media to GHL:", responseText);
     throw new Error("Failed to send media to GHL");
+  }
+
+  // Extract messageId from response
+  try {
+    const parsed = JSON.parse(responseText);
+    return parsed?.messageId || parsed?.id || null;
+  } catch {
+    return null;
   }
 }
 
@@ -1535,13 +1553,46 @@ serve(async (req) => {
       }
       
       // For group media without caption, still add member identification
+      // Also capture and save message mapping for edit/react/delete
+      const uazapiMsgId = messageData.messageid || messageData.id || "";
+      
       if (isMediaMessage && publicMediaUrl) {
         const mediaCaption = formattedCaption || (memberPrefix ? memberPrefix.trim() : undefined);
         console.log("Sending inbound media to GHL:", { publicMediaUrl, mediaCaption, memberName, memberPhone });
-        await sendMediaToGHL(contact.id, [publicMediaUrl], token, mediaCaption);
+        const ghlMessageId = await sendMediaToGHL(contact.id, [publicMediaUrl], token, mediaCaption);
+        
+        // Save message mapping for inbound media
+        if (ghlMessageId && uazapiMsgId) {
+          await supabase.from("message_map").upsert({
+            ghl_message_id: ghlMessageId,
+            uazapi_message_id: uazapiMsgId,
+            location_id: subaccount.location_id,
+            contact_id: contact.id,
+            message_text: mediaCaption || "",
+            message_type: "media",
+            from_me: false,
+            original_timestamp: new Date().toISOString(),
+          }, { onConflict: "ghl_message_id" });
+          console.log("Inbound message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+        }
       } else {
         console.log("Sending inbound text to GHL:", { formattedMessage: formattedMessage?.substring(0, 50) });
-        await sendMessageToGHL(contact.id, formattedMessage, token);
+        const ghlMessageId = await sendMessageToGHL(contact.id, formattedMessage, token);
+        
+        // Save message mapping for inbound text
+        if (ghlMessageId && uazapiMsgId) {
+          await supabase.from("message_map").upsert({
+            ghl_message_id: ghlMessageId,
+            uazapi_message_id: uazapiMsgId,
+            location_id: subaccount.location_id,
+            contact_id: contact.id,
+            message_text: textMessage || "",
+            message_type: "text",
+            from_me: false,
+            original_timestamp: new Date().toISOString(),
+          }, { onConflict: "ghl_message_id" });
+          console.log("Inbound message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+        }
       }
       
       console.log(`✅ Inbound message forwarded to GHL: ${phoneNumber} -> ${contact.id}`);
