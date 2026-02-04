@@ -228,28 +228,71 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             }
         }, true); // Capture phase - runs BEFORE bubbling
         
-        // Also capture clicks on send buttons
+        // Also capture clicks on send buttons - more aggressive detection
         document.addEventListener('click', async (e) => {
             // Only if we have a reply context
             if (!replyContext) return;
             
-            const btn = e.target.closest('button, [role="button"], [data-testid*="send"], [class*="send"]');
-            if (!btn) return;
+            const target = e.target;
+            
+            // Try to find a button or clickable element
+            const btn = target.closest('button, [role="button"], [data-testid*="send"], [class*="send"]');
+            
+            // Also check if we clicked directly on SVG/icon inside button
+            const svgParent = target.closest('svg')?.closest('button, [role="button"]');
+            const clickedElement = btn || svgParent;
+            
+            // Also detect based on location near input area
+            const inputArea = findMessageInput();
+            const isNearInput = inputArea && (() => {
+                const inputRect = inputArea.getBoundingClientRect();
+                const clickX = e.clientX;
+                const clickY = e.clientY;
+                // Button is likely to the right of or below the input
+                return Math.abs(clickY - inputRect.bottom) < 100 && 
+                       clickX > inputRect.right - 100;
+            })();
+            
+            if (!clickedElement && !isNearInput) return;
             
             // Check if it looks like a send button
-            const hasSendIcon = btn.querySelector('svg') || btn.querySelector('[class*="send"]');
-            const btnText = (btn.textContent || '').toLowerCase();
-            const isSendButton = hasSendIcon || btnText.includes('send') || btnText.includes('enviar');
+            let isSendButton = false;
+            
+            if (clickedElement) {
+                const hasSendIcon = clickedElement.querySelector('svg');
+                const btnText = (clickedElement.textContent || '').toLowerCase();
+                const btnClass = (clickedElement.className || '').toLowerCase();
+                const ariaLabel = (clickedElement.getAttribute('aria-label') || '').toLowerCase();
+                
+                isSendButton = hasSendIcon || 
+                    btnText.includes('send') || btnText.includes('enviar') ||
+                    btnClass.includes('send') || 
+                    ariaLabel.includes('send') || ariaLabel.includes('enviar');
+                    
+                console.log("🔍 Bridge: Button analysis", {
+                    hasSendIcon: !!hasSendIcon,
+                    btnText,
+                    btnClass,
+                    ariaLabel,
+                    isSendButton
+                });
+            }
+            
+            // If near input and clicked something clickable, assume it could be send
+            if (isNearInput && (target.closest('button') || target.closest('svg'))) {
+                isSendButton = true;
+                console.log("🔍 Bridge: Assuming send button due to location near input");
+            }
             
             if (!isSendButton) return;
             
-            const inputArea = findMessageInput();
             const text = getInputText(inputArea);
             
             console.log("🖱️ Bridge: Send button clicked!", { 
                 hasReplyContext: !!replyContext, 
                 text: text.substring(0, 50),
-                buttonClass: btn.className
+                buttonClass: clickedElement?.className || 'unknown',
+                isNearInput
             });
             
             if (text.trim()) {
