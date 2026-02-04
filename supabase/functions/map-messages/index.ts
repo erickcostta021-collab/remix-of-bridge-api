@@ -178,14 +178,11 @@ serve(async (req) => {
         const config = await getInstanceForLocation(supabase, mapping.location_id);
 
         if (config) {
-          // Try multiple endpoint formats for edit
+          console.log("✏️ Edit payload:", { id: mapping.uazapi_message_id, text: new_text });
+          
+          // UAZAPI exact format: POST /message/edit with { id, text }
           const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
-            // UAZAPI style
             { path: "/message/edit", body: { id: mapping.uazapi_message_id, text: new_text } },
-            { path: "/chat/edit", body: { Id: mapping.uazapi_message_id, Body: new_text } },
-            { path: "/chat/edit", body: { messageId: mapping.uazapi_message_id, text: new_text } },
-            // Evolution style
-            { path: "/message/sendText", body: { id: mapping.uazapi_message_id, textMessage: { text: new_text }, options: { edit: true } } },
           ]);
 
           uazapiSuccess = result.success;
