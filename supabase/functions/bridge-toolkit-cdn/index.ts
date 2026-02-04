@@ -101,44 +101,96 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
     
     // Ensure chat panel is open before showing banners
-    const ensureChatOpen = () => {
-        // Look for closed chat indicators or expand buttons
-        const expandButtons = document.querySelectorAll('[data-testid*="expand"], [aria-label*="expand"], [aria-label*="abrir"], [aria-label*="open"]');
+    const ensureChatOpen = async () => {
         const chatInput = findMessageInput();
         
-        // If no input is visible, try to click on conversation or expand chat
-        if (!chatInput || chatInput.offsetParent === null) {
-            console.log("🔍 Bridge: Chat appears closed, trying to open...");
-            
-            // Try to find and click on the conversation row or expand button
-            const conversationRow = document.querySelector('.hl_conversations--conversation-card.active, [class*="conversation"][class*="active"], [class*="selected"]');
-            if (conversationRow) {
-                console.log("📱 Bridge: Clicking conversation row to open chat...");
-                conversationRow.click();
-                return true; // Will need to wait
+        // If input is visible, chat is already open
+        if (chatInput && chatInput.offsetParent !== null) {
+            console.log("✅ Bridge: Chat already open");
+            return false;
+        }
+        
+        console.log("🔍 Bridge: Chat appears closed, trying to open...");
+        
+        // Strategy 1: Find the message container we clicked on and traverse up to find conversation context
+        const messageContainers = document.querySelectorAll('.message-container');
+        if (messageContainers.length > 0) {
+            // Find the closest conversation panel or expandable area
+            const msgParent = messageContainers[0].closest('[class*="conversation"], [class*="chat"], [class*="panel"]');
+            if (msgParent) {
+                console.log("📱 Bridge: Found conversation parent, clicking...");
+                msgParent.click();
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
-            
-            // Try expand buttons
-            for (const btn of expandButtons) {
+        }
+        
+        // Strategy 2: Look for expand/open buttons near the chat area
+        const expandSelectors = [
+            '[data-testid*="expand"]',
+            '[aria-label*="expand"]', 
+            '[aria-label*="abrir"]',
+            '[aria-label*="open"]',
+            '[class*="expand"]',
+            '[class*="open-chat"]',
+            'button[class*="chat"]'
+        ];
+        
+        for (const sel of expandSelectors) {
+            const btns = document.querySelectorAll(sel);
+            for (const btn of btns) {
                 if (btn.offsetParent !== null) {
-                    console.log("📱 Bridge: Clicking expand button...");
+                    console.log("📱 Bridge: Clicking expand button:", sel);
                     btn.click();
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    
+                    // Check if input appeared
+                    const newInput = findMessageInput();
+                    if (newInput && newInput.offsetParent !== null) {
+                        console.log("✅ Bridge: Chat opened successfully!");
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        // Strategy 3: Click on conversation list item (for split view)
+        const conversationSelectors = [
+            '.hl_conversations--conversation-card.active',
+            '[class*="conversation"][class*="active"]',
+            '[class*="conversation-card"]',
+            '[class*="ConversationItem"]',
+            '[class*="selected"]',
+            '[class*="conversation-row"]'
+        ];
+        
+        for (const sel of conversationSelectors) {
+            const el = document.querySelector(sel);
+            if (el && el.offsetParent !== null) {
+                console.log("📱 Bridge: Clicking conversation item:", sel);
+                el.click();
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Check if input appeared
+                const newInput = findMessageInput();
+                if (newInput && newInput.offsetParent !== null) {
+                    console.log("✅ Bridge: Chat opened via conversation click!");
                     return true;
                 }
             }
-            
-            // Look for any clickable element in conversation list
-            const conversationItem = document.querySelector('[class*="conversation-card"], [class*="ConversationItem"]');
-            if (conversationItem) {
-                console.log("📱 Bridge: Clicking conversation item...");
-                conversationItem.click();
-                return true;
-            }
-            
-            return false; // Could not find way to open
         }
         
-        return false; // Chat already open
+        // Strategy 4: Try clicking the input area's parent container to focus it
+        const inputContainers = document.querySelectorAll('[class*="composer"], [class*="input-area"], [class*="message-input"]');
+        for (const container of inputContainers) {
+            if (container.offsetParent !== null) {
+                console.log("📱 Bridge: Clicking input container...");
+                container.click();
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+        }
+        
+        console.log("⚠️ Bridge: Could not find way to open chat");
+        return false;
     };
     
     // Show edit banner in input area (same pattern as reply)
@@ -147,17 +199,17 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         const existingBanner = document.getElementById('bridge-edit-banner');
         if (existingBanner) existingBanner.remove();
         
-        // Try to open chat if closed
-        const needsWait = ensureChatOpen();
-        if (needsWait) {
-            // Wait for chat to open
-            await new Promise(resolve => setTimeout(resolve, 300));
-        }
+        // Try to open chat if closed (ensureChatOpen is now async)
+        await ensureChatOpen();
+        
+        // Wait a bit more for UI to settle
+        await new Promise(resolve => setTimeout(resolve, 300));
         
         let inputArea = findMessageInput();
         
-        // Retry finding input after potential open
+        // Retry finding input with longer wait
         if (!inputArea || inputArea.offsetParent === null) {
+            console.log("🔄 Bridge: Input not found, waiting more...");
             await new Promise(resolve => setTimeout(resolve, 500));
             inputArea = findMessageInput();
         }
@@ -166,6 +218,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             showToast("Abra o chat para editar a mensagem", true);
             return;
         }
+        
+        console.log("✅ Bridge: Input found, showing edit banner");
         
         const banner = document.createElement('div');
         banner.id = 'bridge-edit-banner';
