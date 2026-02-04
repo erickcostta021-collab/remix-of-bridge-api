@@ -1195,9 +1195,10 @@ serve(async (req) => {
       });
 
       if (isMediaMessage && publicMediaUrl) {
-        console.log("Sending outbound media to GHL:", { publicMediaUrl, textMessage });
+        console.log("Sending outbound media to GHL (inbound endpoint):", { publicMediaUrl, textMessage });
         const before = Date.now();
-        const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+        // Use /inbound endpoint with direction=outbound to avoid triggering GHL webhooks
+        const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -1211,10 +1212,11 @@ serve(async (req) => {
             message: textMessage || "",
             attachments: [publicMediaUrl],
             status: "delivered",
+            direction: "outbound", // Critical: marks as outbound but won't trigger webhooks
           }),
         });
         const bodyText = await res.text();
-        console.log("GHL outbound-media response:", { status: res.status, ms: Date.now() - before, body: bodyText.substring(0, 500) });
+        console.log("GHL outbound-media response (no webhook):", { status: res.status, ms: Date.now() - before, body: bodyText.substring(0, 500) });
         if (!res.ok) throw new Error("Failed to send outbound media to GHL");
         try {
           const parsed = JSON.parse(bodyText);
@@ -1224,9 +1226,10 @@ serve(async (req) => {
           // ignore
         }
       } else if (textMessage) {
-        console.log("Sending outbound text to GHL:", { textMessage: textMessage?.substring(0, 50) });
+        console.log("Sending outbound text to GHL (inbound endpoint):", { textMessage: textMessage?.substring(0, 50) });
         const before = Date.now();
-        const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+        // Use /inbound endpoint with direction=outbound to avoid triggering GHL webhooks
+        const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -1239,10 +1242,11 @@ serve(async (req) => {
             contactId: contact.id,
             message: textMessage,
             status: "delivered",
+            direction: "outbound", // Critical: marks as outbound but won't trigger webhooks
           }),
         });
         const bodyText = await res.text();
-        console.log("GHL outbound-text response:", { status: res.status, ms: Date.now() - before, body: bodyText.substring(0, 500) });
+        console.log("GHL outbound-text response (no webhook):", { status: res.status, ms: Date.now() - before, body: bodyText.substring(0, 500) });
         if (!res.ok) throw new Error("Failed to send outbound message to GHL");
         try {
           const parsed = JSON.parse(bodyText);
