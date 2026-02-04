@@ -415,6 +415,117 @@ serve(async (req) => {
       );
     }
 
+    // Action: reply - Send a reply message with quoted context
+    if (action === "reply") {
+      const { ghl_id, text, contact_phone, location_id } = body;
+
+      if (!ghl_id || !text || !location_id) {
+        return new Response(
+          JSON.stringify({ error: "ghl_id, text and location_id are required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Get the original message mapping to get the UAZAPI message ID
+      const { data: mapping, error: fetchError } = await supabase
+        .from("message_map")
+        .select("*")
+        .eq("ghl_message_id", ghl_id)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error("❌ Error fetching mapping:", fetchError);
+        return new Response(
+          JSON.stringify({ error: fetchError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!mapping?.uazapi_message_id) {
+        console.log("❌ Message not mapped or missing UAZAPI ID:", ghl_id);
+        return new Response(
+          JSON.stringify({ error: "Message not found or not mapped to WhatsApp" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Get instance configuration for this location
+      const config = await getInstanceForLocation(supabase, location_id);
+
+      if (!config) {
+        return new Response(
+          JSON.stringify({ error: "No connected instance found for this location" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Build the phone number - try from mapping first, then from request
+      let phoneNumber = contact_phone;
+      
+      if (!phoneNumber && mapping.contact_id) {
+        const { data: phoneMapping } = await supabase
+          .from("ghl_contact_phone_mapping")
+          .select("original_phone")
+          .eq("contact_id", mapping.contact_id)
+          .maybeSingle();
+        
+        if (phoneMapping?.original_phone) {
+          phoneNumber = phoneMapping.original_phone.replace(/\D/g, "");
+        }
+      }
+
+      if (!phoneNumber) {
+        return new Response(
+          JSON.stringify({ error: "Could not determine phone number for reply" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log("↩️ Reply payload:", { 
+        number: phoneNumber, 
+        text, 
+        replyid: mapping.uazapi_message_id 
+      });
+
+      // Send reply using /send/text with replyid
+      const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
+        { 
+          path: "/send/text", 
+          body: { 
+            number: phoneNumber, 
+            text: text, 
+            replyid: mapping.uazapi_message_id 
+          } 
+        },
+      ]);
+
+      if (!result.success) {
+        console.error("❌ Reply failed:", result.status, result.body);
+        return new Response(
+          JSON.stringify({ error: "Failed to send reply on WhatsApp", details: result.body }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Parse the response to get the new message ID
+      let newMessageId = null;
+      try {
+        const responseData = JSON.parse(result.body);
+        newMessageId = responseData.key?.id || responseData.messageId || responseData.id;
+      } catch (e) {
+        console.log("⚠️ Could not parse reply response for message ID");
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          whatsapp_sent: true,
+          new_message_id: newMessageId
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Action: lookup - Get mapping by UAZAPI ID (for webhook processing)
     if (action === "lookup") {
       const { uazapi_id, ghl_id } = body;

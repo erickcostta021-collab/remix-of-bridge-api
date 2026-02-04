@@ -65,7 +65,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     // Show reply banner in input area
-    const showReplyBanner = (msgText, ghlId) => {
+    const showReplyBanner = (msgText, ghlId, locationId) => {
         const existingBanner = document.getElementById('bridge-reply-banner');
         if (existingBanner) existingBanner.remove();
         
@@ -94,8 +94,84 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             replyContext = null;
         };
         
-        replyContext = { ghlId, text: msgText };
+        replyContext = { ghlId, text: msgText, locationId };
         inputArea.focus();
+    };
+
+    // Send reply action to backend
+    const sendReply = async (replyText) => {
+        if (!replyContext) return null;
+        
+        const { ghlId, locationId } = replyContext;
+        console.log(\`↩️ Sending reply to \${ghlId} with text: \${replyText.substring(0, 50)}...\`);
+        
+        try {
+            const url = BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'reply', 
+                    ghl_id: ghlId, 
+                    text: replyText,
+                    location_id: locationId
+                })
+            });
+            
+            const data = await response.json();
+            console.log("↩️ Reply response:", data);
+            
+            if (data.success) {
+                showToast("Resposta enviada no WhatsApp!");
+                return data;
+            } else {
+                showToast("Erro: " + (data.error || "Falha ao responder"), true);
+                return null;
+            }
+        } catch (e) {
+            console.error("❌ Reply error:", e);
+            showToast("Erro de conexão: " + e.message, true);
+            return null;
+        }
+    };
+
+    // Intercept send button to handle replies
+    const interceptSendButton = () => {
+        // Look for send button in GHL
+        const sendButtons = document.querySelectorAll('button[type="submit"], button:has(svg), [class*="send"]');
+        
+        sendButtons.forEach(btn => {
+            if (btn.dataset.bridgeIntercepted) return;
+            btn.dataset.bridgeIntercepted = 'true';
+            
+            btn.addEventListener('click', async (e) => {
+                if (!replyContext) return; // Let normal flow continue
+                
+                const inputArea = document.querySelector('textarea, [contenteditable="true"]');
+                const text = inputArea?.value || inputArea?.innerText || '';
+                
+                if (text.trim()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const result = await sendReply(text.trim());
+                    
+                    if (result) {
+                        // Clear the input
+                        if (inputArea.value !== undefined) {
+                            inputArea.value = '';
+                        } else {
+                            inputArea.innerText = '';
+                        }
+                        
+                        // Clear reply context
+                        const banner = document.getElementById('bridge-reply-banner');
+                        if (banner) banner.remove();
+                        replyContext = null;
+                    }
+                }
+            }, true);
+        });
     };
 
     window.openBridgeMenu = (e, triggerEl) => {
@@ -267,8 +343,17 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 menu.remove();
                 
                 if (act === 'reply') {
-                    showReplyBanner(msgText, ghlId);
-                    showToast("Digite sua resposta abaixo");
+                    // Extract location_id from URL or DOM
+                    const urlMatch = window.location.href.match(/location[_/]?([a-zA-Z0-9]+)/i);
+                    const locationId = urlMatch ? urlMatch[1] : null;
+                    
+                    if (!locationId) {
+                        showToast("Não foi possível identificar a subconta", true);
+                        return;
+                    }
+                    
+                    showReplyBanner(msgText, ghlId, locationId);
+                    showToast("Digite sua resposta e envie normalmente");
                     return;
                 }
                 
@@ -335,6 +420,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             btn.onclick = (e) => window.openBridgeMenu(e, btn);
             msg.appendChild(btn);
         });
+        // Also intercept send buttons for replies
+        interceptSendButton();
     };
 
     // Expose reply context for send button integration
@@ -347,7 +434,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     setInterval(inject, 1000);
-    console.log("✅ Bridge Toolkit v13 carregado!");
+    console.log("✅ Bridge Toolkit v14 carregado (com Reply WhatsApp)!");
 })();
 `;
 
