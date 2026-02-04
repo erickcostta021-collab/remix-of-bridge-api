@@ -6,6 +6,78 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper function to try multiple API endpoints/formats
+async function tryUazapiEndpoints(
+  baseUrl: string,
+  instanceToken: string,
+  attempts: Array<{ path: string; body: Record<string, any> }>
+): Promise<{ success: boolean; status: number; body: string }> {
+  let lastStatus = 0;
+  let lastBody = "";
+
+  for (const attempt of attempts) {
+    const url = `${baseUrl}${attempt.path}`;
+    console.log("🔄 Trying UAZAPI endpoint:", { url, body: attempt.body });
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "token": instanceToken,
+        },
+        body: JSON.stringify(attempt.body),
+      });
+
+      lastStatus = res.status;
+      lastBody = await res.text();
+      console.log("📥 UAZAPI response:", { url, status: lastStatus, body: lastBody.substring(0, 300) });
+
+      if (res.ok) {
+        return { success: true, status: lastStatus, body: lastBody };
+      }
+    } catch (e) {
+      console.error("❌ Fetch error for", url, e);
+      lastBody = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  return { success: false, status: lastStatus, body: lastBody };
+}
+
+// Get instance and settings for a location
+async function getInstanceForLocation(supabase: any, locationId: string) {
+  const { data: instance } = await supabase
+    .from("instances")
+    .select("*, ghl_subaccounts!inner(location_id, user_id)")
+    .eq("ghl_subaccounts.location_id", locationId)
+    .eq("instance_status", "connected")
+    .limit(1)
+    .maybeSingle();
+
+  if (!instance) {
+    console.log("⚠️ No connected instance found for location:", locationId);
+    return null;
+  }
+
+  const { data: settings } = await supabase
+    .from("user_settings")
+    .select("uazapi_base_url")
+    .eq("user_id", instance.ghl_subaccounts.user_id)
+    .maybeSingle();
+
+  if (!settings?.uazapi_base_url) {
+    console.log("⚠️ No UAZAPI base URL configured for user");
+    return null;
+  }
+
+  return {
+    instance,
+    baseUrl: settings.uazapi_base_url,
+    token: instance.uazapi_instance_token,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -19,6 +91,8 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
+    console.log("📨 map-messages received:", { action, ...body });
+
     // Action: map - Save message mapping
     if (action === "map" || !action) {
       const { ghl_id, uazapi_id, text, timestamp, location_id, contact_id, from_me, message_type } = body;
@@ -30,7 +104,6 @@ serve(async (req) => {
         );
       }
 
-      // Upsert message mapping
       const { data, error } = await supabase
         .from("message_map")
         .upsert({
@@ -62,7 +135,7 @@ serve(async (req) => {
 
     // Action: edit - Edit a message (with 15-minute validation)
     if (action === "edit") {
-      const { ghl_id, new_text, location_id } = body;
+      const { ghl_id, new_text } = body;
 
       if (!ghl_id || !new_text) {
         return new Response(
@@ -79,6 +152,7 @@ serve(async (req) => {
         .maybeSingle();
 
       if (fetchError || !mapping) {
+        console.log("❌ Message not found:", ghl_id);
         return new Response(
           JSON.stringify({ error: "Message not found" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -97,40 +171,30 @@ serve(async (req) => {
         );
       }
 
+      let uazapiSuccess = false;
+
       // If we have UAZAPI ID, send edit to WhatsApp
       if (mapping.uazapi_message_id) {
-        // Get instance info for UAZAPI call
-        const { data: instance } = await supabase
-          .from("instances")
-          .select("*, ghl_subaccounts!inner(location_id, user_id)")
-          .eq("ghl_subaccounts.location_id", mapping.location_id)
-          .limit(1)
-          .maybeSingle();
+        const config = await getInstanceForLocation(supabase, mapping.location_id);
 
-        if (instance) {
-          const { data: settings } = await supabase
-            .from("user_settings")
-            .select("uazapi_base_url")
-            .eq("user_id", instance.ghl_subaccounts.user_id)
-            .maybeSingle();
+        if (config) {
+          // Try multiple endpoint formats for edit
+          const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
+            // UAZAPI style
+            { path: "/message/edit", body: { id: mapping.uazapi_message_id, text: new_text } },
+            { path: "/chat/edit", body: { Id: mapping.uazapi_message_id, Body: new_text } },
+            { path: "/chat/edit", body: { messageId: mapping.uazapi_message_id, text: new_text } },
+            // Evolution style
+            { path: "/message/sendText", body: { id: mapping.uazapi_message_id, textMessage: { text: new_text }, options: { edit: true } } },
+          ]);
 
-          if (settings?.uazapi_base_url) {
-            // Send edit to UAZAPI
-            try {
-              await fetch(`${settings.uazapi_base_url}/message/edit`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "token": instance.uazapi_instance_token,
-                },
-                body: JSON.stringify({
-                  id: mapping.uazapi_message_id,
-                  text: new_text,
-                }),
-              });
-            } catch (e) {
-              console.error("Failed to send edit to UAZAPI:", e);
-            }
+          uazapiSuccess = result.success;
+          if (!result.success) {
+            console.error("❌ All edit attempts failed:", result.status, result.body);
+            return new Response(
+              JSON.stringify({ error: "Failed to edit on WhatsApp", details: result.body }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
           }
         }
       }
@@ -157,23 +221,18 @@ serve(async (req) => {
       await supabase.channel("ghl_updates").send({
         type: "broadcast",
         event: "msg_update",
-        payload: {
-          ghl_id,
-          type: "edit",
-          new_text,
-          location_id: mapping.location_id,
-        },
+        payload: { ghl_id, type: "edit", new_text, location_id: mapping.location_id },
       });
 
       return new Response(
-        JSON.stringify({ success: true, data: updated }),
+        JSON.stringify({ success: true, data: updated, whatsapp_sent: uazapiSuccess }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Action: react - Add reaction to message
     if (action === "react") {
-      const { ghl_id, emoji, location_id } = body;
+      const { ghl_id, emoji } = body;
 
       if (!ghl_id || !emoji) {
         return new Response(
@@ -190,44 +249,42 @@ serve(async (req) => {
         .maybeSingle();
 
       if (fetchError || !mapping) {
+        console.log("❌ Message not found:", ghl_id);
         return new Response(
           JSON.stringify({ error: "Message not found" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      let uazapiSuccess = false;
+
       // Send reaction to UAZAPI if we have the ID
       if (mapping.uazapi_message_id) {
-        const { data: instance } = await supabase
-          .from("instances")
-          .select("*, ghl_subaccounts!inner(location_id, user_id)")
-          .eq("ghl_subaccounts.location_id", mapping.location_id)
-          .limit(1)
-          .maybeSingle();
+        const config = await getInstanceForLocation(supabase, mapping.location_id);
 
-        if (instance) {
-          const { data: settings } = await supabase
-            .from("user_settings")
-            .select("uazapi_base_url")
-            .eq("user_id", instance.ghl_subaccounts.user_id)
-            .maybeSingle();
+        if (config) {
+          // Get contact phone for some API formats
+          const contactPhone = mapping.contact_id || "";
 
-          if (settings?.uazapi_base_url) {
-            try {
-              await fetch(`${settings.uazapi_base_url}/message/react`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "token": instance.uazapi_instance_token,
-                },
-                body: JSON.stringify({
-                  id: mapping.uazapi_message_id,
-                  emoji,
-                }),
-              });
-            } catch (e) {
-              console.error("Failed to send reaction to UAZAPI:", e);
-            }
+          // Try multiple endpoint formats for react (based on wuzapi/UAZAPI documentation)
+          const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
+            // Wuzapi/UAZAPI style - /chat/react with { Phone, Body (emoji), Id (messageId) }
+            { path: "/chat/react", body: { Phone: contactPhone, Body: emoji, Id: mapping.uazapi_message_id } },
+            { path: "/chat/react", body: { phone: contactPhone, body: emoji, id: mapping.uazapi_message_id } },
+            // Alternative UAZAPI format
+            { path: "/message/react", body: { id: mapping.uazapi_message_id, emoji: emoji } },
+            { path: "/message/react", body: { messageId: mapping.uazapi_message_id, reaction: emoji } },
+            // Evolution style
+            { path: "/message/sendReaction", body: { key: { id: mapping.uazapi_message_id }, reaction: emoji } },
+          ]);
+
+          uazapiSuccess = result.success;
+          if (!result.success) {
+            console.error("❌ All react attempts failed:", result.status, result.body);
+            return new Response(
+              JSON.stringify({ error: "Failed to react on WhatsApp", details: result.body }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
           }
         }
       }
@@ -254,16 +311,11 @@ serve(async (req) => {
       await supabase.channel("ghl_updates").send({
         type: "broadcast",
         event: "msg_update",
-        payload: {
-          ghl_id,
-          type: "react",
-          emoji,
-          location_id: mapping.location_id,
-        },
+        payload: { ghl_id, type: "react", emoji, location_id: mapping.location_id },
       });
 
       return new Response(
-        JSON.stringify({ success: true, data: updated }),
+        JSON.stringify({ success: true, data: updated, whatsapp_sent: uazapiSuccess }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -287,44 +339,34 @@ serve(async (req) => {
         .maybeSingle();
 
       if (fetchError || !mapping) {
+        console.log("❌ Message not found:", ghl_id);
         return new Response(
           JSON.stringify({ error: "Message not found" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      let uazapiSuccess = false;
+
       // Send delete to UAZAPI if we have the ID and it's from_me
       if (mapping.uazapi_message_id && from_me) {
-        const { data: instance } = await supabase
-          .from("instances")
-          .select("*, ghl_subaccounts!inner(location_id, user_id)")
-          .eq("ghl_subaccounts.location_id", mapping.location_id)
-          .limit(1)
-          .maybeSingle();
+        const config = await getInstanceForLocation(supabase, mapping.location_id);
 
-        if (instance) {
-          const { data: settings } = await supabase
-            .from("user_settings")
-            .select("uazapi_base_url")
-            .eq("user_id", instance.ghl_subaccounts.user_id)
-            .maybeSingle();
+        if (config) {
+          // Try multiple endpoint formats for delete
+          const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
+            // UAZAPI style
+            { path: "/message/delete", body: { id: mapping.uazapi_message_id, fromMe: true } },
+            { path: "/chat/delete", body: { Id: mapping.uazapi_message_id, FromMe: true } },
+            { path: "/chat/delete", body: { messageId: mapping.uazapi_message_id, fromMe: true } },
+            // Evolution style
+            { path: "/message/delete", body: { key: { id: mapping.uazapi_message_id, fromMe: true } } },
+          ]);
 
-          if (settings?.uazapi_base_url) {
-            try {
-              await fetch(`${settings.uazapi_base_url}/message/delete`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "token": instance.uazapi_instance_token,
-                },
-                body: JSON.stringify({
-                  id: mapping.uazapi_message_id,
-                  fromMe: true,
-                }),
-              });
-            } catch (e) {
-              console.error("Failed to send delete to UAZAPI:", e);
-            }
+          uazapiSuccess = result.success;
+          if (!result.success) {
+            console.error("❌ All delete attempts failed:", result.status, result.body);
+            // For delete, we still mark as deleted in DB even if WhatsApp fails
           }
         }
       }
@@ -348,16 +390,11 @@ serve(async (req) => {
       await supabase.channel("ghl_updates").send({
         type: "broadcast",
         event: "msg_update",
-        payload: {
-          ghl_id,
-          type: "delete",
-          fromMe: from_me,
-          location_id: mapping.location_id,
-        },
+        payload: { ghl_id, type: "delete", fromMe: from_me, location_id: mapping.location_id },
       });
 
       return new Response(
-        JSON.stringify({ success: true, data: updated }),
+        JSON.stringify({ success: true, data: updated, whatsapp_sent: uazapiSuccess }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
