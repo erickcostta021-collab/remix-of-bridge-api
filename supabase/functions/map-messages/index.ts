@@ -263,24 +263,43 @@ serve(async (req) => {
         const config = await getInstanceForLocation(supabase, mapping.location_id);
 
         if (config) {
-          // Get contact phone for some API formats
-          const contactPhone = mapping.contact_id || "";
+          // Need to get the contact's phone number to build the WhatsApp JID
+          let contactPhone = "";
+          
+          if (mapping.contact_id) {
+            // Try to get phone from contact_instance_preferences or ghl_contact_phone_mapping
+            const { data: phoneMapping } = await supabase
+              .from("ghl_contact_phone_mapping")
+              .select("original_phone")
+              .eq("contact_id", mapping.contact_id)
+              .maybeSingle();
+            
+            if (phoneMapping?.original_phone) {
+              contactPhone = phoneMapping.original_phone.replace(/\D/g, "");
+            }
+          }
 
-          // Try multiple endpoint formats for react (based on wuzapi/UAZAPI documentation)
+          // Build the WhatsApp JID (number@s.whatsapp.net)
+          const whatsappJid = contactPhone ? `${contactPhone}@s.whatsapp.net` : "";
+          
+          console.log("📱 React payload:", { 
+            number: whatsappJid, 
+            text: emoji, 
+            id: mapping.uazapi_message_id,
+            contact_id: mapping.contact_id 
+          });
+
+          // UAZAPI format: POST /message/react with { number, text (emoji), id }
           const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
-            // Wuzapi/UAZAPI style - /chat/react with { Phone, Body (emoji), Id (messageId) }
-            { path: "/chat/react", body: { Phone: contactPhone, Body: emoji, Id: mapping.uazapi_message_id } },
-            { path: "/chat/react", body: { phone: contactPhone, body: emoji, id: mapping.uazapi_message_id } },
-            // Alternative UAZAPI format
-            { path: "/message/react", body: { id: mapping.uazapi_message_id, emoji: emoji } },
-            { path: "/message/react", body: { messageId: mapping.uazapi_message_id, reaction: emoji } },
-            // Evolution style
-            { path: "/message/sendReaction", body: { key: { id: mapping.uazapi_message_id }, reaction: emoji } },
+            // Exact UAZAPI format from user documentation
+            { path: "/message/react", body: { number: whatsappJid, text: emoji, id: mapping.uazapi_message_id } },
+            // Try without JID suffix if needed
+            { path: "/message/react", body: { number: contactPhone, text: emoji, id: mapping.uazapi_message_id } },
           ]);
 
           uazapiSuccess = result.success;
           if (!result.success) {
-            console.error("❌ All react attempts failed:", result.status, result.body);
+            console.error("❌ React failed:", result.status, result.body);
             return new Response(
               JSON.stringify({ error: "Failed to react on WhatsApp", details: result.body }),
               { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
