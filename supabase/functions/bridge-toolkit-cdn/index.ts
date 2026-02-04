@@ -102,23 +102,32 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     
     // Ensure chat panel is open before showing banners
     const ensureChatOpen = () => {
-        // Look for closed chat indicators or expand buttons
-        const expandButtons = document.querySelectorAll('[data-testid*="expand"], [aria-label*="expand"], [aria-label*="abrir"], [aria-label*="open"]');
+        // PRIORITY: Look for the closed/collapsed chat input (GHL pattern)
+        // When chat is closed, GHL shows an input with "Digite uma mensagem..." placeholder
+        const closedChatInput = document.querySelector("input[id^='composer-input-']");
+        
+        if (closedChatInput && closedChatInput.offsetParent !== null) {
+            const placeholder = closedChatInput.getAttribute('placeholder') || '';
+            console.log("🔍 Bridge: Found composer input, placeholder:", placeholder);
+            
+            // If placeholder contains "Digite" or is a collapsed state indicator, click to expand
+            if (placeholder.includes('Digite') || placeholder.includes('message') || placeholder.includes('Message')) {
+                console.log("📱 Bridge: Clicking composer input to expand chat...");
+                closedChatInput.click();
+                closedChatInput.focus();
+                return true; // Will need to wait for expansion
+            }
+        }
+        
+        // Fallback: Look for other closed chat indicators
         const chatInput = findMessageInput();
         
-        // If no input is visible, try to click on conversation or expand chat
+        // If no proper input is visible, try other methods
         if (!chatInput || chatInput.offsetParent === null) {
-            console.log("🔍 Bridge: Chat appears closed, trying to open...");
-            
-            // Try to find and click on the conversation row or expand button
-            const conversationRow = document.querySelector('.hl_conversations--conversation-card.active, [class*="conversation"][class*="active"], [class*="selected"]');
-            if (conversationRow) {
-                console.log("📱 Bridge: Clicking conversation row to open chat...");
-                conversationRow.click();
-                return true; // Will need to wait
-            }
+            console.log("🔍 Bridge: Chat appears closed, trying other methods...");
             
             // Try expand buttons
+            const expandButtons = document.querySelectorAll('[data-testid*="expand"], [aria-label*="expand"], [aria-label*="abrir"], [aria-label*="open"]');
             for (const btn of expandButtons) {
                 if (btn.offsetParent !== null) {
                     console.log("📱 Bridge: Clicking expand button...");
@@ -127,11 +136,11 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 }
             }
             
-            // Look for any clickable element in conversation list
-            const conversationItem = document.querySelector('[class*="conversation-card"], [class*="ConversationItem"]');
-            if (conversationItem) {
-                console.log("📱 Bridge: Clicking conversation item...");
-                conversationItem.click();
+            // Try to find and click on the conversation row
+            const conversationRow = document.querySelector('.hl_conversations--conversation-card.active, [class*="conversation"][class*="active"], [class*="selected"]');
+            if (conversationRow) {
+                console.log("📱 Bridge: Clicking conversation row to open chat...");
+                conversationRow.click();
                 return true;
             }
             
