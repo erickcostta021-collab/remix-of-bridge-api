@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v15: Iniciando...");
+    console.log("🚀 Bridge Toolkit v17: Iniciando...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
@@ -913,30 +913,55 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     const handleRealtimeUpdate = (payload) => {
         console.log("📡 Bridge Realtime:", payload);
         
-        const { ghl_id, type, new_text, emoji, quoted_text, reply_text, fromMe } = payload;
+        const { ghl_id, type, new_text, original_text, emoji, quoted_text, reply_text, fromMe } = payload;
         
         if (!ghl_id) return;
         
         if (type === 'delete') {
-            renderDeletedState(ghl_id);
-        } else if (type === 'edit') {
-            // Get original text from current DOM before update
+            // Use original_text from payload if available, otherwise try to get from DOM
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
-            const origText = msgEl?.querySelector('.text-\\\\[14px\\\\]')?.innerText || '';
+            const textFromDom = msgEl?.querySelector('.text-\\\\[14px\\\\]')?.innerText || 
+                               msgEl?.querySelector('[class*="text-"]')?.innerText || '';
+            const textToShow = original_text || textFromDom || '(mensagem apagada)';
+            
+            // Store original text before rendering overlay
+            if (msgEl && !msgEl.dataset.originalText) {
+                msgEl.dataset.originalText = textFromDom;
+            }
+            
+            renderDeletedState(ghl_id);
+            console.log("🗑️ Bridge: Processed delete event", { ghl_id, fromMe, hasOriginalText: !!original_text });
+        } else if (type === 'edit') {
+            // Use original_text from payload if available, otherwise get from DOM
+            const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
+            const textFromDom = msgEl?.querySelector('.text-\\\\[14px\\\\]')?.innerText || 
+                               msgEl?.querySelector('[class*="text-"]')?.innerText || '';
+            const origText = original_text || textFromDom || '(texto original)';
+            
             renderEditedState(ghl_id, new_text, origText);
+            console.log("✏️ Bridge: Processed edit event", { ghl_id, new_text: new_text?.substring(0, 30), fromMe, hasOriginalText: !!original_text });
         } else if (type === 'reply' && quoted_text) {
             renderRepliedState(ghl_id, quoted_text, reply_text);
         } else if (type === 'react' && emoji) {
-            // Optional: render reaction badge on message
+            // Render reaction badge on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
-            if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
-                const badge = document.createElement('span');
-                badge.className = 'bridge-reaction-badge';
-                badge.style.cssText = 'position: absolute; bottom: -8px; right: 8px; background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);';
-                badge.innerText = emoji;
-                msgEl.style.position = 'relative';
-                msgEl.appendChild(badge);
+            if (msgEl) {
+                // Check if we already have this emoji
+                const existingBadge = msgEl.querySelector('.bridge-reaction-badge');
+                if (existingBadge) {
+                    // Add emoji to existing badge
+                    existingBadge.innerText += emoji;
+                } else {
+                    // Create new badge
+                    const badge = document.createElement('span');
+                    badge.className = 'bridge-reaction-badge';
+                    badge.style.cssText = 'position: absolute; bottom: -8px; right: 8px; background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);';
+                    badge.innerText = emoji;
+                    msgEl.style.position = 'relative';
+                    msgEl.appendChild(badge);
+                }
             }
+            console.log("😊 Bridge: Processed react event", { ghl_id, emoji, fromMe });
         }
     };
     
