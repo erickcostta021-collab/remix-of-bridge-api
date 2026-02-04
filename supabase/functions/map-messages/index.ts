@@ -564,6 +564,58 @@ serve(async (req) => {
       );
     }
 
+    // Action: list-states - Get all modified message states for a location (for page load persistence)
+    if (action === "list-states") {
+      const { location_id, ghl_ids } = body;
+
+      if (!location_id && !ghl_ids) {
+        return new Response(
+          JSON.stringify({ error: "location_id or ghl_ids is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let query = supabase
+        .from("message_map")
+        .select("ghl_message_id, message_text, is_deleted, is_edited, reactions")
+        .or("is_deleted.eq.true,is_edited.eq.true,reactions.neq.null");
+
+      if (location_id) {
+        query = query.eq("location_id", location_id);
+      }
+
+      if (ghl_ids && Array.isArray(ghl_ids) && ghl_ids.length > 0) {
+        query = query.in("ghl_message_id", ghl_ids);
+      }
+
+      // Limit to last 100 modified messages to avoid large payloads
+      query = query.order("updated_at", { ascending: false }).limit(100);
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("Failed to list message states:", error);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Transform to a more efficient format for the frontend
+      const states = (data || []).map(row => ({
+        ghl_id: row.ghl_message_id,
+        text: row.message_text,
+        is_deleted: row.is_deleted || false,
+        is_edited: row.is_edited || false,
+        reactions: row.reactions || [],
+      }));
+
+      return new Response(
+        JSON.stringify({ success: true, states }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ error: "Invalid action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
