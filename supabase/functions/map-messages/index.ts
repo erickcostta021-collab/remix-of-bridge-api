@@ -218,7 +218,13 @@ serve(async (req) => {
       await supabase.channel("ghl_updates").send({
         type: "broadcast",
         event: "msg_update",
-        payload: { ghl_id, type: "edit", new_text, location_id: mapping.location_id },
+        payload: { 
+          ghl_id, 
+          type: "edit", 
+          new_text, 
+          original_text: mapping.message_text,
+          location_id: mapping.location_id 
+        },
       });
 
       return new Response(
