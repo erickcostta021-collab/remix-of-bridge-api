@@ -137,69 +137,32 @@ const BRIDGE_TOOLKIT_SCRIPT = `
 
     // Intercept keyboard Enter and send buttons to handle replies
     const interceptSendActions = () => {
-        // Find all text inputs in chat area
-        const inputs = document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"]');
-        
-        inputs.forEach(input => {
-            if (input.dataset.bridgeKeyIntercepted) return;
-            input.dataset.bridgeKeyIntercepted = 'true';
+        // Use document-level capture to intercept before GHL
+        if (!window.bridgeDocumentInterceptorAttached) {
+            window.bridgeDocumentInterceptorAttached = true;
             
-            // Intercept Enter key
-            input.addEventListener('keydown', async (e) => {
+            // Capture Enter key at document level
+            document.addEventListener('keydown', async (e) => {
                 if (e.key !== 'Enter' || e.shiftKey) return;
-                if (!replyContext) return; // Let normal flow continue
-                
-                const text = input.value || input.innerText || '';
-                
-                if (text.trim()) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    const result = await sendReply(text.trim());
-                    
-                    if (result) {
-                        // Clear the input
-                        if (input.value !== undefined) {
-                            input.value = '';
-                        } else {
-                            input.innerText = '';
-                        }
-                        // Dispatch input event to update GHL state
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        
-                        // Clear reply context and banner
-                        clearReplyContext();
-                    }
-                }
-            }, true);
-        });
-        
-        // Also intercept click on any button that looks like send
-        const buttons = document.querySelectorAll('button, [role="button"]');
-        buttons.forEach(btn => {
-            if (btn.dataset.bridgeClickIntercepted) return;
-            
-            // Check if it's likely a send button (has send icon, is near input, etc)
-            const isSendButton = btn.querySelector('svg') && 
-                (btn.closest('form') || btn.closest('[class*="input"]') || btn.closest('[class*="chat"]'));
-            
-            if (!isSendButton) return;
-            
-            btn.dataset.bridgeClickIntercepted = 'true';
-            
-            btn.addEventListener('click', async (e) => {
                 if (!replyContext) return;
                 
-                const inputArea = document.querySelector('textarea, [contenteditable="true"]');
-                const text = inputArea?.value || inputArea?.innerText || '';
+                const inputArea = document.activeElement;
+                if (!inputArea || (inputArea.tagName !== 'TEXTAREA' && !inputArea.isContentEditable && inputArea.type !== 'text')) return;
+                
+                const text = inputArea.value || inputArea.innerText || '';
+                console.log("🔑 Bridge: Enter detected with reply context, text:", text.substring(0, 30));
                 
                 if (text.trim()) {
                     e.preventDefault();
                     e.stopPropagation();
+                    e.stopImmediatePropagation();
                     
+                    console.log("📤 Bridge: Sending reply to WhatsApp...");
                     const result = await sendReply(text.trim());
                     
                     if (result) {
+                        console.log("✅ Bridge: Reply sent successfully");
+                        // Clear the input
                         if (inputArea.value !== undefined) {
                             inputArea.value = '';
                         } else {
@@ -209,8 +172,49 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         clearReplyContext();
                     }
                 }
-            }, true);
-        });
+            }, true); // Capture phase
+            
+            // Also capture clicks on send buttons
+            document.addEventListener('click', async (e) => {
+                if (!replyContext) return;
+                
+                const btn = e.target.closest('button, [role="button"]');
+                if (!btn) return;
+                
+                // Check if it's a send button (has send/arrow icon or is submit type)
+                const hasSendIcon = btn.querySelector('svg');
+                const isInChatArea = btn.closest('form') || btn.closest('[class*="input"]') || btn.closest('[class*="message"]') || btn.closest('[class*="chat"]');
+                
+                if (!hasSendIcon || !isInChatArea) return;
+                
+                const inputArea = document.querySelector('textarea, [contenteditable="true"]');
+                const text = inputArea?.value || inputArea?.innerText || '';
+                
+                console.log("🖱️ Bridge: Send button clicked with reply context, text:", text.substring(0, 30));
+                
+                if (text.trim()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    
+                    console.log("📤 Bridge: Sending reply via button...");
+                    const result = await sendReply(text.trim());
+                    
+                    if (result) {
+                        console.log("✅ Bridge: Reply sent successfully via button");
+                        if (inputArea.value !== undefined) {
+                            inputArea.value = '';
+                        } else {
+                            inputArea.innerText = '';
+                        }
+                        inputArea.dispatchEvent(new Event('input', { bubbles: true }));
+                        clearReplyContext();
+                    }
+                }
+            }, true); // Capture phase
+            
+            console.log("🎯 Bridge: Document-level interceptors attached");
+        }
     };
     
     // Helper to clear reply context and banner
@@ -218,6 +222,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         const banner = document.getElementById('bridge-reply-banner');
         if (banner) banner.remove();
         replyContext = null;
+        console.log("🧹 Bridge: Reply context cleared");
         console.log("✅ Reply context cleared");
     };
 
