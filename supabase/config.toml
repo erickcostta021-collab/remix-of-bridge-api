@@ -34,3 +34,6 @@ verify_jwt = false
 
 [functions.bridge-switcher-cdn]
 verify_jwt = false
+
+[functions.map-messages]
+verify_jwt = false
