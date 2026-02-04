@@ -133,9 +133,16 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             border: 1px solid #f0f0f0; font-family: sans-serif;
         \`;
 
+        const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+        const moreEmojis = ['🔥', '👏', '🎉', '💯', '🤔', '😍', '😭', '🙄', '😡', '👎', '✅', '❌', '⭐', '💪', '🤝', '💀', '🥳', '😅'];
+        
         menu.innerHTML = \`
-            <div style="display:flex; justify-content:space-around; padding:12px; border-bottom:1px solid #f0f0f0;">
-                \${['👍', '❤️', '😂', '😮', '😢', '🙏'].map(em => \`<span class="em-btn" style="cursor:pointer; font-size:22px;" title="Reagir com \${em}">\${em}</span>\`).join('')}
+            <div id="emoji-quick" style="display:flex; justify-content:space-around; align-items:center; padding:12px; border-bottom:1px solid #f0f0f0;">
+                \${quickEmojis.map(em => \`<span class="em-btn" style="cursor:pointer; font-size:22px; transition:transform 0.1s;" title="Reagir com \${em}">\${em}</span>\`).join('')}
+                <span id="emoji-expand" style="cursor:pointer; font-size:18px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:#f0f0f0; border-radius:50%; transition:background 0.2s;" title="Mais emojis">➕</span>
+            </div>
+            <div id="emoji-more" style="display:none; flex-wrap:wrap; justify-content:center; gap:8px; padding:12px; border-bottom:1px solid #f0f0f0; max-height:120px; overflow-y:auto;">
+                \${moreEmojis.map(em => \`<span class="em-btn" style="cursor:pointer; font-size:22px; transition:transform 0.1s;" title="Reagir com \${em}">\${em}</span>\`).join('')}
             </div>
             <div class="menu-opt" data-act="reply" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>↩️</span> Responder</div>
             <div class="menu-opt" data-act="copy" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>📋</span> Copiar</div>
@@ -149,6 +156,27 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         menu.querySelectorAll('.menu-opt').forEach(opt => {
             opt.addEventListener('mouseenter', () => opt.style.background = '#f5f5f5');
             opt.addEventListener('mouseleave', () => opt.style.background = 'transparent');
+        });
+
+        // Expand emoji button
+        const expandBtn = menu.querySelector('#emoji-expand');
+        const morePanel = menu.querySelector('#emoji-more');
+        let emojiExpanded = false;
+        
+        if (expandBtn && morePanel) {
+            expandBtn.onclick = (e) => {
+                e.stopPropagation();
+                emojiExpanded = !emojiExpanded;
+                morePanel.style.display = emojiExpanded ? 'flex' : 'none';
+                expandBtn.innerText = emojiExpanded ? '➖' : '➕';
+                expandBtn.style.background = emojiExpanded ? '#e0e0e0' : '#f0f0f0';
+            };
+        }
+
+        // Emoji hover effect
+        menu.querySelectorAll('.em-btn').forEach(btn => {
+            btn.addEventListener('mouseenter', () => btn.style.transform = 'scale(1.2)');
+            btn.addEventListener('mouseleave', () => btn.style.transform = 'scale(1)');
         });
 
         // Get message text from DOM
