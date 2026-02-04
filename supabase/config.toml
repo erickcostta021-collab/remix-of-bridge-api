@@ -40,3 +40,12 @@ verify_jwt = false
 
 [functions.bridge-toolkit-cdn]
 verify_jwt = false
+
+[functions.uazapi-proxy-embed]
+verify_jwt = false
+
+[functions.list-groups]
+verify_jwt = false
+
+[functions.group-commands]
+verify_jwt = false

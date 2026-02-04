@@ -6,22 +6,47 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit: Iniciando...");
+    console.log("🚀 Bridge Toolkit v12: Iniciando...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
-        webhook_endpoint: '/functions/v1/map-messages'
+        endpoint: '/functions/v1/map-messages'
     };
 
-    const sendWebhook = async (action, ghlId, extra = {}) => {
-        console.log(\`📡 Ação: \${action} | ID: \${ghlId}\`);
+    const showToast = (msg) => {
+        const toast = document.createElement('div');
+        toast.innerText = msg;
+        toast.style.cssText = \`
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+            background: #333; color: #fff; padding: 10px 20px; border-radius: 8px;
+            z-index: 999999; font-size: 14px; font-family: sans-serif;
+        \`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2500);
+    };
+
+    const sendAction = async (action, ghlId, extra = {}) => {
+        console.log(\`📡 Ação: \${action} | GHL ID: \${ghlId}\`);
         try {
-            await fetch(BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.webhook_endpoint, {
+            const response = await fetch(BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action, ghl_id: ghlId, ...extra })
             });
-        } catch (e) { console.error("❌ Erro Webhook:", e); }
+            const data = await response.json();
+            if (data.success) {
+                console.log("✅ Ação executada:", data);
+                return data;
+            } else {
+                console.error("❌ Erro na ação:", data.error);
+                showToast("Erro: " + (data.error || "Falha na operação"));
+                return null;
+            }
+        } catch (e) {
+            console.error("❌ Erro de conexão:", e);
+            showToast("Erro de conexão");
+            return null;
+        }
     };
 
     window.openBridgeMenu = (e, triggerEl) => {
@@ -29,9 +54,14 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         e.stopPropagation();
 
         const parentItem = triggerEl.closest('[data-message-id]');
-        const ghlId = parentItem ? parentItem.getAttribute('data-message-id') : "id-nao-encontrado";
+        const ghlId = parentItem ? parentItem.getAttribute('data-message-id') : null;
         const msgContainer = triggerEl.closest('.message-container');
         const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
+        
+        if (!ghlId) {
+            console.error("❌ ID da mensagem não encontrado");
+            return;
+        }
         
         console.log("📂 Abrindo menu para ID:", ghlId);
 
@@ -43,11 +73,11 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         
         const rect = triggerEl.getBoundingClientRect();
         const openDown = rect.top < 300;
-        const topPos = openDown ? rect.bottom + 5 : rect.top - 240;
+        const topPos = openDown ? rect.bottom + 5 : rect.top - 260;
+        const leftPos = isOutbound ? rect.left - 200 : rect.left;
 
         menu.style.cssText = \`
-            position: fixed; top: \${topPos}px; 
-            left: \${isOutbound ? rect.left - 200 : rect.left}px; 
+            position: fixed; top: \${topPos}px; left: \${leftPos}px; 
             z-index: 999999; background: white; border-radius: 12px; 
             box-shadow: 0 4px 20px rgba(0,0,0,0.2); width: 240px; 
             border: 1px solid #f0f0f0; font-family: sans-serif;
@@ -55,51 +85,83 @@ const BRIDGE_TOOLKIT_SCRIPT = `
 
         menu.innerHTML = \`
             <div style="display:flex; justify-content:space-around; padding:12px; border-bottom:1px solid #f0f0f0;">
-                \${['👍', '❤️', '😂', '😮', '😢', '🙏'].map(em => \`<span class="em-btn" style="cursor:pointer; font-size:22px;">\${em}</span>\`).join('')}
-                <span id="btn-plus-emoji" style="cursor:pointer; font-size:18px; color:#666; background:#f0f0f0; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">＋</span>
+                \${['👍', '❤️', '😂', '😮', '😢', '🙏'].map(em => \`<span class="em-btn" style="cursor:pointer; font-size:22px;" title="Reagir com \${em}">\${em}</span>\`).join('')}
             </div>
-            <div class="menu-opt" data-act="reply" style="padding:10px 16px; cursor:pointer; display:flex; align-items:center; gap:12px;"><span>↩️</span> Responder</div>
-            <div class="menu-opt" data-act="copy" style="padding:10px 16px; cursor:pointer; display:flex; align-items:center; gap:12px;"><span>📋</span> Copiar</div>
-            <div class="menu-opt" data-act="edit" style="padding:10px 16px; cursor:pointer; display:flex; align-items:center; gap:12px;"><span>✏️</span> Editar</div>
-            <div class="menu-opt" data-act="delete" style="padding:10px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; color:#ef4444;"><span>🗑️</span> Apagar</div>
+            <div class="menu-opt" data-act="copy" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>📋</span> Copiar</div>
+            <div class="menu-opt" data-act="edit" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>✏️</span> Editar</div>
+            <div class="menu-opt" data-act="delete" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; color:#ef4444; transition: background 0.2s;"><span>🗑️</span> Apagar</div>
         \`;
 
         document.body.appendChild(menu);
 
-        menu.querySelectorAll('.em-btn').forEach(btn => {
-            btn.onclick = () => { sendWebhook('react', ghlId, { emoji: btn.innerText }); menu.remove(); };
+        // Hover effect
+        menu.querySelectorAll('.menu-opt').forEach(opt => {
+            opt.addEventListener('mouseenter', () => opt.style.background = '#f5f5f5');
+            opt.addEventListener('mouseleave', () => opt.style.background = 'transparent');
         });
 
-        menu.querySelectorAll('.menu-opt').forEach(opt => {
-            opt.onclick = () => {
-                const act = opt.getAttribute('data-act');
-                if(act === 'copy') {
-                    const text = parentItem.querySelector('.text-\\\\[14px\\\\]')?.innerText;
-                    navigator.clipboard.writeText(text);
-                }
-                if(act === 'delete') sendWebhook('delete', ghlId);
-                if(act === 'edit') {
-                    const oldText = parentItem.querySelector('.text-\\\\[14px\\\\]')?.innerText;
-                    const newT = prompt("Editar mensagem:", oldText);
-                    if(newT) sendWebhook('edit', ghlId, { new_text: newT });
-                }
+        // Emoji reactions
+        menu.querySelectorAll('.em-btn').forEach(btn => {
+            btn.onclick = async () => {
+                const emoji = btn.innerText;
                 menu.remove();
+                const result = await sendAction('react', ghlId, { emoji });
+                if (result) showToast(\`Reagiu com \${emoji}\`);
             };
         });
 
-        const outClick = (ev) => { if(!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', outClick); }};
+        // Menu options
+        menu.querySelectorAll('.menu-opt').forEach(opt => {
+            opt.onclick = async () => {
+                const act = opt.getAttribute('data-act');
+                const msgText = parentItem.querySelector('.text-\\\\[14px\\\\]')?.innerText || "";
+                
+                menu.remove();
+                
+                if (act === 'copy') {
+                    navigator.clipboard.writeText(msgText);
+                    showToast("Copiado!");
+                    return;
+                }
+                
+                if (act === 'edit') {
+                    const newText = prompt("Editar mensagem:", msgText);
+                    if (newText && newText !== msgText) {
+                        const result = await sendAction('edit', ghlId, { new_text: newText });
+                        if (result) showToast("Mensagem editada!");
+                    }
+                    return;
+                }
+                
+                if (act === 'delete') {
+                    if (confirm("Apagar esta mensagem para todos?")) {
+                        const result = await sendAction('delete', ghlId, { from_me: isOutbound });
+                        if (result) showToast("Mensagem apagada!");
+                    }
+                    return;
+                }
+            };
+        });
+
+        // Close on outside click
+        const outClick = (ev) => {
+            if (!menu.contains(ev.target)) {
+                menu.remove();
+                document.removeEventListener('click', outClick);
+            }
+        };
         setTimeout(() => document.addEventListener('click', outClick), 50);
     };
 
     const inject = () => {
-        const containers = document.querySelectorAll('.message-container:not(.bridge-v11)');
+        const containers = document.querySelectorAll('.message-container:not(.bridge-v12)');
         
         containers.forEach(msg => {
-            msg.classList.add('bridge-v11');
+            msg.classList.add('bridge-v12');
             const isOutbound = msg.classList.contains('ml-auto');
             
             const btn = document.createElement('div');
-            btn.className = 'bridge-trigger-v11';
+            btn.className = 'bridge-trigger-v12';
             btn.innerHTML = '▼';
             btn.style.cssText = \`
                 position: absolute; top: 5px; 
@@ -108,7 +170,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 border-radius: 50%; display: flex; align-items: center; 
                 justify-content: center; cursor: pointer; z-index: 999;
                 opacity: 0; transition: opacity 0.2s; font-size: 12px; color: #54656f;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.2); border: 1px solid #ddd;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.15); border: 1px solid #e0e0e0;
             \`;
             
             msg.style.setProperty('position', 'relative', 'important');
@@ -122,6 +184,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     setInterval(inject, 1000);
+    console.log("✅ Bridge Toolkit v12 carregado!");
 })();
 `;
 
