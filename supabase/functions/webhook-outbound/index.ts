@@ -219,7 +219,8 @@ function detectMediaType(url: string): string {
 }
 
 // Send text message via UAZAPI
-async function sendTextMessage(base: string, instanceToken: string, phone: string, text: string): Promise<{ sent: boolean; status: number; body: string }> {
+// Returns { sent, status, body, uazapiMessageId }
+async function sendTextMessage(base: string, instanceToken: string, phone: string, text: string): Promise<{ sent: boolean; status: number; body: string; uazapiMessageId: string | null }> {
   const attempts: Array<{ path: string; headers: Record<string, string>; body: Record<string, string> }> = [
     // n8n style - primary
     {
@@ -277,15 +278,24 @@ async function sendTextMessage(base: string, instanceToken: string, phone: strin
     console.log("UAZAPI text response:", { url, status: lastStatus, body: lastBody.substring(0, 200) });
 
     if (res.ok) {
-      return { sent: true, status: lastStatus, body: lastBody };
+      // Extract messageId from response
+      let uazapiMessageId: string | null = null;
+      try {
+        const parsed = JSON.parse(lastBody);
+        uazapiMessageId = parsed?.messageid || parsed?.messageId || parsed?.id || parsed?.key?.id || null;
+      } catch {
+        // Ignore parse errors
+      }
+      return { sent: true, status: lastStatus, body: lastBody, uazapiMessageId };
     }
   }
 
-  return { sent: false, status: lastStatus, body: lastBody };
+  return { sent: false, status: lastStatus, body: lastBody, uazapiMessageId: null };
 }
 
 // Send media message via UAZAPI (based on n8n flow)
-async function sendMediaMessage(base: string, instanceToken: string, phone: string, fileUrl: string, mediaType: string, caption?: string): Promise<{ sent: boolean; status: number; body: string }> {
+// Returns { sent, status, body, uazapiMessageId }
+async function sendMediaMessage(base: string, instanceToken: string, phone: string, fileUrl: string, mediaType: string, caption?: string): Promise<{ sent: boolean; status: number; body: string; uazapiMessageId: string | null }> {
   // Based on n8n: POST {base}/send/media with header token and body { number, type, file, readchat, text (optional caption) }
   const attempts: Array<{ path: string; headers: Record<string, string>; body: Record<string, any> }> = [
     // n8n style - primary
@@ -342,11 +352,19 @@ async function sendMediaMessage(base: string, instanceToken: string, phone: stri
     console.log("UAZAPI media response:", { url, status: lastStatus, body: lastBody.substring(0, 200) });
 
     if (res.ok) {
-      return { sent: true, status: lastStatus, body: lastBody };
+      // Extract messageId from response
+      let uazapiMessageId: string | null = null;
+      try {
+        const parsed = JSON.parse(lastBody);
+        uazapiMessageId = parsed?.messageid || parsed?.messageId || parsed?.id || parsed?.key?.id || null;
+      } catch {
+        // Ignore parse errors
+      }
+      return { sent: true, status: lastStatus, body: lastBody, uazapiMessageId };
     }
   }
 
-  return { sent: false, status: lastStatus, body: lastBody };
+  return { sent: false, status: lastStatus, body: lastBody, uazapiMessageId: null };
 }
 
 // Database-based deduplication using ghl_processed_messages table
@@ -1952,6 +1970,23 @@ serve(async (req: Request) => {
       
       if (!result.sent) {
         console.error("Failed to send media:", { attachment, status: result.status, body: result.body });
+      } else if (result.uazapiMessageId && messageId) {
+        // Save message mapping for outbound media
+        try {
+          await supabase.from("message_map").upsert({
+            ghl_message_id: messageId,
+            uazapi_message_id: result.uazapiMessageId,
+            location_id: locationId,
+            contact_id: contactId || null,
+            message_text: messageText || "",
+            message_type: `media:${mediaType}`,
+            from_me: true,
+            original_timestamp: new Date().toISOString(),
+          }, { onConflict: "ghl_message_id" });
+          console.log("Outbound message mapping saved:", { ghl: messageId, uazapi: result.uazapiMessageId });
+        } catch (mapErr) {
+          console.error("Failed to save outbound mapping:", mapErr);
+        }
       }
     }
 
@@ -1964,6 +1999,23 @@ serve(async (req: Request) => {
       
       if (!result.sent) {
         console.error("Failed to send text:", { status: result.status, body: result.body });
+      } else if (result.uazapiMessageId && messageId) {
+        // Save message mapping for outbound text
+        try {
+          await supabase.from("message_map").upsert({
+            ghl_message_id: messageId,
+            uazapi_message_id: result.uazapiMessageId,
+            location_id: locationId,
+            contact_id: contactId || null,
+            message_text: messageText,
+            message_type: "text",
+            from_me: true,
+            original_timestamp: new Date().toISOString(),
+          }, { onConflict: "ghl_message_id" });
+          console.log("Outbound message mapping saved:", { ghl: messageId, uazapi: result.uazapiMessageId });
+        } catch (mapErr) {
+          console.error("Failed to save outbound mapping:", mapErr);
+        }
       }
     }
 
