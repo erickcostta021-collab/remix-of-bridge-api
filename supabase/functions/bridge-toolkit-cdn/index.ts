@@ -135,86 +135,142 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         }
     };
 
+    // Find the active message input (GHL uses various input types)
+    const findMessageInput = () => {
+        // Try multiple selectors used by GHL
+        const selectors = [
+            'textarea[placeholder*="Type"]',
+            'textarea[placeholder*="type"]',
+            'textarea[placeholder*="Message"]',
+            'textarea[placeholder*="message"]',
+            'textarea',
+            '[contenteditable="true"]',
+            'input[type="text"]'
+        ];
+        
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el && (el.offsetParent !== null)) { // visible
+                return el;
+            }
+        }
+        return document.activeElement;
+    };
+    
+    // Get text from input element
+    const getInputText = (el) => {
+        if (!el) return '';
+        if (el.value !== undefined && el.value !== '') return el.value;
+        if (el.innerText) return el.innerText;
+        if (el.textContent) return el.textContent;
+        return '';
+    };
+    
+    // Clear input element
+    const clearInput = (el) => {
+        if (!el) return;
+        if (el.value !== undefined) {
+            el.value = '';
+        } else if (el.innerText !== undefined) {
+            el.innerText = '';
+        }
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
     // Intercept keyboard Enter and send buttons to handle replies
     const interceptSendActions = () => {
         // Use document-level capture to intercept before GHL
-        if (!window.bridgeDocumentInterceptorAttached) {
-            window.bridgeDocumentInterceptorAttached = true;
+        if (window.bridgeDocumentInterceptorAttached) return;
+        window.bridgeDocumentInterceptorAttached = true;
+        
+        console.log("🎯 Bridge: Attaching document-level interceptors...");
+        
+        // Capture Enter key at document level
+        document.addEventListener('keydown', async (e) => {
+            // Only intercept Enter (not Shift+Enter)
+            if (e.key !== 'Enter' || e.shiftKey) return;
             
-            // Capture Enter key at document level
-            document.addEventListener('keydown', async (e) => {
-                if (e.key !== 'Enter' || e.shiftKey) return;
-                if (!replyContext) return;
+            // Only if we have a reply context
+            if (!replyContext) {
+                console.log("⏭️ Bridge: Enter pressed but no reply context, skipping");
+                return;
+            }
+            
+            const inputArea = findMessageInput();
+            const text = getInputText(inputArea);
+            
+            console.log("🔑 Bridge: Enter detected!", { 
+                hasReplyContext: !!replyContext, 
+                text: text.substring(0, 50),
+                inputTag: inputArea?.tagName,
+                activeElement: document.activeElement?.tagName
+            });
+            
+            if (text.trim()) {
+                // CRITICAL: Stop the event before it reaches GHL
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
                 
-                const inputArea = document.activeElement;
-                if (!inputArea || (inputArea.tagName !== 'TEXTAREA' && !inputArea.isContentEditable && inputArea.type !== 'text')) return;
+                console.log("📤 Bridge: Intercepted! Sending reply to WhatsApp...");
+                showToast("Enviando resposta...");
                 
-                const text = inputArea.value || inputArea.innerText || '';
-                console.log("🔑 Bridge: Enter detected with reply context, text:", text.substring(0, 30));
+                const result = await sendReply(text.trim());
                 
-                if (text.trim()) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    
-                    console.log("📤 Bridge: Sending reply to WhatsApp...");
-                    const result = await sendReply(text.trim());
-                    
-                    if (result) {
-                        console.log("✅ Bridge: Reply sent successfully");
-                        // Clear the input
-                        if (inputArea.value !== undefined) {
-                            inputArea.value = '';
-                        } else {
-                            inputArea.innerText = '';
-                        }
-                        inputArea.dispatchEvent(new Event('input', { bubbles: true }));
-                        clearReplyContext();
-                    }
+                if (result) {
+                    console.log("✅ Bridge: Reply sent successfully");
+                    clearInput(inputArea);
+                    clearReplyContext();
+                } else {
+                    console.log("❌ Bridge: Reply failed");
                 }
-            }, true); // Capture phase
+            }
+        }, true); // Capture phase - runs BEFORE bubbling
+        
+        // Also capture clicks on send buttons
+        document.addEventListener('click', async (e) => {
+            // Only if we have a reply context
+            if (!replyContext) return;
             
-            // Also capture clicks on send buttons
-            document.addEventListener('click', async (e) => {
-                if (!replyContext) return;
+            const btn = e.target.closest('button, [role="button"], [data-testid*="send"], [class*="send"]');
+            if (!btn) return;
+            
+            // Check if it looks like a send button
+            const hasSendIcon = btn.querySelector('svg') || btn.querySelector('[class*="send"]');
+            const btnText = (btn.textContent || '').toLowerCase();
+            const isSendButton = hasSendIcon || btnText.includes('send') || btnText.includes('enviar');
+            
+            if (!isSendButton) return;
+            
+            const inputArea = findMessageInput();
+            const text = getInputText(inputArea);
+            
+            console.log("🖱️ Bridge: Send button clicked!", { 
+                hasReplyContext: !!replyContext, 
+                text: text.substring(0, 50),
+                buttonClass: btn.className
+            });
+            
+            if (text.trim()) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
                 
-                const btn = e.target.closest('button, [role="button"]');
-                if (!btn) return;
+                console.log("📤 Bridge: Sending reply via button...");
+                showToast("Enviando resposta...");
                 
-                // Check if it's a send button (has send/arrow icon or is submit type)
-                const hasSendIcon = btn.querySelector('svg');
-                const isInChatArea = btn.closest('form') || btn.closest('[class*="input"]') || btn.closest('[class*="message"]') || btn.closest('[class*="chat"]');
+                const result = await sendReply(text.trim());
                 
-                if (!hasSendIcon || !isInChatArea) return;
-                
-                const inputArea = document.querySelector('textarea, [contenteditable="true"]');
-                const text = inputArea?.value || inputArea?.innerText || '';
-                
-                console.log("🖱️ Bridge: Send button clicked with reply context, text:", text.substring(0, 30));
-                
-                if (text.trim()) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    
-                    console.log("📤 Bridge: Sending reply via button...");
-                    const result = await sendReply(text.trim());
-                    
-                    if (result) {
-                        console.log("✅ Bridge: Reply sent successfully via button");
-                        if (inputArea.value !== undefined) {
-                            inputArea.value = '';
-                        } else {
-                            inputArea.innerText = '';
-                        }
-                        inputArea.dispatchEvent(new Event('input', { bubbles: true }));
-                        clearReplyContext();
-                    }
+                if (result) {
+                    console.log("✅ Bridge: Reply sent successfully via button");
+                    clearInput(inputArea);
+                    clearReplyContext();
                 }
-            }, true); // Capture phase
-            
-            console.log("🎯 Bridge: Document-level interceptors attached");
-        }
+            }
+        }, true); // Capture phase
+        
+        console.log("✅ Bridge: Document-level interceptors attached successfully");
     };
     
     // Helper to clear reply context and banner
