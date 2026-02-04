@@ -6,19 +6,21 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v12: Iniciando...");
+    console.log("🚀 Bridge Toolkit v13: Iniciando...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
         endpoint: '/functions/v1/map-messages'
     };
 
-    const showToast = (msg) => {
+    let replyContext = null; // Stores message being replied to
+
+    const showToast = (msg, isError = false) => {
         const toast = document.createElement('div');
         toast.innerText = msg;
         toast.style.cssText = \`
             position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
-            background: #333; color: #fff; padding: 10px 20px; border-radius: 8px;
+            background: \${isError ? '#ef4444' : '#333'}; color: #fff; padding: 10px 20px; border-radius: 8px;
             z-index: 999999; font-size: 14px; font-family: sans-serif;
         \`;
         document.body.appendChild(toast);
@@ -26,7 +28,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     const sendAction = async (action, ghlId, extra = {}) => {
-        console.log(\`📡 Ação: \${action} | GHL ID: \${ghlId}\`);
+        console.log(\`📡 Ação: \${action} | GHL ID: \${ghlId}\`, extra);
         try {
             const response = await fetch(BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint, {
                 method: 'POST',
@@ -39,14 +41,52 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 return data;
             } else {
                 console.error("❌ Erro na ação:", data.error);
-                showToast("Erro: " + (data.error || "Falha na operação"));
+                if (data.error === "Message not found") {
+                    showToast("Mensagem não mapeada. Envie uma nova mensagem primeiro.", true);
+                } else {
+                    showToast("Erro: " + (data.error || "Falha na operação"), true);
+                }
                 return null;
             }
         } catch (e) {
             console.error("❌ Erro de conexão:", e);
-            showToast("Erro de conexão");
+            showToast("Erro de conexão", true);
             return null;
         }
+    };
+
+    // Show reply banner in input area
+    const showReplyBanner = (msgText, ghlId) => {
+        const existingBanner = document.getElementById('bridge-reply-banner');
+        if (existingBanner) existingBanner.remove();
+        
+        const inputArea = document.querySelector('textarea, [contenteditable="true"]');
+        if (!inputArea) return;
+        
+        const banner = document.createElement('div');
+        banner.id = 'bridge-reply-banner';
+        banner.style.cssText = \`
+            background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 8px 12px;
+            margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between;
+            align-items: center; font-family: sans-serif; font-size: 13px;
+        \`;
+        banner.innerHTML = \`
+            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%;">
+                <span style="color:#0ea5e9; font-weight:600;">↩️ Respondendo:</span>
+                <span style="color:#666; margin-left:8px;">\${msgText.substring(0, 50)}\${msgText.length > 50 ? '...' : ''}</span>
+            </div>
+            <span id="cancel-reply" style="cursor:pointer; color:#999; font-size:18px;">✕</span>
+        \`;
+        
+        inputArea.parentElement.insertBefore(banner, inputArea);
+        
+        document.getElementById('cancel-reply').onclick = () => {
+            banner.remove();
+            replyContext = null;
+        };
+        
+        replyContext = { ghlId, text: msgText };
+        inputArea.focus();
     };
 
     window.openBridgeMenu = (e, triggerEl) => {
@@ -59,11 +99,12 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
         
         if (!ghlId) {
-            console.error("❌ ID da mensagem não encontrado");
+            console.error("❌ ID da mensagem não encontrado no DOM");
+            showToast("ID da mensagem não encontrado", true);
             return;
         }
         
-        console.log("📂 Abrindo menu para ID:", ghlId);
+        console.log("📂 Menu para ID:", ghlId, "| Outbound:", isOutbound);
 
         const prev = document.getElementById('bridge-whatsapp-menu');
         if (prev) prev.remove();
@@ -73,7 +114,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         
         const rect = triggerEl.getBoundingClientRect();
         const openDown = rect.top < 300;
-        const topPos = openDown ? rect.bottom + 5 : rect.top - 260;
+        const topPos = openDown ? rect.bottom + 5 : rect.top - 300;
         const leftPos = isOutbound ? rect.left - 200 : rect.left;
 
         menu.style.cssText = \`
@@ -87,6 +128,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             <div style="display:flex; justify-content:space-around; padding:12px; border-bottom:1px solid #f0f0f0;">
                 \${['👍', '❤️', '😂', '😮', '😢', '🙏'].map(em => \`<span class="em-btn" style="cursor:pointer; font-size:22px;" title="Reagir com \${em}">\${em}</span>\`).join('')}
             </div>
+            <div class="menu-opt" data-act="reply" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>↩️</span> Responder</div>
             <div class="menu-opt" data-act="copy" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>📋</span> Copiar</div>
             <div class="menu-opt" data-act="edit" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>✏️</span> Editar</div>
             <div class="menu-opt" data-act="delete" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; color:#ef4444; transition: background 0.2s;"><span>🗑️</span> Apagar</div>
@@ -99,6 +141,11 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             opt.addEventListener('mouseenter', () => opt.style.background = '#f5f5f5');
             opt.addEventListener('mouseleave', () => opt.style.background = 'transparent');
         });
+
+        // Get message text from DOM
+        const msgText = parentItem.querySelector('.text-\\\\[14px\\\\]')?.innerText || 
+                        parentItem.querySelector('[class*="text-"]')?.innerText || 
+                        parentItem.innerText?.substring(0, 200) || "";
 
         // Emoji reactions
         menu.querySelectorAll('.em-btn').forEach(btn => {
@@ -114,9 +161,13 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         menu.querySelectorAll('.menu-opt').forEach(opt => {
             opt.onclick = async () => {
                 const act = opt.getAttribute('data-act');
-                const msgText = parentItem.querySelector('.text-\\\\[14px\\\\]')?.innerText || "";
-                
                 menu.remove();
+                
+                if (act === 'reply') {
+                    showReplyBanner(msgText, ghlId);
+                    showToast("Digite sua resposta abaixo");
+                    return;
+                }
                 
                 if (act === 'copy') {
                     navigator.clipboard.writeText(msgText);
@@ -154,14 +205,14 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     const inject = () => {
-        const containers = document.querySelectorAll('.message-container:not(.bridge-v12)');
+        const containers = document.querySelectorAll('.message-container:not(.bridge-v13)');
         
         containers.forEach(msg => {
-            msg.classList.add('bridge-v12');
+            msg.classList.add('bridge-v13');
             const isOutbound = msg.classList.contains('ml-auto');
             
             const btn = document.createElement('div');
-            btn.className = 'bridge-trigger-v12';
+            btn.className = 'bridge-trigger-v13';
             btn.innerHTML = '▼';
             btn.style.cssText = \`
                 position: absolute; top: 5px; 
@@ -183,8 +234,17 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         });
     };
 
+    // Expose reply context for send button integration
+    window.getBridgeReplyContext = () => {
+        const ctx = replyContext;
+        replyContext = null;
+        const banner = document.getElementById('bridge-reply-banner');
+        if (banner) banner.remove();
+        return ctx;
+    };
+
     setInterval(inject, 1000);
-    console.log("✅ Bridge Toolkit v12 carregado!");
+    console.log("✅ Bridge Toolkit v13 carregado!");
 })();
 `;
 
