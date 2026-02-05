@@ -412,7 +412,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                     action: 'reply', 
                     ghl_id: ghlId, 
                     text: replyText,
-                    location_id: locationId
+                    location_id: locationId,
+                    ghl_user_id: getGhlUserId()
                 })
             });
             
