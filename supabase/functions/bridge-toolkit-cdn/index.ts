@@ -1029,21 +1029,9 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             renderDeletedState(ghl_id);
             console.log("🗑️ Bridge: Processed delete event", { ghl_id, fromMe, hasOriginalText: !!original_text });
         } else if (type === 'edit') {
-            // Only render edit overlay for OUTBOUND messages (from CRM user)
-            // Inbound edits (from lead) are handled via formatted message in GHL
-            if (fromMe !== true) {
-                console.log("✏️ Bridge: Skipping edit overlay for inbound message", { ghl_id, fromMe });
-                return;
-            }
-            
-            // Use original_text from payload if available, otherwise get from DOM
-            const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
-            const textFromDom = msgEl?.querySelector('.text-\\\\[14px\\\\]')?.innerText || 
-                               msgEl?.querySelector('[class*="text-"]')?.innerText || '';
-            const origText = original_text || textFromDom || '(texto original)';
-            
-            renderEditedState(ghl_id, new_text, origText);
-            console.log("✏️ Bridge: Processed edit event", { ghl_id, new_text: new_text?.substring(0, 30), fromMe, hasOriginalText: !!original_text });
+            // All edits are now handled via InternalComment in GHL
+            // No overlay needed for either inbound or outbound
+            console.log("✏️ Bridge: Edit event received - handled via InternalComment, no overlay", { ghl_id, fromMe });
         } else if (type === 'reply' && replyData?.text) {
             // The ghl_id here is the MESSAGE BEING REPLIED TO
             // We show a badge/indicator that someone replied to this message
@@ -1200,18 +1188,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 data.states.forEach(state => {
                     if (state.is_deleted) {
                         renderDeletedState(state.ghl_id);
-                    } else if (state.is_edited && state.text) {
-                        // Only render edit overlay for OUTBOUND messages (from CRM user)
-                        const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
-                        if (msgEl) {
-                            const isOutbound = getIsOutbound(msgEl);
-                            if (isOutbound) {
-                                renderEditedState(state.ghl_id, state.text, '(texto original)');
-                            } else {
-                                console.log("📋 Bridge: Skipping edit overlay for inbound message", state.ghl_id);
-                            }
-                        }
                     }
+                    // Edit states are now handled via InternalComment - no overlay needed
                     
                     // Render reactions if any
                     if (state.reactions && state.reactions.length > 0) {
