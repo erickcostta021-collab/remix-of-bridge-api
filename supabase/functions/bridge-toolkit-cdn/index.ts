@@ -961,22 +961,29 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             // Render reaction badge on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             if (msgEl) {
+                // Detect if message is outbound (from user) or inbound (from lead)
+                const msgContainer = msgEl.closest('.message-container');
+                const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
+                const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
+                
                 // Replace reaction (not accumulate) - user can only have one active reaction
                 const existingBadge = msgEl.querySelector('.bridge-reaction-badge');
                 if (existingBadge) {
                     // Replace with new emoji
                     existingBadge.innerText = emoji;
+                    // Update position in case it changed
+                    existingBadge.style.cssText = \`position: absolute; bottom: -8px; \${badgePosition} background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\`;
                 } else {
                     // Create new badge
                     const badge = document.createElement('span');
                     badge.className = 'bridge-reaction-badge';
-                    badge.style.cssText = 'position: absolute; bottom: -8px; right: 8px; background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);';
+                    badge.style.cssText = \`position: absolute; bottom: -8px; \${badgePosition} background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\`;
                     badge.innerText = emoji;
                     msgEl.style.position = 'relative';
                     msgEl.appendChild(badge);
                 }
             }
-            console.log("😊 Bridge: Processed react event", { ghl_id, emoji, fromMe });
+            console.log("😊 Bridge: Processed react event", { ghl_id, emoji });
         }
     };
     
@@ -1092,9 +1099,14 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         const currentReaction = state.reactions[state.reactions.length - 1];
                         const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
                         if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
+                            // Detect if message is outbound or inbound for badge positioning
+                            const msgContainer = msgEl.closest('.message-container');
+                            const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
+                            const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
+                            
                             const badge = document.createElement('span');
                             badge.className = 'bridge-reaction-badge';
-                            badge.style.cssText = 'position: absolute; bottom: -8px; right: 8px; background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);';
+                            badge.style.cssText = \`position: absolute; bottom: -8px; \${badgePosition} background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\`;
                             badge.innerText = currentReaction;
                             msgEl.style.position = 'relative';
                             msgEl.appendChild(badge);
