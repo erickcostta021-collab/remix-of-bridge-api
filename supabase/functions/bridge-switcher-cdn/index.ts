@@ -288,9 +288,33 @@ try {
 
         function inject() {
             if (document.getElementById('bridge-api-container')) return;
-            const actionBar = document.querySelector('.msg-composer-actions') || 
-                              document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
-            if (!actionBar) return;
+            
+            // Try multiple selectors for the GHL action bar
+            const actionBarSelectors = [
+                '.msg-composer-actions',
+                '.flex.flex-row.gap-2.items-center.pl-2',
+                '[class*="composer-actions"]',
+                '[class*="message-composer"] .flex',
+                '.hl-text-input-container .flex',
+                '.conversation-input-container .flex',
+                '[class*="input-container"] .flex.items-center',
+            ];
+            
+            let actionBar = null;
+            for (const sel of actionBarSelectors) {
+                actionBar = document.querySelector(sel);
+                if (actionBar) {
+                    console.log(LOG_PREFIX, '✅ Found action bar with selector:', sel);
+                    break;
+                }
+            }
+            
+            if (!actionBar) {
+                // Log available containers for debugging
+                const possibleContainers = document.querySelectorAll('[class*="composer"], [class*="input-container"], [class*="message-input"]');
+                console.log(LOG_PREFIX, '⚠️ Action bar not found. Possible containers:', possibleContainers.length);
+                return;
+            }
 
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
