@@ -969,78 +969,48 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     
     // Render reaction badge with WhatsApp style
     const renderReactionBadge = (msgEl, emoji) => {
-        // Detect if message is outbound (user) vs inbound (lead)
-        // Check parent elements for ml-auto class (GHL's indicator for outbound)
-        let isOutbound = false;
-        let parent = msgEl.parentElement;
-        for (let i = 0; i < 10 && parent; i++) {
-            if (parent.classList && parent.classList.contains('ml-auto')) {
-                isOutbound = true;
-                break;
-            }
-            parent = parent.parentElement;
-        }
-        
-        // Also try spatial detection as fallback
-        if (!isOutbound) {
-            try {
-                let chatContainer = msgEl.parentElement;
-                for (let i = 0; i < 15 && chatContainer; i++) {
-                    const style = window.getComputedStyle(chatContainer);
-                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-                    chatContainer = chatContainer.parentElement;
-                }
-                
-                if (chatContainer) {
-                    const containerRect = chatContainer.getBoundingClientRect();
-                    const msgRect = msgEl.getBoundingClientRect();
-                    const msgCenter = msgRect.left + msgRect.width / 2;
-                    const containerCenter = containerRect.left + containerRect.width / 2;
-                    isOutbound = msgCenter > containerCenter;
-                }
-            } catch (e) {
-                isOutbound = false;
-            }
-        }
+        // Detect if message is outbound using GHL's .ml-auto class on .message-container
+        const msgContainer = msgEl.closest('.message-container');
+        const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
         
         const justifyContent = isOutbound ? 'flex-end' : 'flex-start';
         
-        // Find or create the reactions wrapper (outside/below the message bubble)
+        // Find or create the reactions wrapper (absolute positioned below message)
         let wrapper = msgEl.querySelector('.bridge-reactions-wrapper');
         
         if (!wrapper) {
             wrapper = document.createElement('div');
             wrapper.className = 'bridge-reactions-wrapper';
+            // Position absolute with width 100% allows justify-content to work correctly
             wrapper.style.cssText = \`
                 display: flex;
-                flex-direction: row;
+                position: absolute;
+                bottom: -12px;
+                left: 0;
+                right: 0;
                 width: 100%;
-                margin-top: -6px;
-                padding: 0 4px;
-                z-index: 5;
+                z-index: 50;
                 pointer-events: none;
                 justify-content: \${justifyContent};
             \`;
             
-            // Insert wrapper after the message element
             msgEl.style.position = 'relative';
             msgEl.appendChild(wrapper);
         } else {
-            // Update justify-content in case direction changed
             wrapper.style.justifyContent = justifyContent;
         }
         
-        // WhatsApp style emoji pill
+        // WhatsApp style emoji pill with smart margins
         const emojiPillStyle = \`
             background: white;
             border-radius: 20px;
-            padding: 2px 6px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-            font-size: 14px;
-            border: 1px solid #f0f0f0;
+            padding: 1px 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            font-size: 13px;
+            border: 1px solid #eee;
             pointer-events: auto;
-            cursor: pointer;
-            margin: 0 2px;
+            cursor: default;
+            margin: \${isOutbound ? '0 10px 0 0' : '0 0 0 10px'};
         \`;
         
         // Check for existing reaction badge inside wrapper
