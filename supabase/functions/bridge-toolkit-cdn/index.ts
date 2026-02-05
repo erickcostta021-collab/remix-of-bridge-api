@@ -961,15 +961,27 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             // Render reaction badge on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             if (msgEl) {
-                // Detect if message is outbound (user bubble on the right) vs inbound (lead on the left)
-                // DOM classes vary across GHL layouts; bounding-box is the most reliable signal.
+                // Detect if message is outbound (user) vs inbound (lead)
+                // GHL chat is a panel, not full window. Find chat container and compare positions.
                 let isOutbound = false;
                 try {
-                    const rect = msgEl.getBoundingClientRect();
-                    const mid = rect.left + rect.width / 2;
-                    isOutbound = mid > (window.innerWidth * 0.5);
+                    // Find the scrollable chat container (parent with overflow)
+                    let chatContainer = msgEl.parentElement;
+                    for (let i = 0; i < 15 && chatContainer; i++) {
+                        const style = window.getComputedStyle(chatContainer);
+                        if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
+                        chatContainer = chatContainer.parentElement;
+                    }
+                    
+                    if (chatContainer) {
+                        const containerRect = chatContainer.getBoundingClientRect();
+                        const msgRect = msgEl.getBoundingClientRect();
+                        // Message center relative to chat container
+                        const msgCenter = msgRect.left + msgRect.width / 2;
+                        const containerCenter = containerRect.left + containerRect.width / 2;
+                        isOutbound = msgCenter > containerCenter;
+                    }
                 } catch (e) {
-                    // fail-open: default to inbound (left)
                     isOutbound = false;
                 }
                 const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
@@ -1107,12 +1119,23 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         const currentReaction = state.reactions[state.reactions.length - 1];
                         const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
                         if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
-                            // Detect if message is outbound (right) vs inbound (left) using bounding-box.
+                            // Detect if message is outbound (user) vs inbound (lead)
                             let isOutbound = false;
                             try {
-                                const rect = msgEl.getBoundingClientRect();
-                                const mid = rect.left + rect.width / 2;
-                                isOutbound = mid > (window.innerWidth * 0.5);
+                                let chatContainer = msgEl.parentElement;
+                                for (let i = 0; i < 15 && chatContainer; i++) {
+                                    const style = window.getComputedStyle(chatContainer);
+                                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
+                                    chatContainer = chatContainer.parentElement;
+                                }
+                                
+                                if (chatContainer) {
+                                    const containerRect = chatContainer.getBoundingClientRect();
+                                    const msgRect = msgEl.getBoundingClientRect();
+                                    const msgCenter = msgRect.left + msgRect.width / 2;
+                                    const containerCenter = containerRect.left + containerRect.width / 2;
+                                    isOutbound = msgCenter > containerCenter;
+                                }
                             } catch (e) {
                                 isOutbound = false;
                             }
