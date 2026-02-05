@@ -233,9 +233,8 @@ serve(async (req) => {
       );
     }
 
-    // Action: react - Add reaction to message
     if (action === "react") {
-      const { ghl_id, emoji } = body;
+      const { ghl_id, emoji, source } = body;
 
       if (!ghl_id || !emoji) {
         return new Response(
@@ -311,10 +310,33 @@ serve(async (req) => {
         }
       }
 
-      // Update reactions in database - REPLACE (not accumulate)
-      // Since this is from the CRM user reacting, we replace the reaction with the new emoji
-      // If they want to remove the reaction, they can use an empty string or specific action
-      const updatedReactions = [emoji];
+      // Determine reaction source: 'ghl_user' (CRM) or 'lead' (WhatsApp)
+      const reactionSource = source || 'ghl_user';
+      
+      // Get existing reactions array (format: [{emoji, source}, ...])
+      // Current reactions format in DB may be old (just emojis) or new (objects)
+      const existingReactions: Array<{emoji: string; source: string}> = [];
+      
+      if (mapping.reactions && Array.isArray(mapping.reactions)) {
+        for (const r of mapping.reactions) {
+          if (typeof r === 'string') {
+            // Old format: just emoji string - assume it was from ghl_user
+            existingReactions.push({ emoji: r, source: 'ghl_user' });
+          } else if (r && typeof r === 'object' && r.emoji) {
+            // New format: {emoji, source}
+            existingReactions.push({ emoji: r.emoji, source: r.source || 'ghl_user' });
+          }
+        }
+      }
+      
+      // Remove any existing reaction from the SAME source (replace, not accumulate for same person)
+      const filteredReactions = existingReactions.filter(r => r.source !== reactionSource);
+      
+      // Add the new reaction from this source
+      filteredReactions.push({ emoji, source: reactionSource });
+      
+      // Keep only the most recent reactions (max 8 to allow for groups)
+      const updatedReactions = filteredReactions.slice(-8);
 
       const { data: updated, error: updateError } = await supabase
         .from("message_map")
@@ -334,7 +356,7 @@ serve(async (req) => {
       await supabase.channel("ghl_updates").send({
         type: "broadcast",
         event: "msg_update",
-        payload: { ghl_id, type: "react", emoji, location_id: mapping.location_id },
+        payload: { ghl_id, type: "react", reactions: updatedReactions, location_id: mapping.location_id },
       });
 
       return new Response(

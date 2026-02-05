@@ -681,7 +681,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             btn.onclick = async () => {
                 const emoji = btn.innerText;
                 menu.remove();
-                const result = await sendAction('react', ghlId, { emoji });
+                const result = await sendAction('react', ghlId, { emoji, source: 'ghl_user' });
                 if (result) showToast(\`Reagiu com \${emoji}\`);
             };
         });
@@ -958,53 +958,90 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             }
             console.log("↩️ Bridge: Processed reply event", { ghl_id, replyText: replyData?.text?.substring(0, 30) });
         } else if (type === 'react' && emoji) {
-            // Render reaction badge on message
+        } else if (type === 'react') {
+            // NEW: reactions is now an array of {emoji, source}
+            const reactionsArray = payload.reactions || (emoji ? [{emoji, source: 'ghl_user'}] : []);
+            
+            // Render reaction badges on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             if (msgEl) {
-                // Detect if message is outbound (user) vs inbound (lead)
-                // GHL chat is a panel, not full window. Find chat container and compare positions.
-                let isOutbound = false;
-                try {
-                    // Find the scrollable chat container (parent with overflow)
-                    let chatContainer = msgEl.parentElement;
-                    for (let i = 0; i < 15 && chatContainer; i++) {
-                        const style = window.getComputedStyle(chatContainer);
-                        if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-                        chatContainer = chatContainer.parentElement;
-                    }
-                    
-                    if (chatContainer) {
-                        const containerRect = chatContainer.getBoundingClientRect();
-                        const msgRect = msgEl.getBoundingClientRect();
-                        // Message center relative to chat container
-                        const msgCenter = msgRect.left + msgRect.width / 2;
-                        const containerCenter = containerRect.left + containerRect.width / 2;
-                        isOutbound = msgCenter > containerCenter;
-                    }
-                } catch (e) {
-                    isOutbound = false;
-                }
-                const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
-                
-                // Replace reaction (not accumulate) - user can only have one active reaction
-                const existingBadge = msgEl.querySelector('.bridge-reaction-badge');
-                if (existingBadge) {
-                    // Replace with new emoji
-                    existingBadge.innerText = emoji;
-                    // Update position in case it changed
-                    existingBadge.style.cssText = \`position: absolute; bottom: -8px; \${badgePosition} background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\`;
-                } else {
-                    // Create new badge
-                    const badge = document.createElement('span');
-                    badge.className = 'bridge-reaction-badge';
-                    badge.style.cssText = \`position: absolute; bottom: -8px; \${badgePosition} background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\`;
-                    badge.innerText = emoji;
-                    msgEl.style.position = 'relative';
-                    msgEl.appendChild(badge);
-                }
+                renderReactionBadges(msgEl, reactionsArray);
             }
-            console.log("😊 Bridge: Processed react event", { ghl_id, emoji });
+            console.log("😊 Bridge: Processed react event", { ghl_id, reactions: reactionsArray });
         }
+    };
+    
+    // Render reaction badges (max 4 visible + overflow)
+    const renderReactionBadges = (msgEl, reactions) => {
+        if (!msgEl || !reactions) return;
+        
+        // Remove existing badges
+        msgEl.querySelectorAll('.bridge-reaction-badge, .bridge-reactions-container').forEach(el => el.remove());
+        
+        if (!reactions.length) return;
+        
+        // Detect if message is outbound (user) vs inbound (lead)
+        let isOutbound = false;
+        try {
+            let chatContainer = msgEl.parentElement;
+            for (let i = 0; i < 15 && chatContainer; i++) {
+                const style = window.getComputedStyle(chatContainer);
+                if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
+                chatContainer = chatContainer.parentElement;
+            }
+            
+            if (chatContainer) {
+                const containerRect = chatContainer.getBoundingClientRect();
+                const msgRect = msgEl.getBoundingClientRect();
+                const msgCenter = msgRect.left + msgRect.width / 2;
+                const containerCenter = containerRect.left + containerRect.width / 2;
+                isOutbound = msgCenter > containerCenter;
+            }
+        } catch (e) {
+            isOutbound = false;
+        }
+        const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
+        
+        // Max 4 visible reactions
+        const MAX_VISIBLE = 4;
+        const visibleReactions = reactions.slice(0, MAX_VISIBLE);
+        const overflowCount = reactions.length - MAX_VISIBLE;
+        
+        // Create container for badges
+        const container = document.createElement('div');
+        container.className = 'bridge-reactions-container';
+        container.style.cssText = \`
+            position: absolute; bottom: -10px; \${badgePosition}
+            display: flex; gap: 2px; align-items: center;
+        \`;
+        
+        visibleReactions.forEach(r => {
+            const emoji = typeof r === 'string' ? r : r.emoji;
+            const badge = document.createElement('span');
+            badge.className = 'bridge-reaction-badge';
+            badge.style.cssText = 'background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);';
+            badge.innerText = emoji;
+            container.appendChild(badge);
+        });
+        
+        // Add overflow indicator if needed
+        if (overflowCount > 0) {
+            const overflow = document.createElement('span');
+            overflow.className = 'bridge-reaction-overflow';
+            overflow.style.cssText = 'background: #f3f4f6; border-radius: 12px; padding: 2px 8px; font-size: 12px; color: #6b7280; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.15);';
+            overflow.innerText = '...';
+            overflow.title = reactions.slice(MAX_VISIBLE).map(r => typeof r === 'string' ? r : r.emoji).join(' ');
+            overflow.onclick = (e) => {
+                e.stopPropagation();
+                // Show all reactions in a popup
+                const allEmojis = reactions.map(r => typeof r === 'string' ? r : r.emoji).join(' ');
+                alert('Todas as reações: ' + allEmojis);
+            };
+            container.appendChild(overflow);
+        }
+        
+        msgEl.style.position = 'relative';
+        msgEl.appendChild(container);
     };
     
     // Initialize Supabase Realtime connection
@@ -1115,38 +1152,9 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                     
                     // Render reactions if any
                     if (state.reactions && state.reactions.length > 0) {
-                        // With the new logic, reactions array should have at most 1 emoji (replacement model)
-                        const currentReaction = state.reactions[state.reactions.length - 1];
                         const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
-                        if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
-                            // Detect if message is outbound (user) vs inbound (lead)
-                            let isOutbound = false;
-                            try {
-                                let chatContainer = msgEl.parentElement;
-                                for (let i = 0; i < 15 && chatContainer; i++) {
-                                    const style = window.getComputedStyle(chatContainer);
-                                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-                                    chatContainer = chatContainer.parentElement;
-                                }
-                                
-                                if (chatContainer) {
-                                    const containerRect = chatContainer.getBoundingClientRect();
-                                    const msgRect = msgEl.getBoundingClientRect();
-                                    const msgCenter = msgRect.left + msgRect.width / 2;
-                                    const containerCenter = containerRect.left + containerRect.width / 2;
-                                    isOutbound = msgCenter > containerCenter;
-                                }
-                            } catch (e) {
-                                isOutbound = false;
-                            }
-                            const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
-                            
-                            const badge = document.createElement('span');
-                            badge.className = 'bridge-reaction-badge';
-                            badge.style.cssText = \`position: absolute; bottom: -8px; \${badgePosition} background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\`;
-                            badge.innerText = currentReaction;
-                            msgEl.style.position = 'relative';
-                            msgEl.appendChild(badge);
+                        if (msgEl) {
+                            renderReactionBadges(msgEl, state.reactions);
                         }
                     }
                 });
