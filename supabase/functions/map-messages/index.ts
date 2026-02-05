@@ -394,38 +394,19 @@ serve(async (req) => {
           // Build the WhatsApp JID (number@s.whatsapp.net)
           const whatsappJid = contactPhone ? `${contactPhone}@s.whatsapp.net` : "";
           
-          // Build the full key object as UAZAPI might require
-          const messageKey = {
-            id: mapping.uazapi_message_id,
-            remoteJid: whatsappJid,
-            fromMe: mapping.from_me ?? true,
-          };
-          
           console.log("📱 React payload:", { 
             number: whatsappJid, 
             text: emoji, 
             id: mapping.uazapi_message_id,
-            contact_id: mapping.contact_id,
-            key: messageKey,
+            contact_id: mapping.contact_id 
           });
 
-          // UAZAPI format: Try multiple variations for /message/react
-          // Different UAZAPI versions may expect different payload structures
+          // UAZAPI format: POST /message/react with { number, text (emoji), id }
           const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
-            // Format 1: { number, text (emoji), id } - most common
+            // Exact UAZAPI format from user documentation
             { path: "/message/react", body: { number: whatsappJid, text: emoji, id: mapping.uazapi_message_id } },
-            // Format 2: { key: { id, remoteJid, fromMe }, reaction: emoji }
-            { path: "/message/react", body: { key: messageKey, reaction: emoji } },
-            // Format 3: { msgId, jid, emoji }
-            { path: "/message/react", body: { msgId: mapping.uazapi_message_id, jid: whatsappJid, emoji } },
-            // Format 4: { messageId, number, emoji }
-            { path: "/message/react", body: { messageId: mapping.uazapi_message_id, number: whatsappJid, emoji } },
-            // Format 5: Without JID suffix
+            // Try without JID suffix if needed
             { path: "/message/react", body: { number: contactPhone, text: emoji, id: mapping.uazapi_message_id } },
-            // Format 6: Reaction as text field
-            { path: "/message/react", body: { id: mapping.uazapi_message_id, text: emoji } },
-            // Format 7: key.id format with reaction text
-            { path: "/message/react", body: { key: { id: mapping.uazapi_message_id }, text: emoji } },
           ]);
 
           uazapiSuccess = result.success;
