@@ -232,6 +232,7 @@ try {
                 }
             }
 
+            let usingDock = false;
             if (!actionBar) {
                 console.log(LOG_PREFIX, '⚠️ Bridge Switcher: actionBar não encontrado — criando dock fixo (fallback).');
 
@@ -239,35 +240,27 @@ try {
                 if (!dock) {
                     dock = document.createElement('div');
                     dock.id = 'bridge-fallback-dock';
-                    dock.style.cssText = [
-                        'position: fixed',
-                        'right: 16px',
-                        'bottom: 88px',
-                        'z-index: 2147483647',
-                        'display: flex',
-                        'align-items: center',
-                        'justify-content: flex-end',
-                        'pointer-events: auto'
-                    ].join(';');
+                    dock.style.cssText = 'position: fixed; right: 16px; bottom: 88px; z-index: 2147483647; display: flex; align-items: center; justify-content: flex-end; pointer-events: auto;';
                     document.body.appendChild(dock);
                 }
 
                 actionBar = dock;
+                usingDock = true;
             }
-
 
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
-            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid ' + CONFIG.theme.border + '; border-radius: 20px;';
+            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid ' + CONFIG.theme.border + '; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);';
             
-            // CSS para remover a linha azul e resetar o visual do select
+            // CSS para o select e dropdown para cima quando no dock
             const styleTag = document.createElement('style');
-            styleTag.textContent = '#bridge-instance-selector { border: none !important; background: transparent !important; font-size: 12px; font-weight: 700; color: ' + CONFIG.theme.text + '; cursor: pointer; outline: none !important; box-shadow: none !important; appearance: none; -webkit-appearance: none; max-width: 150px; padding-right: 16px; } #bridge-instance-selector:focus, #bridge-instance-selector:active { outline: none !important; box-shadow: none !important; border: none !important; } #bridge-select-wrapper { position: relative; display: inline-flex; align-items: center; } #bridge-select-wrapper::after { content: \"\"; position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid ' + CONFIG.theme.text + '; pointer-events: none; }';
+            styleTag.textContent = '#bridge-instance-selector { border: none !important; background: transparent !important; font-size: 12px; font-weight: 700; color: ' + CONFIG.theme.text + '; cursor: pointer; outline: none !important; box-shadow: none !important; appearance: auto; -webkit-appearance: menulist; max-width: 150px; } #bridge-instance-selector:focus, #bridge-instance-selector:active { outline: none !important; box-shadow: none !important; border: none !important; }';
             document.head.appendChild(styleTag);
 
-            container.innerHTML = '<div style="display: flex; align-items: center; gap: 6px;"><div style="width: 8px; height: 8px; background: ' + CONFIG.theme.primary + '; border-radius: 50%;"></div><div id="bridge-select-wrapper"><select id="bridge-instance-selector"><option>...</option></select></div></div>';
+            container.innerHTML = '<div style="display: flex; align-items: center; gap: 6px;"><div style="width: 8px; height: 8px; background: ' + CONFIG.theme.primary + '; border-radius: 50%;"></div><select id="bridge-instance-selector"><option>...</option></select></div>';
             
             actionBar.appendChild(container);
+
             const select = container.querySelector('select');
 
             select.addEventListener('mousedown', () => renderOptions(true));
