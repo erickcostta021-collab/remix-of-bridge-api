@@ -792,6 +792,26 @@ serve(async (req) => {
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
       
+      // === DEDUPLICATION FOR EDITS ===
+      // Multiple instances may receive the same edit event - deduplicate by original message ID
+      const editDedupeKey = `edit:${editedOriginalMsgId || messageDataForEvents.messageid || messageDataForEvents.id}`;
+      const { data: existingEdit } = await supabase
+        .from("ghl_processed_messages")
+        .select("id")
+        .eq("message_id", editDedupeKey)
+        .maybeSingle();
+      
+      if (existingEdit) {
+        console.log("⏭️ Edit already processed by another instance, skipping:", editDedupeKey);
+        return new Response(
+          JSON.stringify({ received: true, processed: false, reason: "edit_already_processed" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Mark edit as processed immediately
+      await supabase.from("ghl_processed_messages").insert({ message_id: editDedupeKey });
+      
       // Extract the ORIGINAL message ID that was edited
       // - For "edited" field format: the "edited" field IS the original message ID
       // - For protocolMessage format: key.id contains the original ID
