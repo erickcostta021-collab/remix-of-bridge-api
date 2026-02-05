@@ -45,11 +45,62 @@ async function tryUazapiEndpoints(
   return { success: false, status: lastStatus, body: lastBody };
 }
 
+// Helper to get valid access token (refresh if needed)
+async function getValidToken(supabase: any, subaccount: any, settings: any): Promise<string> {
+  const now = new Date();
+  const expiresAt = new Date(subaccount.ghl_token_expires_at);
+  const expiresIn1Hour = (expiresAt.getTime() - now.getTime()) < 3600000;
+
+  if (now >= expiresAt || expiresIn1Hour) {
+    // Refresh token
+    const tokenParams = new URLSearchParams({
+      client_id: settings.ghl_client_id,
+      client_secret: settings.ghl_client_secret,
+      grant_type: "refresh_token",
+      refresh_token: subaccount.ghl_refresh_token,
+      user_type: "Location",
+    });
+
+    const tokenResponse = await fetch("https://services.leadconnectorhq.com/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+      },
+      body: tokenParams.toString(),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorBody = await tokenResponse.text();
+      console.error("Token refresh failed:", errorBody.substring(0, 200));
+      throw new Error(`Failed to refresh token: ${tokenResponse.status}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
+
+    await supabase
+      .from("ghl_subaccounts")
+      .update({
+        ghl_access_token: tokenData.access_token,
+        ghl_refresh_token: tokenData.refresh_token,
+        ghl_token_expires_at: newExpiresAt.toISOString(),
+        ghl_subaccount_token: tokenData.access_token,
+        oauth_last_refresh: new Date().toISOString(),
+      })
+      .eq("id", subaccount.id);
+
+    return tokenData.access_token;
+  }
+
+  return subaccount.ghl_access_token;
+}
+
 // Get instance and settings for a location
 async function getInstanceForLocation(supabase: any, locationId: string) {
   const { data: instance } = await supabase
     .from("instances")
-    .select("*, ghl_subaccounts!inner(location_id, user_id)")
+    .select("*, ghl_subaccounts!inner(location_id, user_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at)")
     .eq("ghl_subaccounts.location_id", locationId)
     .eq("instance_status", "connected")
     .limit(1)
@@ -62,7 +113,7 @@ async function getInstanceForLocation(supabase: any, locationId: string) {
 
   const { data: settings } = await supabase
     .from("user_settings")
-    .select("uazapi_base_url")
+    .select("uazapi_base_url, ghl_client_id, ghl_client_secret")
     .eq("user_id", instance.ghl_subaccounts.user_id)
     .maybeSingle();
 
@@ -73,6 +124,8 @@ async function getInstanceForLocation(supabase: any, locationId: string) {
 
   return {
     instance,
+    subaccount: instance.ghl_subaccounts,
+    settings,
     baseUrl: settings.uazapi_base_url,
     token: instance.uazapi_instance_token,
   };
@@ -172,27 +225,28 @@ serve(async (req) => {
       }
 
       let uazapiSuccess = false;
+      let ghlInternalCommentSent = false;
+      const originalText = mapping.message_text || '(texto original)';
+
+      // Get config for this location
+      const config = await getInstanceForLocation(supabase, mapping.location_id);
 
       // If we have UAZAPI ID, send edit to WhatsApp
-      if (mapping.uazapi_message_id) {
-        const config = await getInstanceForLocation(supabase, mapping.location_id);
+      if (mapping.uazapi_message_id && config) {
+        console.log("✏️ Edit payload:", { id: mapping.uazapi_message_id, text: new_text });
+        
+        // UAZAPI exact format: POST /message/edit with { id, text }
+        const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
+          { path: "/message/edit", body: { id: mapping.uazapi_message_id, text: new_text } },
+        ]);
 
-        if (config) {
-          console.log("✏️ Edit payload:", { id: mapping.uazapi_message_id, text: new_text });
-          
-          // UAZAPI exact format: POST /message/edit with { id, text }
-          const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
-            { path: "/message/edit", body: { id: mapping.uazapi_message_id, text: new_text } },
-          ]);
-
-          uazapiSuccess = result.success;
-          if (!result.success) {
-            console.error("❌ All edit attempts failed:", result.status, result.body);
-            return new Response(
-              JSON.stringify({ error: "Failed to edit on WhatsApp", details: result.body }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
+        uazapiSuccess = result.success;
+        if (!result.success) {
+          console.error("❌ All edit attempts failed:", result.status, result.body);
+          return new Response(
+            JSON.stringify({ error: "Failed to edit on WhatsApp", details: result.body }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
       }
 
@@ -214,7 +268,48 @@ serve(async (req) => {
         );
       }
 
-      // Broadcast update via realtime
+      // Send InternalComment to GHL with formatted edit message
+      if (config?.subaccount && config?.settings?.ghl_client_id && mapping.contact_id) {
+        try {
+          const ghlToken = await getValidToken(supabase, config.subaccount, config.settings);
+          
+          // Format: ✏️ Editado: "texto original" → novo texto
+          const formattedEditMessage = `✏️ Editado: "${originalText}"\n\n${new_text}`;
+          
+          console.log("📝 Sending edit InternalComment to GHL:", {
+            contactId: mapping.contact_id,
+            originalText: originalText?.substring(0, 30),
+            newText: new_text?.substring(0, 30),
+          });
+          
+          const response = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${ghlToken}`,
+              "Version": "2021-04-15",
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify({
+              type: "InternalComment",
+              contactId: mapping.contact_id,
+              message: formattedEditMessage,
+            }),
+          });
+          
+          const responseText = await response.text();
+          if (!response.ok) {
+            console.error("Failed to send InternalComment to GHL:", responseText);
+          } else {
+            console.log("✅ InternalComment sent to GHL:", responseText.substring(0, 200));
+            ghlInternalCommentSent = true;
+          }
+        } catch (e) {
+          console.error("Error sending InternalComment:", e);
+        }
+      }
+
+      // Broadcast update via realtime (for any UI that might want to react)
       await supabase.channel("ghl_updates").send({
         type: "broadcast",
         event: "msg_update",
@@ -222,13 +317,14 @@ serve(async (req) => {
           ghl_id, 
           type: "edit", 
           new_text, 
-          original_text: mapping.message_text,
-          location_id: mapping.location_id 
+          original_text: originalText,
+          location_id: mapping.location_id,
+          fromMe: true,
         },
       });
 
       return new Response(
-        JSON.stringify({ success: true, data: updated, whatsapp_sent: uazapiSuccess }),
+        JSON.stringify({ success: true, data: updated, whatsapp_sent: uazapiSuccess, ghl_internal_comment: ghlInternalCommentSent }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
