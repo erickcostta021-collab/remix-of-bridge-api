@@ -246,10 +246,9 @@ try {
                     font-weight: 700;
                     color: \${CONFIG.theme.text};
                     cursor: pointer;
-                    outline: none !important; /* REMOVE A LINHA AZUL */
+                    outline: none !important;
                     box-shadow: none !important;
-                    appearance: none;
-                    -webkit-appearance: none;
+                    padding-right: 16px;
                     max-width: 150px;
                 }
                 #bridge-instance-selector:focus, #bridge-instance-selector:active {
@@ -257,15 +256,35 @@ try {
                     box-shadow: none !important;
                     border: none !important;
                 }
+                #bridge-select-wrapper {
+                    position: relative;
+                    display: inline-flex;
+                    align-items: center;
+                }
+                #bridge-select-wrapper::after {
+                    content: '';
+                    position: absolute;
+                    right: 0;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    width: 0;
+                    height: 0;
+                    border-left: 4px solid transparent;
+                    border-right: 4px solid transparent;
+                    border-top: 5px solid \${CONFIG.theme.text};
+                    pointer-events: none;
+                }
             \`;
             document.head.appendChild(styleTag);
 
             container.innerHTML = \`
                 <div style="display: flex; align-items: center; gap: 6px;">
                     <div style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div>
-                    <select id="bridge-instance-selector">
-                        <option>...</option>
-                    </select>
+                    <div id="bridge-select-wrapper">
+                        <select id="bridge-instance-selector">
+                            <option>...</option>
+                        </select>
+                    </div>
                 </div>\`;
             
             actionBar.appendChild(container);
