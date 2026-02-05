@@ -1131,15 +1131,21 @@ serve(async (req) => {
     // Opportunistic cleanup (1% chance) - runs in background without blocking
     maybeCleanupOldMappings(supabase);
 
-    // UAZAPI may fire the same 'fromMe' message multiple times; dedupe by UAZAPI messageid.
+    // UAZAPI may fire the same 'fromMe' message multiple times; dedupe by instance + UAZAPI messageid.
+    // IMPORTANT: Include instanceToken in the key so that different instances can each process
+    // the same physical WhatsApp message independently. Example: message "1" is sent from phone A
+    // to phone B. Both Teste-CK (phone A's instance) and teste2323 (phone B's instance) receive
+    // a webhook with the same messageid. Without the token in the key, the first to arrive would
+    // block the second, causing message loss in the CRM.
     // This prevents creating the same outbound message repeatedly in GHL (which then triggers outbound webhooks and loops).
     const uazapiMessageId = String(messageData.messageid || messageData.id || "");
     if (uazapiMessageId) {
-      const isNew = await markIfNew(supabase, `uazapi:${uazapiMessageId}`);
+      const dedupKey = `uazapi:${instanceToken}:${uazapiMessageId}`;
+      const isNew = await markIfNew(supabase, dedupKey);
       if (!isNew) {
-        console.log("Duplicate UAZAPI message ignored:", { uazapiMessageId });
+        console.log("Duplicate UAZAPI message ignored:", { uazapiMessageId, instanceToken: instanceToken?.substring(0, 8) });
         return new Response(
-          JSON.stringify({ received: true, ignored: true, reason: "duplicate_uazapi_message", uazapiMessageId }),
+          JSON.stringify({ received: true, ignored: true, reason: "duplicate_uazapi_message", uazapiMessageId, instanceToken: instanceToken?.substring(0, 8) }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
