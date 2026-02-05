@@ -196,7 +196,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     const sendAction = async (action, ghlId, extra = {}) => {
-        console.log(`📡 Bridge Toolkit - Ação: ${action} | GHL ID: ${ghlId}`, extra);
+        console.log(\`📡 Bridge Toolkit - Ação: \${action} | GHL ID: \${ghlId}\`, extra);
         try {
             const url = BRIDGE_CONFIG.functions_origin + BRIDGE_CONFIG.endpoint;
             console.log("📤 Enviando para:", url);
@@ -206,7 +206,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 headers: {
                     'Content-Type': 'application/json',
                     'apikey': BRIDGE_CONFIG.supabase_anon_key,
-                    'Authorization': `Bearer ${BRIDGE_CONFIG.supabase_anon_key}`,
+                    'Authorization': \`Bearer \${BRIDGE_CONFIG.supabase_anon_key}\`,
                 },
                 body: JSON.stringify({ action, ghl_id: ghlId, ...extra })
             });
@@ -425,7 +425,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 headers: {
                     'Content-Type': 'application/json',
                     'apikey': BRIDGE_CONFIG.supabase_anon_key,
-                    'Authorization': `Bearer ${BRIDGE_CONFIG.supabase_anon_key}`,
+                    'Authorization': \`Bearer \${BRIDGE_CONFIG.supabase_anon_key}\`,
                 },
                 body: JSON.stringify({ 
                     action: 'reply', 
@@ -1264,7 +1264,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 headers: {
                     'Content-Type': 'application/json',
                     'apikey': BRIDGE_CONFIG.supabase_anon_key,
-                    'Authorization': `Bearer ${BRIDGE_CONFIG.supabase_anon_key}`,
+                    'Authorization': \`Bearer \${BRIDGE_CONFIG.supabase_anon_key}\`,
                 },
                 body: JSON.stringify({ action: 'list-states', ghl_ids: ghlIds })
             });
