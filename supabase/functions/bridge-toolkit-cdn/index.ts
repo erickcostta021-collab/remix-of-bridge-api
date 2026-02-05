@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v20: Iniciando (Performance Otimizada)...");
+    console.log("🚀 Bridge Toolkit v21: Iniciando (Performance Otimizada)...");
 
     const BRIDGE_CONFIG = {
         // Project URL is still needed for Realtime websocket.
@@ -915,7 +915,18 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     const inject = () => {
-        const containers = document.querySelectorAll('.message-container:not(.bridge-v13)');
+        // Multiple fallback selectors for GHL message containers
+        let containers = document.querySelectorAll('.message-container:not(.bridge-v13)');
+        
+        // Fallback: try data-message-id attribute if .message-container not found
+        if (containers.length === 0) {
+            containers = document.querySelectorAll('[data-message-id]:not(.bridge-v13)');
+        }
+        
+        // Fallback 2: conversation message items
+        if (containers.length === 0) {
+            containers = document.querySelectorAll('.conversation-message:not(.bridge-v13), .chat-message:not(.bridge-v13)');
+        }
         
         containers.forEach(msg => {
             msg.classList.add('bridge-v13');
@@ -1351,7 +1362,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     // Initialize persistence (load states on page load)
     initPersistence();
     
-    console.log("✅ Bridge Toolkit v19 carregado (Performance Otimizada)!");
+    console.log("✅ Bridge Toolkit v21 carregado (Performance Otimizada)!");
 })();
 `;
 
