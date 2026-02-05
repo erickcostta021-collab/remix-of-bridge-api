@@ -233,7 +233,8 @@ try {
         }
 
         async function loadInstances(phone) {
-            const locId = window.location.pathname.match(/location\/([^\/]+)/)?.[1];
+            const m = window.location.pathname.match(/location\/([^\/]+)/);
+            const locId = (m && m[1]) ? m[1] : null;
             if (!locId || !phone) {
                 console.log(LOG_PREFIX, '⚠️ Missing locId/phone for loadInstances:', { locId, hasPhone: !!phone, path: window.location.pathname });
                 return;
@@ -268,15 +269,24 @@ try {
                 }
 
                 state.instances = data.instances;
-                const activeId = data.activeInstanceId || data.instances[0]?.id;
-                const activeInstance = data.instances.find(i => i.id === activeId);
-                state.currentInstanceName = activeInstance?.name || null;
+                const firstId = (data.instances[0] && data.instances[0].id) ? data.instances[0].id : null;
+                const activeId = data.activeInstanceId || firstId;
+                const activeInstance = state.instances.find(i => i.id === activeId);
+                state.currentInstanceName = (activeInstance && activeInstance.name) ? activeInstance.name : null;
                 const select = document.getElementById('bridge-instance-selector');
-                if (select) {
+                if (select && activeId) {
                     select.value = activeId;
                     renderOptions(false);
                     select.value = activeId;
                 }
+
+                console.log(LOG_PREFIX, '✅ Instances loaded:', { count: state.instances.length, activeId });
+            } catch (e) {
+                console.error(LOG_PREFIX, '❌ loadInstances error:', e);
+                state.instances = [];
+                renderOptions(false);
+            }
+        }
 
                 console.log(LOG_PREFIX, '✅ Instances loaded:', { count: state.instances.length, activeId });
             } catch (e) {
@@ -382,7 +392,7 @@ try {
                 const conversationId = extractConversationId();
                 const previousName = state.currentInstanceName;
                 const newInstance = state.instances.find(i => i.id === e.target.value);
-                const newName = newInstance?.name || "";
+                const newName = (newInstance && newInstance.name) ? newInstance.name : "";
                 
                 console.log(LOG_PREFIX, '🔄 Instance change detected:', { previousName, newName, instanceId: e.target.value, conversationId });
                 
