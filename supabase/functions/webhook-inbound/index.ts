@@ -911,6 +911,34 @@ serve(async (req) => {
                   console.error("Failed to send edit message to GHL:", responseText);
                 } else {
                   console.log("✅ Edit message sent to GHL successfully:", responseText.substring(0, 200));
+                  
+                  // Map the new formatted message to the same UAZAPI message ID
+                  // so replies to the edited message work correctly
+                  try {
+                    const responseData = JSON.parse(responseText);
+                    const newGhlMessageId = responseData.messageId || responseData.id;
+                    
+                    if (newGhlMessageId && mapping.uazapi_message_id) {
+                      console.log("📝 Mapping formatted edit message:", { newGhlMessageId, uazapiId: mapping.uazapi_message_id });
+                      
+                      await supabase
+                        .from("message_map")
+                        .upsert({
+                          ghl_message_id: newGhlMessageId,
+                          uazapi_message_id: mapping.uazapi_message_id,
+                          location_id: mapping.location_id,
+                          contact_id: mapping.contact_id,
+                          message_text: formattedEditMessage,
+                          message_type: "text",
+                          from_me: false,
+                          original_timestamp: new Date().toISOString(),
+                        }, { onConflict: "ghl_message_id" });
+                      
+                      console.log("✅ Formatted edit message mapped successfully");
+                    }
+                  } catch (e) {
+                    console.error("Failed to map formatted edit message:", e);
+                  }
                 }
               }
             }
