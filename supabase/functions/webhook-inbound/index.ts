@@ -745,38 +745,49 @@ serve(async (req) => {
     }
     
     // === HANDLE MESSAGE EDIT EVENTS ===
-    // UAZAPI sends edits with specific event types or protocolMessage.type === 14
-    // IMPORTANT: The "edited" field in UAZAPI contains a MESSAGE ID (reference), NOT the new text!
-    // The new text is in the "text" or "content" fields
-    // We detect real edits via event types, NOT by the presence of "edited" field
+    // UAZAPI sends edits in different formats:
+    // 1. Event type "messages.edit" / "message.edit"
+    // 2. protocolMessage.type === 14
+    // 3. The "edited" field contains a MESSAGE ID (the original message being edited)
+    //    and the new text is in the "text" or "content" fields
     const isEditEventType = eventType === "messages.edit" || eventType === "message.edit";
     const isProtocolEdit = messageDataForEvents.protocolMessage?.type === 14;
+    // CRITICAL: "edited" field contains the ORIGINAL MESSAGE ID being edited
+    const editedOriginalMsgId = messageDataForEvents.edited || "";
+    const isEditedFieldPresent = typeof editedOriginalMsgId === "string" && editedOriginalMsgId.length > 10;
     
-    if (isEditEventType || isProtocolEdit) {
+    if (isEditEventType || isProtocolEdit || isEditedFieldPresent) {
       console.log("Processing message EDIT event:", { 
         eventType, 
         messageId: messageDataForEvents.messageid || messageDataForEvents.id,
+        editedOriginalMsgId,
         protocolMessage: messageDataForEvents.protocolMessage,
         isEditEventType,
-        isProtocolEdit
+        isProtocolEdit,
+        isEditedFieldPresent
       });
       
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
       
-      // Extract message ID - can come from different places depending on event format
-      const uazapiMsgId = messageDataForEvents.protocolMessage?.key?.id || 
+      // Extract the ORIGINAL message ID that was edited
+      // - For "edited" field format: the "edited" field IS the original message ID
+      // - For protocolMessage format: key.id contains the original ID
+      const uazapiMsgId = editedOriginalMsgId ||
+                          messageDataForEvents.protocolMessage?.key?.id || 
                           messageDataForEvents.key?.id ||
                           messageDataForEvents.messageid || 
                           messageDataForEvents.id || "";
       
-      // Extract new text - from protocolMessage for edit events
-      const newText = messageDataForEvents.protocolMessage?.editedMessage?.conversation ||
-                      messageDataForEvents.protocolMessage?.editedMessage?.extendedTextMessage?.text ||
-                      messageDataForEvents.text || 
+      // Extract the NEW text content
+      // For "edited" field format: new text is in "text" or "content" at root level
+      const newText = messageDataForEvents.text ||
                       (typeof messageDataForEvents.content === "string" ? messageDataForEvents.content : null) ||
-                      messageDataForEvents.content?.text || "";
+                      messageDataForEvents.content?.text ||
+                      messageDataForEvents.protocolMessage?.editedMessage?.conversation ||
+                      messageDataForEvents.protocolMessage?.editedMessage?.extendedTextMessage?.text ||
+                      "";
       
       console.log("Edit extracted:", { uazapiMsgId, newText: newText?.substring(0, 50) });
       
@@ -820,6 +831,7 @@ serve(async (req) => {
           });
         } else {
           console.log("⚠️ No mapping found for edited message:", uazapiMsgId);
+          console.log("⚠️ Available in payload: messageid=" + messageDataForEvents.messageid + ", id=" + messageDataForEvents.id + ", edited=" + editedOriginalMsgId);
         }
       }
       
@@ -1022,12 +1034,39 @@ serve(async (req) => {
     }
 
     // Extract quoted message data (for replies)
-    const quotedData = messageData.quoted || messageData.quotedMessage || null;
+    // UAZAPI format: 
+    // - message.quoted: string with the original message ID (e.g., "3EB0C64A08A1609D776B55")
+    // - message.content.contextInfo.stanzaID: same ID
+    // - message.content.contextInfo.quotedMessage.conversation: the quoted text
     let quotedText = "";
     let quotedMessageId = "";
-    if (quotedData) {
-      quotedText = quotedData.text || quotedData.content || quotedData.conversation || "";
-      quotedMessageId = quotedData.id || quotedData.messageid || quotedData.stanzaId || "";
+    
+    // Method 1: UAZAPI puts the quoted message ID as a string in message.quoted
+    const quotedIdFromField = typeof messageData.quoted === "string" && messageData.quoted.length > 10 
+      ? messageData.quoted 
+      : "";
+    
+    // Method 2: Full context info is in content.contextInfo
+    const contextInfo = typeof contentRaw === "object" ? contentRaw?.contextInfo : null;
+    
+    if (contextInfo) {
+      quotedMessageId = contextInfo.stanzaID || contextInfo.stanzaId || quotedIdFromField || "";
+      quotedText = contextInfo.quotedMessage?.conversation || 
+                   contextInfo.quotedMessage?.extendedTextMessage?.text ||
+                   contextInfo.quotedMessage?.text || "";
+    } else if (quotedIdFromField) {
+      // Fallback: only have the ID, not the text
+      quotedMessageId = quotedIdFromField;
+    }
+    
+    // Alternative formats for other UAZAPI versions
+    if (!quotedMessageId && messageData.quotedMessage) {
+      quotedText = messageData.quotedMessage.text || messageData.quotedMessage.content || messageData.quotedMessage.conversation || "";
+      quotedMessageId = messageData.quotedMessage.id || messageData.quotedMessage.messageid || messageData.quotedMessage.stanzaId || "";
+    }
+    
+    const hasQuotedMessage = !!quotedMessageId;
+    if (hasQuotedMessage) {
       console.log("Message is a REPLY to:", { quotedText: quotedText?.substring(0, 50), quotedMessageId });
     }
 
@@ -1041,7 +1080,7 @@ serve(async (req) => {
       isFromMe,
       trackId,
       isSticker,
-      hasQuoted: !!quotedData,
+      hasQuoted: hasQuotedMessage,
       instanceToken: instanceToken?.substring(0, 20) + "..." 
     });
 
