@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v18: Iniciando...");
+    console.log("🚀 Bridge Toolkit v19: Iniciando (Performance Otimizada)...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
@@ -20,6 +20,96 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     
     // Track rendered states to avoid re-rendering
     const renderedStates = new Map(); // ghlId -> { deleted, edited, replied }
+    
+    // ========== PERFORMANCE: Caches and Observers ==========
+    
+    // Position cache to avoid repeated getBoundingClientRect calls
+    const positionCache = new WeakMap(); // msgElement -> { isOutbound: boolean, timestamp: number }
+    const POSITION_CACHE_TTL = 5000; // 5 seconds TTL
+    
+    // Visible messages set (updated by Intersection Observer)
+    const visibleMessages = new Set();
+    let messageObserver = null;
+    
+    // Debounce helper
+    const debounce = (fn, delay) => {
+        let timeoutId = null;
+        return (...args) => {
+            if (timeoutId) clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => fn(...args), delay);
+        };
+    };
+    
+    // Get cached isOutbound value or calculate it
+    const getIsOutbound = (msgEl) => {
+        if (!msgEl) return false;
+        
+        const now = Date.now();
+        const cached = positionCache.get(msgEl);
+        
+        // Return cached value if still valid
+        if (cached && (now - cached.timestamp) < POSITION_CACHE_TTL) {
+            return cached.isOutbound;
+        }
+        
+        // Calculate isOutbound
+        let isOutbound = false;
+        try {
+            // Find the scrollable chat container (parent with overflow)
+            let chatContainer = msgEl.parentElement;
+            for (let i = 0; i < 15 && chatContainer; i++) {
+                const style = window.getComputedStyle(chatContainer);
+                if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
+                chatContainer = chatContainer.parentElement;
+            }
+            
+            if (chatContainer) {
+                const containerRect = chatContainer.getBoundingClientRect();
+                const msgRect = msgEl.getBoundingClientRect();
+                // Message center relative to chat container
+                const msgCenter = msgRect.left + msgRect.width / 2;
+                const containerCenter = containerRect.left + containerRect.width / 2;
+                isOutbound = msgCenter > containerCenter;
+            }
+        } catch (e) {
+            isOutbound = false;
+        }
+        
+        // Cache the result
+        positionCache.set(msgEl, { isOutbound, timestamp: now });
+        
+        return isOutbound;
+    };
+    
+    // Initialize Intersection Observer for visible messages
+    const initMessageObserver = () => {
+        if (messageObserver) return;
+        
+        messageObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const ghlId = entry.target.getAttribute('data-message-id');
+                if (!ghlId) return;
+                
+                if (entry.isIntersecting) {
+                    visibleMessages.add(ghlId);
+                } else {
+                    visibleMessages.delete(ghlId);
+                }
+            });
+        }, {
+            root: null, // viewport
+            rootMargin: '100px', // Pre-load 100px outside viewport
+            threshold: 0
+        });
+        
+        console.log("👁️ Bridge: Intersection Observer initialized");
+    };
+    
+    // Observe a message element
+    const observeMessage = (msgEl) => {
+        if (!messageObserver || !msgEl) return;
+        messageObserver.observe(msgEl);
+    };
 
     const showToast = (msg, isError = false) => {
         const toast = document.createElement('div');
@@ -744,7 +834,14 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         
         containers.forEach(msg => {
             msg.classList.add('bridge-v13');
-            const isOutbound = msg.classList.contains('ml-auto');
+            // Use cached position for consistency
+            const isOutbound = getIsOutbound(msg) || msg.classList.contains('ml-auto');
+            
+            // Observe message for visibility tracking
+            const msgId = msg.getAttribute('data-message-id');
+            if (msgId) {
+                observeMessage(msg);
+            }
             
             const btn = document.createElement('div');
             btn.className = 'bridge-trigger-v13';
@@ -961,29 +1058,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             // Render reaction badge on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             if (msgEl) {
-                // Detect if message is outbound (user) vs inbound (lead)
-                // GHL chat is a panel, not full window. Find chat container and compare positions.
-                let isOutbound = false;
-                try {
-                    // Find the scrollable chat container (parent with overflow)
-                    let chatContainer = msgEl.parentElement;
-                    for (let i = 0; i < 15 && chatContainer; i++) {
-                        const style = window.getComputedStyle(chatContainer);
-                        if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-                        chatContainer = chatContainer.parentElement;
-                    }
-                    
-                    if (chatContainer) {
-                        const containerRect = chatContainer.getBoundingClientRect();
-                        const msgRect = msgEl.getBoundingClientRect();
-                        // Message center relative to chat container
-                        const msgCenter = msgRect.left + msgRect.width / 2;
-                        const containerCenter = containerRect.left + containerRect.width / 2;
-                        isOutbound = msgCenter > containerCenter;
-                    }
-                } catch (e) {
-                    isOutbound = false;
-                }
+                // Use cached position calculation for performance
+                const isOutbound = getIsOutbound(msgEl);
                 const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
                 
                 // Replace reaction (not accumulate) - user can only have one active reaction
@@ -1048,7 +1124,16 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 // Handle broadcast messages on ghl_updates channel
                 if (msg.topic === 'realtime:ghl_updates' && msg.event === 'broadcast') {
                     if (msg.payload?.payload) {
-                        handleRealtimeUpdate(msg.payload.payload);
+                    // Debounced update for rapid events
+                    const payload = msg.payload.payload;
+                    const ghlId = payload.ghl_id;
+                    
+                    // Log if message not currently visible
+                    if (ghlId && !visibleMessages.has(ghlId)) {
+                        console.log("⏳ Bridge: Update for non-visible message", ghlId);
+                    }
+                    
+                    handleRealtimeUpdate(payload);
                     }
                 }
             } catch (e) {
@@ -1119,26 +1204,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         const currentReaction = state.reactions[state.reactions.length - 1];
                         const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
                         if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
-                            // Detect if message is outbound (user) vs inbound (lead)
-                            let isOutbound = false;
-                            try {
-                                let chatContainer = msgEl.parentElement;
-                                for (let i = 0; i < 15 && chatContainer; i++) {
-                                    const style = window.getComputedStyle(chatContainer);
-                                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-                                    chatContainer = chatContainer.parentElement;
-                                }
-                                
-                                if (chatContainer) {
-                                    const containerRect = chatContainer.getBoundingClientRect();
-                                    const msgRect = msgEl.getBoundingClientRect();
-                                    const msgCenter = msgRect.left + msgRect.width / 2;
-                                    const containerCenter = containerRect.left + containerRect.width / 2;
-                                    isOutbound = msgCenter > containerCenter;
-                                }
-                            } catch (e) {
-                                isOutbound = false;
-                            }
+                            // Use cached position calculation for performance
+                            const isOutbound = getIsOutbound(msgEl);
                             const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
                             
                             const badge = document.createElement('span');
@@ -1193,13 +1260,16 @@ const BRIDGE_TOOLKIT_SCRIPT = `
 
     setInterval(inject, 1000);
     
+    // Initialize Intersection Observer
+    initMessageObserver();
+    
     // Initialize Realtime after a short delay
     setTimeout(initRealtime, 2000);
     
     // Initialize persistence (load states on page load)
     initPersistence();
     
-    console.log("✅ Bridge Toolkit v16 carregado (com Persistência de Estados)!");
+    console.log("✅ Bridge Toolkit v19 carregado (Performance Otimizada)!");
 })();
 `;
 
