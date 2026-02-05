@@ -657,6 +657,27 @@ serve(async (req) => {
     // Handle different event types from UAZAPI
     // EventType is a string, but event can be an object
     const eventType = body.EventType || body.type || "";
+
+    // ==============================================================
+    // EARLY IGNORE: delivery/read receipts
+    // UAZAPI sends these as EventType=messages_update + type=ReadReceipt
+    // They contain MessageIDs but no message content. If we process them,
+    // they can cause noisy logs and (depending on payload variants) may
+    // interfere with dedup or downstream logic.
+    // ==============================================================
+    const rootType = String(body.type || "");
+    const updateState = String(body.state || body.event?.Type || "");
+    const isReceipt =
+      rootType.toLowerCase() === "readreceipt" ||
+      (String(eventType).toLowerCase() === "messages_update" &&
+        ["delivered", "read", "seen"].includes(updateState.toLowerCase()));
+
+    if (isReceipt) {
+      return new Response(
+        JSON.stringify({ received: true, ignored: true, reason: "receipt_event", eventType, state: updateState }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     // Extract message data early for special event handling
     const messageDataForEvents = body.message || body.data || {};
