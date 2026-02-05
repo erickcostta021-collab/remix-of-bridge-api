@@ -1,3 +1,4 @@
+// v2.0 - Forced redeploy
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
