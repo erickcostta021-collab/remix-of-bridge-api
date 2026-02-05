@@ -6,53 +6,13 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v21: Iniciando (Performance Otimizada)...");
+    console.log("🚀 Bridge Toolkit v20: Iniciando (Performance Otimizada)...");
 
-    // Capture script source immediately (before async execution)
-    const _scriptSrc = document.currentScript ? document.currentScript.src : null;
-    
-    // Try to find script origin from multiple sources
-    const detectFunctionsOrigin = () => {
-        // Method 1: Use captured currentScript src
-        if (_scriptSrc) {
-            try {
-                return new URL(_scriptSrc).origin;
-            } catch (e) {}
-        }
-        
-        // Method 2: Find script tag by partial URL match
-        const scripts = document.querySelectorAll('script[src*="bridge-toolkit"]');
-        for (const script of scripts) {
-            if (script.src) {
-                try {
-                    return new URL(script.src).origin;
-                } catch (e) {}
-            }
-        }
-        
-        // Method 3: Find script by supabase.co in URL
-        const supabaseScripts = document.querySelectorAll('script[src*="supabase.co"]');
-        for (const script of supabaseScripts) {
-            if (script.src && script.src.includes('functions/v1')) {
-                try {
-                    return new URL(script.src).origin;
-                } catch (e) {}
-            }
-        }
-        
-        // Fallback to direct URL
-        return 'https://jsupvprudyxyiyxwqxuq.supabase.co';
-    };
-    
     const BRIDGE_CONFIG = {
-        // Project URL is still needed for Realtime websocket.
-        project_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
+        supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
         supabase_anon_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzdXB2cHJ1ZHl4eWl5eHdxeHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MzMwNDAsImV4cCI6MjA4NDUwOTA0MH0._Ge7hb5CHCE6mchtjGLbWXx5Q9i_D7P0dn7OlMYlvyM',
-        endpoint: '/functions/v1/map-messages',
-        functions_origin: detectFunctionsOrigin()
+        endpoint: '/functions/v1/map-messages'
     };
-    
-    console.log("🔗 Bridge: Functions origin:", BRIDGE_CONFIG.functions_origin);
 
     let replyContext = null; // Stores message being replied to
     let editContext = null;  // Stores message being edited
@@ -227,23 +187,19 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     const sendAction = async (action, ghlId, extra = {}) => {
         console.log(\`📡 Bridge Toolkit - Ação: \${action} | GHL ID: \${ghlId}\`, extra);
         try {
-            const url = BRIDGE_CONFIG.functions_origin + BRIDGE_CONFIG.endpoint;
+            const url = BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint;
             console.log("📤 Enviando para:", url);
-
+            
             const response = await fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': BRIDGE_CONFIG.supabase_anon_key,
-                    'Authorization': \`Bearer \${BRIDGE_CONFIG.supabase_anon_key}\`,
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action, ghl_id: ghlId, ...extra })
             });
-
+            
             console.log("📥 Response status:", response.status);
             const data = await response.json();
             console.log("📥 Response data:", data);
-
+            
             if (data.success) {
                 console.log("✅ Ação executada com sucesso:", action);
                 return data;
@@ -448,14 +404,10 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         console.log(\`↩️ Sending reply to \${ghlId} with text: \${replyText.substring(0, 50)}...\`);
         
         try {
-            const url = BRIDGE_CONFIG.functions_origin + BRIDGE_CONFIG.endpoint;
+            const url = BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint;
             const response = await fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': BRIDGE_CONFIG.supabase_anon_key,
-                    'Authorization': \`Bearer \${BRIDGE_CONFIG.supabase_anon_key}\`,
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     action: 'reply', 
                     ghl_id: ghlId, 
@@ -734,8 +686,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
 
         const parentItem = triggerEl.closest('[data-message-id]');
         const ghlId = parentItem ? parentItem.getAttribute('data-message-id') : null;
-        // Use getIsOutbound for consistent position detection
-        const isOutbound = parentItem ? (getIsOutbound(parentItem) || parentItem.classList.contains('ml-auto')) : false;
+        const msgContainer = triggerEl.closest('.message-container');
+        const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
         
         if (!ghlId) {
             console.error("❌ ID da mensagem não encontrado no DOM");
@@ -944,18 +896,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     const inject = () => {
-        // Multiple fallback selectors for GHL message containers
-        let containers = document.querySelectorAll('.message-container:not(.bridge-v13)');
-        
-        // Fallback: try data-message-id attribute if .message-container not found
-        if (containers.length === 0) {
-            containers = document.querySelectorAll('[data-message-id]:not(.bridge-v13)');
-        }
-        
-        // Fallback 2: conversation message items
-        if (containers.length === 0) {
-            containers = document.querySelectorAll('.conversation-message:not(.bridge-v13), .chat-message:not(.bridge-v13)');
-        }
+        const containers = document.querySelectorAll('.message-container:not(.bridge-v13)');
         
         containers.forEach(msg => {
             msg.classList.add('bridge-v13');
@@ -1209,7 +1150,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         
         // Create a simple Realtime connection using native WebSocket
         // Supabase Realtime uses Phoenix protocol
-        const wsUrl = BRIDGE_CONFIG.project_url.replace('https://', 'wss://') + 
+        const wsUrl = BRIDGE_CONFIG.supabase_url.replace('https://', 'wss://') + 
                       '/realtime/v1/websocket?apikey=' + BRIDGE_CONFIG.supabase_anon_key + 
                       '&vsn=1.0.0';
         
@@ -1298,14 +1239,10 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         console.log("📋 Bridge: Loading persisted states for", ghlIds.length, "messages");
         
         try {
-            const url = BRIDGE_CONFIG.functions_origin + BRIDGE_CONFIG.endpoint;
+            const url = BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint;
             const response = await fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': BRIDGE_CONFIG.supabase_anon_key,
-                    'Authorization': \`Bearer \${BRIDGE_CONFIG.supabase_anon_key}\`,
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'list-states', ghl_ids: ghlIds })
             });
             
@@ -1391,7 +1328,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     // Initialize persistence (load states on page load)
     initPersistence();
     
-    console.log("✅ Bridge Toolkit v21 carregado (Performance Otimizada)!");
+    console.log("✅ Bridge Toolkit v19 carregado (Performance Otimizada)!");
 })();
 `;
 
