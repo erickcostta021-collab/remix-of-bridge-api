@@ -8,22 +8,51 @@ const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
     console.log("🚀 Bridge Toolkit v21: Iniciando (Performance Otimizada)...");
 
+    // Capture script source immediately (before async execution)
+    const _scriptSrc = document.currentScript ? document.currentScript.src : null;
+    
+    // Try to find script origin from multiple sources
+    const detectFunctionsOrigin = () => {
+        // Method 1: Use captured currentScript src
+        if (_scriptSrc) {
+            try {
+                return new URL(_scriptSrc).origin;
+            } catch (e) {}
+        }
+        
+        // Method 2: Find script tag by partial URL match
+        const scripts = document.querySelectorAll('script[src*="bridge-toolkit"]');
+        for (const script of scripts) {
+            if (script.src) {
+                try {
+                    return new URL(script.src).origin;
+                } catch (e) {}
+            }
+        }
+        
+        // Method 3: Find script by supabase.co in URL
+        const supabaseScripts = document.querySelectorAll('script[src*="supabase.co"]');
+        for (const script of supabaseScripts) {
+            if (script.src && script.src.includes('functions/v1')) {
+                try {
+                    return new URL(script.src).origin;
+                } catch (e) {}
+            }
+        }
+        
+        // Fallback to direct URL
+        return 'https://jsupvprudyxyiyxwqxuq.supabase.co';
+    };
+    
     const BRIDGE_CONFIG = {
         // Project URL is still needed for Realtime websocket.
         project_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
         supabase_anon_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzdXB2cHJ1ZHl4eWl5eHdxeHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MzMwNDAsImV4cCI6MjA4NDUwOTA0MH0._Ge7hb5CHCE6mchtjGLbWXx5Q9i_D7P0dn7OlMYlvyM',
         endpoint: '/functions/v1/map-messages',
-        // Prefer the origin where THIS script was loaded from (avoids CSP/connect-src blocks).
-        // Falls back to project_url if currentScript is unavailable.
-        functions_origin: (() => {
-            try {
-                const src = document.currentScript && document.currentScript.src;
-                return src ? new URL(src).origin : null;
-            } catch (e) {
-                return null;
-            }
-        })() || 'https://jsupvprudyxyiyxwqxuq.supabase.co'
+        functions_origin: detectFunctionsOrigin()
     };
+    
+    console.log("🔗 Bridge: Functions origin:", BRIDGE_CONFIG.functions_origin);
 
     let replyContext = null; // Stores message being replied to
     let editContext = null;  // Stores message being edited
