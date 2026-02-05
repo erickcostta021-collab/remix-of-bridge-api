@@ -914,26 +914,30 @@ serve(async (req) => {
             }
           }
           
-          // Also broadcast to frontend for any UI updates needed
-          await supabase.channel("ghl_updates").send({
-            type: "broadcast",
-            event: "msg_update",
-            payload: {
-              ghl_id: mapping.ghl_message_id,
-              type: "edit",
-              new_text: newText,
-              original_text: originalText,
-              location_id: mapping.location_id,
-              fromMe: mapping.from_me,
-            },
-          });
+          // Only broadcast edit overlay for OUTBOUND edits (from CRM user)
+          // For inbound edits (from lead), we send formatted message instead - no overlay needed
+          if (mapping.from_me) {
+            await supabase.channel("ghl_updates").send({
+              type: "broadcast",
+              event: "msg_update",
+              payload: {
+                ghl_id: mapping.ghl_message_id,
+                type: "edit",
+                new_text: newText,
+                original_text: originalText,
+                location_id: mapping.location_id,
+                fromMe: mapping.from_me,
+              },
+            });
           
-          console.log("✅ Edit event broadcasted:", { 
-            ghl_id: mapping.ghl_message_id, 
-            new_text: newText?.substring(0, 30),
-            original_text: originalText?.substring(0, 30),
-            fromMe: mapping.from_me
-          });
+            console.log("✅ Edit event broadcasted (outbound):", { 
+              ghl_id: mapping.ghl_message_id, 
+              new_text: newText?.substring(0, 30),
+              original_text: originalText?.substring(0, 30),
+            });
+          } else {
+            console.log("📝 Inbound edit handled via formatted message, no overlay broadcast");
+          }
         } else {
           console.log("⚠️ No mapping found for edited message:", uazapiMsgId);
           console.log("⚠️ Available in payload: messageid=" + messageDataForEvents.messageid + ", id=" + messageDataForEvents.id + ", edited=" + editedOriginalMsgId);
