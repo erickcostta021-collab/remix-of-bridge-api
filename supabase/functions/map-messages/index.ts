@@ -235,42 +235,12 @@ serve(async (req) => {
 
       // If we have UAZAPI ID, send edit to WhatsApp
       if (mapping.uazapi_message_id && config) {
-        // Try to get contact phone for alternative payloads
-        let contactPhone = "";
-        if (mapping.contact_id) {
-          const { data: phoneMapping } = await supabase
-            .from("ghl_contact_phone_mapping")
-            .select("original_phone")
-            .eq("contact_id", mapping.contact_id)
-            .maybeSingle();
-          
-          if (phoneMapping?.original_phone) {
-            contactPhone = phoneMapping.original_phone.replace(/\D/g, "");
-          }
-        }
-
-        const whatsappJid = contactPhone ? `${contactPhone}@s.whatsapp.net` : "";
+        console.log("✏️ Edit payload:", { id: mapping.uazapi_message_id, text: new_text });
         
-        console.log("✏️ Edit payload:", { 
-          id: mapping.uazapi_message_id, 
-          text: new_text, 
-          contact_id: mapping.contact_id,
-          phone: contactPhone || "(not found)"
-        });
-        
-        // Try multiple UAZAPI formats - some require number, some don't
-        const attempts = [
-          // Standard format
+        // UAZAPI exact format: POST /message/edit with { id, text }
+        const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
           { path: "/message/edit", body: { id: mapping.uazapi_message_id, text: new_text } },
-          // With number (WhatsApp JID)
-          { path: "/message/edit", body: { id: mapping.uazapi_message_id, text: new_text, number: whatsappJid } },
-          // With plain number
-          { path: "/message/edit", body: { id: mapping.uazapi_message_id, text: new_text, number: contactPhone } },
-          // Alternative: message field instead of text
-          { path: "/message/edit", body: { id: mapping.uazapi_message_id, message: new_text } },
-        ];
-        
-        const result = await tryUazapiEndpoints(config.baseUrl, config.token, attempts);
+        ]);
 
         uazapiSuccess = result.success;
         if (!result.success) {
