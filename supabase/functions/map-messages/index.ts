@@ -189,7 +189,7 @@ serve(async (req) => {
 
     // Action: edit - Edit a message (with 15-minute validation)
     if (action === "edit") {
-      const { ghl_id, new_text } = body;
+      const { ghl_id, new_text, ghl_user_id } = body;
 
       if (!ghl_id || !new_text) {
         return new Response(
@@ -284,14 +284,16 @@ serve(async (req) => {
             message: formattedEditMessage,
           };
           
-          // If the instance has a GHL user assigned, attribute the comment to them
-          if (config.ghlUserId) {
-            requestBody.userId = config.ghlUserId;
+          // Priority: ghl_user_id from request (actual user editing) > instance's ghl_user_id (fallback)
+          const effectiveUserId = ghl_user_id || config.ghlUserId;
+          if (effectiveUserId) {
+            requestBody.userId = effectiveUserId;
           }
           
           console.log("📝 Sending edit InternalComment to GHL:", {
             contactId: mapping.contact_id,
-            userId: config.ghlUserId || "(not assigned)",
+            userId: effectiveUserId || "(not assigned)",
+            userIdSource: ghl_user_id ? "from_request" : (config.ghlUserId ? "from_instance" : "none"),
             originalText: originalText?.substring(0, 30),
             newText: new_text?.substring(0, 30),
           });
