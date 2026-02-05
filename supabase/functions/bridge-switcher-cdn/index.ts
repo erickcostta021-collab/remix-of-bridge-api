@@ -267,7 +267,7 @@ Deno.serve(async (req) => {
     headers: {
       ...corsHeaders,
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "public, max-age=60, must-revalidate",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
     },
   });
 });
