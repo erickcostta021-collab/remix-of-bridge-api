@@ -661,23 +661,102 @@ serve(async (req) => {
     // Extract message data early for special event handling
     const messageDataForEvents = body.message || body.data || {};
     
+    // === HANDLE MESSAGE REACTION EVENTS ===
+    // UAZAPI sends reactions with:
+    // - messageType: "ReactionMessage"
+    // - type: "reaction"
+    // - reaction: "MESSAGE_ID" (ID of the message being reacted to)
+    // - text: "😂" (the emoji)
+    // - content.key.ID: "MESSAGE_ID" (alternative location for target message ID)
+    const reactionMsgType = (messageDataForEvents.messageType || "").toLowerCase();
+    const messageTypeField = (messageDataForEvents.type || "").toLowerCase();
+    const isReactionMessage = reactionMsgType === "reactionmessage" || messageTypeField === "reaction";
+    const hasReactionField = typeof messageDataForEvents.reaction === "string" && messageDataForEvents.reaction !== "";
+    
+    if (isReactionMessage || hasReactionField) {
+      console.log("Processing message REACTION event:", { 
+        eventType, 
+        reactionMsgType,
+        messageTypeField,
+        reaction: messageDataForEvents.reaction,
+        text: messageDataForEvents.text,
+        contentKey: messageDataForEvents.content?.key
+      });
+      
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      // Extract target message ID (the message being reacted to)
+      // UAZAPI format: reaction field contains the message ID, OR content.key.ID
+      const targetMsgId = messageDataForEvents.reaction || 
+                          messageDataForEvents.content?.key?.ID ||
+                          messageDataForEvents.content?.key?.id || "";
+      
+      // Extract emoji from text field
+      const emoji = messageDataForEvents.text || 
+                    messageDataForEvents.content?.text || "";
+      
+      const fromMe = messageDataForEvents.fromMe ?? false;
+      
+      console.log("Reaction extracted:", { targetMsgId, emoji, fromMe });
+      
+      if (targetMsgId && emoji) {
+        // Find mapping by UAZAPI ID
+        const { data: mapping } = await supabase
+          .from("message_map")
+          .select("*")
+          .eq("uazapi_message_id", targetMsgId)
+          .maybeSingle();
+        
+        if (mapping) {
+          // Update reactions in database
+          const currentReactions = (mapping.reactions as string[]) || [];
+          const updatedReactions = [...currentReactions, emoji];
+          
+          await supabase
+            .from("message_map")
+            .update({ reactions: updatedReactions })
+            .eq("id", mapping.id);
+          
+          // Broadcast to frontend
+          await supabase.channel("ghl_updates").send({
+            type: "broadcast",
+            event: "msg_update",
+            payload: {
+              ghl_id: mapping.ghl_message_id,
+              type: "react",
+              emoji,
+              fromMe,
+              location_id: mapping.location_id,
+            },
+          });
+          
+          console.log("✅ Reaction event broadcasted:", { ghl_id: mapping.ghl_message_id, emoji, fromMe });
+        } else {
+          console.log("⚠️ No mapping found for reaction target message:", targetMsgId);
+        }
+      }
+      
+      return new Response(
+        JSON.stringify({ received: true, processed: true, type: "reaction" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     // === HANDLE MESSAGE EDIT EVENTS ===
-    // UAZAPI sends edited messages with non-empty "edited" field, specific event types, or protocolMessage.type === 14
-    // Check if edited field has content (not empty string)
-    const hasEditedContent = messageDataForEvents.edited && 
-                             typeof messageDataForEvents.edited === "object" && 
-                             Object.keys(messageDataForEvents.edited).length > 0;
-    const hasEditedString = typeof messageDataForEvents.edited === "string" && messageDataForEvents.edited !== "";
-    const isEditEventType = eventType === "messages.edit" || eventType === "message.edit" || eventType === "messages.update";
+    // UAZAPI sends edits with specific event types or protocolMessage.type === 14
+    // IMPORTANT: The "edited" field in UAZAPI contains a MESSAGE ID (reference), NOT the new text!
+    // The new text is in the "text" or "content" fields
+    // We detect real edits via event types, NOT by the presence of "edited" field
+    const isEditEventType = eventType === "messages.edit" || eventType === "message.edit";
     const isProtocolEdit = messageDataForEvents.protocolMessage?.type === 14;
     
-    if (hasEditedContent || hasEditedString || isEditEventType || isProtocolEdit) {
+    if (isEditEventType || isProtocolEdit) {
       console.log("Processing message EDIT event:", { 
         eventType, 
         messageId: messageDataForEvents.messageid || messageDataForEvents.id,
-        editedData: messageDataForEvents.edited,
-        hasEditedContent,
-        hasEditedString,
+        protocolMessage: messageDataForEvents.protocolMessage,
         isEditEventType,
         isProtocolEdit
       });
@@ -692,13 +771,12 @@ serve(async (req) => {
                           messageDataForEvents.messageid || 
                           messageDataForEvents.id || "";
       
-      // Extract new text - try multiple formats
+      // Extract new text - from protocolMessage for edit events
       const newText = messageDataForEvents.protocolMessage?.editedMessage?.conversation ||
                       messageDataForEvents.protocolMessage?.editedMessage?.extendedTextMessage?.text ||
-                      (typeof messageDataForEvents.edited === "object" ? messageDataForEvents.edited.text : null) ||
-                      (typeof messageDataForEvents.edited === "string" ? messageDataForEvents.edited : null) ||
                       messageDataForEvents.text || 
-                      (typeof messageDataForEvents.content === "string" ? messageDataForEvents.content : null) || "";
+                      (typeof messageDataForEvents.content === "string" ? messageDataForEvents.content : null) ||
+                      messageDataForEvents.content?.text || "";
       
       console.log("Edit extracted:", { uazapiMsgId, newText: newText?.substring(0, 50) });
       
@@ -734,107 +812,19 @@ serve(async (req) => {
             },
           });
           
-          console.log("Edit event broadcasted:", { 
+          console.log("✅ Edit event broadcasted:", { 
             ghl_id: mapping.ghl_message_id, 
             new_text: newText?.substring(0, 30),
             original_text: originalText?.substring(0, 30),
             fromMe: mapping.from_me
           });
         } else {
-          console.log("No mapping found for edited message:", uazapiMsgId);
+          console.log("⚠️ No mapping found for edited message:", uazapiMsgId);
         }
       }
       
       return new Response(
         JSON.stringify({ received: true, processed: true, type: "edit" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    // === HANDLE MESSAGE REACTION EVENTS ===
-    // Reactions can come in different formats: reaction object, reactionMessage, or specific event types
-    const hasReactionContent = messageDataForEvents.reaction && 
-                               typeof messageDataForEvents.reaction === "object" && 
-                               Object.keys(messageDataForEvents.reaction).length > 0;
-    const hasReactionMessage = messageDataForEvents.reactionMessage && 
-                               typeof messageDataForEvents.reactionMessage === "object";
-    const isReactionEventType = eventType === "messages.reaction" || eventType === "message.reaction";
-    
-    if (hasReactionContent || hasReactionMessage || isReactionEventType) {
-      console.log("Processing message REACTION event:", { 
-        eventType, 
-        messageId: messageDataForEvents.messageid || messageDataForEvents.id,
-        reaction: messageDataForEvents.reaction,
-        reactionMessage: messageDataForEvents.reactionMessage,
-        hasReactionContent,
-        hasReactionMessage
-      });
-      
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
-      // Reaction can be on a different message - get the referenced message ID
-      // Try multiple formats for extracting reaction data
-      const reactionData = messageDataForEvents.reactionMessage || messageDataForEvents.reaction || {};
-      const targetMsgId = reactionData.key?.id || 
-                          reactionData.messageId || 
-                          reactionData.targetMessageId ||
-                          messageDataForEvents.key?.id ||
-                          messageDataForEvents.messageid || 
-                          messageDataForEvents.id || "";
-      
-      // Extract emoji - try multiple formats
-      const emoji = reactionData.text || 
-                    reactionData.emoji || 
-                    reactionData.reactionText ||
-                    (typeof reactionData === "string" ? reactionData : "") || "";
-      
-      const fromMe = reactionData.key?.fromMe ?? 
-                     messageDataForEvents.key?.fromMe ?? 
-                     messageDataForEvents.fromMe ?? false;
-      
-      console.log("Reaction extracted:", { targetMsgId, emoji, fromMe });
-      
-      if (targetMsgId && emoji) {
-        // Find mapping by UAZAPI ID
-        const { data: mapping } = await supabase
-          .from("message_map")
-          .select("*")
-          .eq("uazapi_message_id", targetMsgId)
-          .maybeSingle();
-        
-        if (mapping) {
-          // Update reactions in database
-          const currentReactions = (mapping.reactions as string[]) || [];
-          const updatedReactions = [...currentReactions, emoji];
-          
-          await supabase
-            .from("message_map")
-            .update({ reactions: updatedReactions })
-            .eq("id", mapping.id);
-          
-          // Broadcast to frontend
-          await supabase.channel("ghl_updates").send({
-            type: "broadcast",
-            event: "msg_update",
-            payload: {
-              ghl_id: mapping.ghl_message_id,
-              type: "react",
-              emoji,
-              fromMe,
-              location_id: mapping.location_id,
-            },
-          });
-          
-          console.log("Reaction event broadcasted:", { ghl_id: mapping.ghl_message_id, emoji, fromMe });
-        } else {
-          console.log("No mapping found for reaction target message:", targetMsgId);
-        }
-      }
-      
-      return new Response(
-        JSON.stringify({ received: true, processed: true, type: "reaction" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -1589,17 +1579,21 @@ serve(async (req) => {
       // If this is a REPLY, try to get the original message from database and add context
       if (quotedMessageId || quotedText) {
         let originalText = quotedText;
+        let originalGhlId = "";
         
         // Try to find the original message in our mapping for richer context
         if (quotedMessageId) {
           const { data: originalMapping } = await supabase
             .from("message_map")
-            .select("message_text")
+            .select("message_text, ghl_message_id")
             .eq("uazapi_message_id", quotedMessageId)
             .maybeSingle();
           
           if (originalMapping?.message_text) {
             originalText = originalMapping.message_text;
+          }
+          if (originalMapping?.ghl_message_id) {
+            originalGhlId = originalMapping.ghl_message_id;
           }
         }
         
@@ -1611,16 +1605,22 @@ serve(async (req) => {
             formattedCaption = replyPrefix + formattedCaption;
           }
           
-          // Broadcast reply event for UI update
-          await supabase.channel("ghl_updates").send({
-            type: "broadcast",
-            event: "msg_update",
-            payload: {
-              type: "reply",
-              replyData: { text: originalText.substring(0, 200) },
-              location_id: subaccount.location_id,
-            },
-          });
+          // Broadcast reply event for UI update - include the GHL ID of the original message
+          if (originalGhlId) {
+            await supabase.channel("ghl_updates").send({
+              type: "broadcast",
+              event: "msg_update",
+              payload: {
+                type: "reply",
+                ghl_id: originalGhlId,  // ID of the message being replied to
+                replyData: { text: originalText.substring(0, 200) },
+                location_id: subaccount.location_id,
+              },
+            });
+            console.log("✅ Reply event broadcasted:", { originalGhlId, quotedText: originalText?.substring(0, 30) });
+          } else {
+            console.log("⚠️ Reply detected but original message not mapped:", { quotedMessageId, quotedText: quotedText?.substring(0, 30) });
+          }
         }
       }
       
