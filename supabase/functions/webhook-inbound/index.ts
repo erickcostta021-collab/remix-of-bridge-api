@@ -1126,6 +1126,8 @@ serve(async (req) => {
 
     // Secondary dedupe: sometimes the provider replays the same message with a different ID (or no ID).
     // We compute a content signature bucketed by minute to avoid blocking legitimate repeated messages later.
+    // CRITICAL: Only apply signature-based dedup when there's no message ID - if we have a unique ID, trust it.
+    if (!uazapiMessageId) {
     try {
       const tsMs =
         toEpochMs((messageData as any)?.timestamp) ||
@@ -1160,6 +1162,7 @@ serve(async (req) => {
     } catch (e) {
       console.error("Secondary dedupe (signature) failed (allowing processing):", e);
       // fail-open
+    }
     }
 
     // Find the instance by token
