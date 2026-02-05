@@ -938,25 +938,21 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         // Get original text if not provided
         const origText = originalText || textContainer.innerText;
         
-        // Create overlay structure - new format:
-        // texto original │✏️editado
-        // ──────────────────
-        // mensagem editada aqui
+        // Create overlay structure
         const wrapper = document.createElement('div');
         wrapper.className = 'bridge-edited-overlay';
         wrapper.dataset.newText = newText;
         wrapper.style.cssText = \`
-            background: #fefce8; border-left: 3px solid #eab308; border-radius: 4px;
-            padding: 10px 12px; font-family: sans-serif;
+            background: #fefce8; border: 1px solid #fef08a; border-radius: 8px;
+            padding: 8px 12px; font-family: sans-serif;
         \`;
         wrapper.innerHTML = \`
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                <span style="color: #9ca3af; font-size: 13px; font-style: italic; text-decoration: line-through;">\${origText.substring(0, 60)}\${origText.length > 60 ? '...' : ''}</span>
-                <span style="color: #d4d4d4;">│</span>
-                <span style="color: #ca8a04; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 2px;">✏️ editado</span>
-            </div>
-            <div style="border-top: 1px dashed #fef08a; padding-top: 8px;">
-                <span style="color: #374151; font-size: 14px;">\${newText}</span>
+            <div style="color: #374151; font-size: 14px; margin-bottom: 4px;">\${newText}</div>
+            <div style="border-top: 1px solid #fef08a; padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between; align-items: flex-end;">
+                <span style="color: #9ca3af; font-size: 13px; font-style: italic;">\${origText}</span>
+                <span style="color: #ca8a04; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                    <span>✏️</span> editado
+                </span>
             </div>
         \`;
         
