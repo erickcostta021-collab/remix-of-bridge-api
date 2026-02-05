@@ -1029,6 +1029,13 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             renderDeletedState(ghl_id);
             console.log("🗑️ Bridge: Processed delete event", { ghl_id, fromMe, hasOriginalText: !!original_text });
         } else if (type === 'edit') {
+            // Only render edit overlay for OUTBOUND messages (from CRM user)
+            // Inbound edits (from lead) are handled via formatted message in GHL
+            if (fromMe !== true) {
+                console.log("✏️ Bridge: Skipping edit overlay for inbound message", { ghl_id, fromMe });
+                return;
+            }
+            
             // Use original_text from payload if available, otherwise get from DOM
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             const textFromDom = msgEl?.querySelector('.text-\\\\[14px\\\\]')?.innerText || 
@@ -1194,8 +1201,16 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                     if (state.is_deleted) {
                         renderDeletedState(state.ghl_id);
                     } else if (state.is_edited && state.text) {
-                        // For edited, we show the current text without original (not available from DB)
-                        renderEditedState(state.ghl_id, state.text, '(texto original)');
+                        // Only render edit overlay for OUTBOUND messages (from CRM user)
+                        const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
+                        if (msgEl) {
+                            const isOutbound = getIsOutbound(msgEl);
+                            if (isOutbound) {
+                                renderEditedState(state.ghl_id, state.text, '(texto original)');
+                            } else {
+                                console.log("📋 Bridge: Skipping edit overlay for inbound message", state.ghl_id);
+                            }
+                        }
                     }
                     
                     // Render reactions if any
