@@ -792,6 +792,28 @@ serve(async (req) => {
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
       
+      // === DEDUPLICATION FOR EDITS ===
+      // Multiple instances may receive the same edit event - deduplicate by original message ID
+      const editDedupeKey = `edit:${editedOriginalMsgId || messageDataForEvents.messageid || messageDataForEvents.id}`;
+      
+      // Use INSERT with ON CONFLICT to atomically claim this edit event
+      // Only the first insert succeeds - others get count=0
+      const { data: insertResult, error: insertError } = await supabase
+        .from("ghl_processed_messages")
+        .insert({ message_id: editDedupeKey })
+        .select("id");
+      
+      // If insert failed due to unique constraint, another instance already claimed it
+      if (insertError?.code === "23505" || !insertResult || insertResult.length === 0) {
+        console.log("⏭️ Edit already claimed by another instance, skipping:", editDedupeKey);
+        return new Response(
+          JSON.stringify({ received: true, processed: false, reason: "edit_already_processed" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log("✅ Edit claimed for processing:", editDedupeKey);
+      
       // Extract the ORIGINAL message ID that was edited
       // - For "edited" field format: the "edited" field IS the original message ID
       // - For protocolMessage format: key.id contains the original ID
@@ -824,17 +846,78 @@ serve(async (req) => {
           // Store original text before updating
           const originalText = mapping.message_text || "";
           
-          // Update message text in database (for reference/history)
+          // Update in database
           await supabase
             .from("message_map")
             .update({ message_text: newText, is_edited: true })
             .eq("id", mapping.id);
           
-          // For INBOUND edits (from lead): GHL updates the message natively via Conversation Provider
-          // No broadcast needed - GHL handles it automatically
+          // === SEND EDIT AS FORMATTED INBOUND MESSAGE TO GHL ===
+          // Only send formatted message for lead edits (not our own outbound edits)
+          if (!mapping.from_me && mapping.contact_id && mapping.location_id) {
+            // Get instance and token for this location to send message to GHL
+            const { data: instanceData } = await supabase
+              .from("instances")
+              .select("*, ghl_subaccounts!inner(*)")
+              .eq("ghl_subaccounts.location_id", mapping.location_id)
+              .eq("instance_status", "connected")
+              .limit(1)
+              .maybeSingle();
+            
+            if (instanceData?.ghl_subaccounts) {
+              const subaccount = instanceData.ghl_subaccounts;
+              
+              // Get user settings for OAuth credentials
+              const { data: settings } = await supabase
+                .from("user_settings")
+                .select("ghl_client_id, ghl_client_secret")
+                .eq("user_id", subaccount.user_id)
+                .single();
+              
+              if (settings?.ghl_client_id && subaccount.ghl_access_token) {
+                // Get valid token (refresh if needed)
+                const token = await getValidToken(supabase, subaccount, settings);
+                
+                // Format the edit message exactly as requested:
+                // texto original│✏️editado
+                // ──────────────────────────
+                // texto editado
+                const formattedEditMessage = `${originalText}│✏️editado\n──────────────────────────\n${newText}`;
+                
+                console.log("📝 Sending formatted edit message to GHL:", {
+                  contactId: mapping.contact_id,
+                  originalText: originalText?.substring(0, 30),
+                  newText: newText?.substring(0, 30),
+                });
+                
+                // Send as inbound message (from lead)
+                const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Version": "2021-04-15",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                  },
+                  body: JSON.stringify({
+                    type: "SMS",
+                    contactId: mapping.contact_id,
+                    message: formattedEditMessage,
+                  }),
+                });
+                
+                const responseText = await response.text();
+                if (!response.ok) {
+                  console.error("Failed to send edit message to GHL:", responseText);
+                } else {
+                  console.log("✅ Edit message sent to GHL successfully:", responseText.substring(0, 200));
+                }
+              }
+            }
+          }
           
-          // For OUTBOUND edits (from CRM user): Need to broadcast overlay to Bridge Toolkit
-          // This handles edits made by the CRM user via UAZAPI (e.g., from another device)
+          // Only broadcast edit overlay for OUTBOUND edits (from CRM user)
+          // For inbound edits (from lead), we send formatted message instead - no overlay needed
           if (mapping.from_me) {
             await supabase.channel("ghl_updates").send({
               type: "broadcast",
@@ -845,19 +928,17 @@ serve(async (req) => {
                 new_text: newText,
                 original_text: originalText,
                 location_id: mapping.location_id,
-                fromMe: true,
+                fromMe: mapping.from_me,
               },
             });
-            
-            console.log("✅ Outbound edit broadcasted for overlay:", { 
+          
+            console.log("✅ Edit event broadcasted (outbound):", { 
               ghl_id: mapping.ghl_message_id, 
               new_text: newText?.substring(0, 30),
+              original_text: originalText?.substring(0, 30),
             });
           } else {
-            console.log("📝 Inbound edit - GHL handles natively, no action needed:", { 
-              ghl_id: mapping.ghl_message_id, 
-              new_text: newText?.substring(0, 30),
-            });
+            console.log("📝 Inbound edit handled via formatted message, no overlay broadcast");
           }
         } else {
           console.log("⚠️ No mapping found for edited message:", uazapiMsgId);
