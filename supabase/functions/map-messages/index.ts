@@ -311,9 +311,10 @@ serve(async (req) => {
         }
       }
 
-      // Update reactions in database
-      const currentReactions = (mapping.reactions as string[]) || [];
-      const updatedReactions = [...currentReactions, emoji];
+      // Update reactions in database - REPLACE (not accumulate)
+      // Since this is from the CRM user reacting, we replace the reaction with the new emoji
+      // If they want to remove the reaction, they can use an empty string or specific action
+      const updatedReactions = [emoji];
 
       const { data: updated, error: updateError } = await supabase
         .from("message_map")

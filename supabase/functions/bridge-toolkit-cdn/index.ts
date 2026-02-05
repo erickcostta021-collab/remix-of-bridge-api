@@ -961,11 +961,11 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             // Render reaction badge on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             if (msgEl) {
-                // Check if we already have this emoji
+                // Replace reaction (not accumulate) - user can only have one active reaction
                 const existingBadge = msgEl.querySelector('.bridge-reaction-badge');
                 if (existingBadge) {
-                    // Add emoji to existing badge
-                    existingBadge.innerText += emoji;
+                    // Replace with new emoji
+                    existingBadge.innerText = emoji;
                 } else {
                     // Create new badge
                     const badge = document.createElement('span');
@@ -1088,13 +1088,14 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                     
                     // Render reactions if any
                     if (state.reactions && state.reactions.length > 0) {
-                        const lastReaction = state.reactions[state.reactions.length - 1];
+                        // With the new logic, reactions array should have at most 1 emoji (replacement model)
+                        const currentReaction = state.reactions[state.reactions.length - 1];
                         const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
                         if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
                             const badge = document.createElement('span');
                             badge.className = 'bridge-reaction-badge';
                             badge.style.cssText = 'position: absolute; bottom: -8px; right: 8px; background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);';
-                            badge.innerText = state.reactions.length > 1 ? \`\${lastReaction} +\${state.reactions.length - 1}\` : lastReaction;
+                            badge.innerText = currentReaction;
                             msgEl.style.position = 'relative';
                             msgEl.appendChild(badge);
                         }
