@@ -961,72 +961,49 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             // Render reaction badge on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             if (msgEl) {
-                renderReactionBadge(msgEl, emoji);
+                // Detect if message is outbound (user) vs inbound (lead)
+                // GHL chat is a panel, not full window. Find chat container and compare positions.
+                let isOutbound = false;
+                try {
+                    // Find the scrollable chat container (parent with overflow)
+                    let chatContainer = msgEl.parentElement;
+                    for (let i = 0; i < 15 && chatContainer; i++) {
+                        const style = window.getComputedStyle(chatContainer);
+                        if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
+                        chatContainer = chatContainer.parentElement;
+                    }
+                    
+                    if (chatContainer) {
+                        const containerRect = chatContainer.getBoundingClientRect();
+                        const msgRect = msgEl.getBoundingClientRect();
+                        // Message center relative to chat container
+                        const msgCenter = msgRect.left + msgRect.width / 2;
+                        const containerCenter = containerRect.left + containerRect.width / 2;
+                        isOutbound = msgCenter > containerCenter;
+                    }
+                } catch (e) {
+                    isOutbound = false;
+                }
+                const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
+                
+                // Replace reaction (not accumulate) - user can only have one active reaction
+                const existingBadge = msgEl.querySelector('.bridge-reaction-badge');
+                if (existingBadge) {
+                    // Replace with new emoji
+                    existingBadge.innerText = emoji;
+                    // Update position in case it changed
+                    existingBadge.style.cssText = \`position: absolute; bottom: -8px; \${badgePosition} background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\`;
+                } else {
+                    // Create new badge
+                    const badge = document.createElement('span');
+                    badge.className = 'bridge-reaction-badge';
+                    badge.style.cssText = \`position: absolute; bottom: -8px; \${badgePosition} background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\`;
+                    badge.innerText = emoji;
+                    msgEl.style.position = 'relative';
+                    msgEl.appendChild(badge);
+                }
             }
             console.log("😊 Bridge: Processed react event", { ghl_id, emoji });
-        }
-    };
-    
-    // Render reaction badge with WhatsApp style
-    const renderReactionBadge = (msgEl, emoji) => {
-        // Detect if message is outbound using GHL's .ml-auto class on .message-container
-        const msgContainer = msgEl.closest('.message-container');
-        const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
-        
-        const justifyContent = isOutbound ? 'flex-end' : 'flex-start';
-        
-        // Find or create the reactions wrapper (absolute positioned below message)
-        let wrapper = msgEl.querySelector('.bridge-reactions-wrapper');
-        
-        if (!wrapper) {
-            wrapper = document.createElement('div');
-            wrapper.className = 'bridge-reactions-wrapper';
-            // Position absolute with width 100% allows justify-content to work correctly
-            wrapper.style.cssText = \`
-                display: flex;
-                position: absolute;
-                bottom: -12px;
-                left: 0;
-                right: 0;
-                width: 100%;
-                z-index: 50;
-                pointer-events: none;
-                justify-content: \${justifyContent};
-            \`;
-            
-            msgEl.style.position = 'relative';
-            msgEl.appendChild(wrapper);
-        } else {
-            wrapper.style.justifyContent = justifyContent;
-        }
-        
-        // WhatsApp style emoji pill with smart margins
-        const emojiPillStyle = \`
-            background: white;
-            border-radius: 20px;
-            padding: 1px 5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-            font-size: 13px;
-            border: 1px solid #eee;
-            pointer-events: auto;
-            cursor: default;
-            margin: \${isOutbound ? '0 10px 0 0' : '0 0 0 10px'};
-        \`;
-        
-        // Check for existing reaction badge inside wrapper
-        let badge = wrapper.querySelector('.bridge-reaction-badge');
-        
-        if (badge) {
-            // Replace emoji
-            badge.innerText = emoji;
-            badge.style.cssText = emojiPillStyle;
-        } else {
-            // Create new badge
-            badge = document.createElement('span');
-            badge.className = 'bridge-reaction-badge';
-            badge.style.cssText = emojiPillStyle;
-            badge.innerText = emoji;
-            wrapper.appendChild(badge);
         }
     };
     
@@ -1141,8 +1118,35 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         // With the new logic, reactions array should have at most 1 emoji (replacement model)
                         const currentReaction = state.reactions[state.reactions.length - 1];
                         const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
-                        if (msgEl) {
-                            renderReactionBadge(msgEl, currentReaction);
+                        if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
+                            // Detect if message is outbound (user) vs inbound (lead)
+                            let isOutbound = false;
+                            try {
+                                let chatContainer = msgEl.parentElement;
+                                for (let i = 0; i < 15 && chatContainer; i++) {
+                                    const style = window.getComputedStyle(chatContainer);
+                                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
+                                    chatContainer = chatContainer.parentElement;
+                                }
+                                
+                                if (chatContainer) {
+                                    const containerRect = chatContainer.getBoundingClientRect();
+                                    const msgRect = msgEl.getBoundingClientRect();
+                                    const msgCenter = msgRect.left + msgRect.width / 2;
+                                    const containerCenter = containerRect.left + containerRect.width / 2;
+                                    isOutbound = msgCenter > containerCenter;
+                                }
+                            } catch (e) {
+                                isOutbound = false;
+                            }
+                            const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
+                            
+                            const badge = document.createElement('span');
+                            badge.className = 'bridge-reaction-badge';
+                            badge.style.cssText = \`position: absolute; bottom: -8px; \${badgePosition} background: white; border-radius: 12px; padding: 2px 6px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\`;
+                            badge.innerText = currentReaction;
+                            msgEl.style.position = 'relative';
+                            msgEl.appendChild(badge);
                         }
                     }
                 });
