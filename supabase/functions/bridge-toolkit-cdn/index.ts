@@ -962,8 +962,16 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             if (msgEl) {
                 // Detect if message is outbound (from user) or inbound (from lead)
-                const msgContainer = msgEl.closest('.message-container');
-                const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
+                // GHL outbound messages have 'ml-auto' class on a parent container
+                let isOutbound = false;
+                let parent = msgEl.parentElement;
+                for (let i = 0; i < 10 && parent; i++) {
+                    if (parent.classList && parent.classList.contains('ml-auto')) {
+                        isOutbound = true;
+                        break;
+                    }
+                    parent = parent.parentElement;
+                }
                 const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
                 
                 // Replace reaction (not accumulate) - user can only have one active reaction
@@ -1100,8 +1108,16 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
                         if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
                             // Detect if message is outbound or inbound for badge positioning
-                            const msgContainer = msgEl.closest('.message-container');
-                            const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
+                            // GHL outbound messages have 'ml-auto' class on a parent container
+                            let isOutbound = false;
+                            let parent = msgEl.parentElement;
+                            for (let i = 0; i < 10 && parent; i++) {
+                                if (parent.classList && parent.classList.contains('ml-auto')) {
+                                    isOutbound = true;
+                                    break;
+                                }
+                                parent = parent.parentElement;
+                            }
                             const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
                             
                             const badge = document.createElement('span');
