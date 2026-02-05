@@ -878,11 +878,11 @@ serve(async (req) => {
                 // Get valid token (refresh if needed)
                 const token = await getValidToken(supabase, subaccount, settings);
                 
-                // Format the edit message exactly as requested:
-                // texto original│✏️editado
-                // ──────────────────────────
+                // Format the edit message:
+                // ✏️ Editado: "texto original"
+                //
                 // texto editado
-                const formattedEditMessage = `${originalText}│✏️editado\n──────────────────────────\n${newText}`;
+                const formattedEditMessage = `✏️ Editado: "${originalText}"\n\n${newText}`;
                 
                 console.log("📝 Sending formatted edit message to GHL:", {
                   contactId: mapping.contact_id,
