@@ -128,6 +128,7 @@ async function getInstanceForLocation(supabase: any, locationId: string) {
     settings,
     baseUrl: settings.uazapi_base_url,
     token: instance.uazapi_instance_token,
+    ghlUserId: instance.ghl_user_id, // GHL user assigned to this instance
   };
 }
 
@@ -188,7 +189,7 @@ serve(async (req) => {
 
     // Action: edit - Edit a message (with 15-minute validation)
     if (action === "edit") {
-      const { ghl_id, new_text } = body;
+      const { ghl_id, new_text, ghl_user_id } = body;
 
       if (!ghl_id || !new_text) {
         return new Response(
@@ -276,8 +277,23 @@ serve(async (req) => {
           // Format: ✏️ Editado: "texto original" → novo texto
           const formattedEditMessage = `✏️ Editado: "${originalText}"\n\n${new_text}`;
           
+          // Build request body with optional userId for attribution
+          const requestBody: Record<string, string> = {
+            type: "InternalComment",
+            contactId: mapping.contact_id,
+            message: formattedEditMessage,
+          };
+          
+          // Priority: ghl_user_id from request (actual user editing) > instance's ghl_user_id (fallback)
+          const effectiveUserId = ghl_user_id || config.ghlUserId;
+          if (effectiveUserId) {
+            requestBody.userId = effectiveUserId;
+          }
+          
           console.log("📝 Sending edit InternalComment to GHL:", {
             contactId: mapping.contact_id,
+            userId: effectiveUserId || "(not assigned)",
+            userIdSource: ghl_user_id ? "from_request" : (config.ghlUserId ? "from_instance" : "none"),
             originalText: originalText?.substring(0, 30),
             newText: new_text?.substring(0, 30),
           });
@@ -290,11 +306,7 @@ serve(async (req) => {
               "Content-Type": "application/json",
               "Accept": "application/json",
             },
-            body: JSON.stringify({
-              type: "InternalComment",
-              contactId: mapping.contact_id,
-              message: formattedEditMessage,
-            }),
+            body: JSON.stringify(requestBody),
           });
           
           const responseText = await response.text();
@@ -441,7 +453,7 @@ serve(async (req) => {
 
     // Action: delete - Mark message as deleted
     if (action === "delete") {
-      const { ghl_id, from_me } = body;
+      const { ghl_id, from_me, ghl_user_id } = body;
 
       if (!ghl_id) {
         return new Response(
@@ -466,10 +478,11 @@ serve(async (req) => {
       }
 
       let uazapiSuccess = false;
+      let config: Awaited<ReturnType<typeof getInstanceForLocation>> = null;
 
       // Send delete to UAZAPI if we have the ID and it's from_me
       if (mapping.uazapi_message_id && from_me) {
-        const config = await getInstanceForLocation(supabase, mapping.location_id);
+        config = await getInstanceForLocation(supabase, mapping.location_id);
 
         if (config) {
           // Try multiple endpoint formats for delete
@@ -505,22 +518,80 @@ serve(async (req) => {
         );
       }
 
-      // Broadcast deletion
-      await supabase.channel("ghl_updates").send({
-        type: "broadcast",
-        event: "msg_update",
-        payload: { ghl_id, type: "delete", fromMe: from_me, location_id: mapping.location_id },
-      });
+      // Send InternalComment to GHL with deletion notice (like we do for edits/replies)
+      let ghlInternalCommentSent = false;
+      const originalText = mapping.message_text || '(mensagem)';
+      
+      // Get config if we don't have it yet
+      if (!config) {
+        config = await getInstanceForLocation(supabase, mapping.location_id);
+      }
+      
+      if (config?.subaccount && config?.settings?.ghl_client_id && mapping.contact_id) {
+        try {
+          const ghlToken = await getValidToken(supabase, config.subaccount, config.settings);
+          
+          // Format: 🗑️ Mensagem apagada: "texto original"
+          const formattedDeleteMessage = `🗑️ Mensagem apagada: "${originalText.substring(0, 150)}${originalText.length > 150 ? '...' : ''}"`;
+          
+          // Build request body with optional userId for attribution
+          const requestBody: Record<string, string> = {
+            type: "InternalComment",
+            contactId: mapping.contact_id,
+            message: formattedDeleteMessage,
+          };
+          
+          // Priority: ghl_user_id from request > instance's ghl_user_id (fallback)
+          const effectiveUserId = ghl_user_id || config.ghlUserId;
+          if (effectiveUserId) {
+            requestBody.userId = effectiveUserId;
+          }
+          
+          console.log("📝 Sending delete InternalComment to GHL:", {
+            contactId: mapping.contact_id,
+            userId: effectiveUserId || "(not assigned)",
+            originalText: originalText?.substring(0, 30),
+          });
+          
+          const response = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${ghlToken}`,
+              "Version": "2021-04-15",
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+          });
+          
+          const responseText = await response.text();
+          if (!response.ok) {
+            console.error("Failed to send delete InternalComment to GHL:", responseText);
+          } else {
+            console.log("✅ Delete InternalComment sent to GHL:", responseText.substring(0, 200));
+            ghlInternalCommentSent = true;
+          }
+        } catch (e) {
+          console.error("Error sending delete InternalComment:", e);
+        }
+      }
+
+      // No broadcast needed - we use InternalComment instead of overlay now
 
       return new Response(
-        JSON.stringify({ success: true, data: updated, whatsapp_sent: uazapiSuccess }),
+        JSON.stringify({ 
+          success: true, 
+          data: updated, 
+          whatsapp_sent: uazapiSuccess,
+          ghl_internal_comment: ghlInternalCommentSent
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Action: reply - Send a reply message with quoted context
     if (action === "reply") {
-      const { ghl_id, text, contact_phone, location_id } = body;
+      const { ghl_id, text, contact_phone, location_id, ghl_user_id } = body;
 
       if (!ghl_id || !text || !location_id) {
         return new Response(
@@ -619,11 +690,66 @@ serve(async (req) => {
         console.log("⚠️ Could not parse reply response for message ID");
       }
 
+      // Send InternalComment to GHL with reply context (like we do for edits)
+      let ghlInternalCommentSent = false;
+      const originalText = mapping.message_text || '(mensagem original)';
+      
+      if (config?.subaccount && config?.settings?.ghl_client_id && mapping.contact_id) {
+        try {
+          const ghlToken = await getValidToken(supabase, config.subaccount, config.settings);
+          
+          // Format: ↩️ Respondendo a: "texto original" \n\n texto da resposta
+          const formattedReplyMessage = `↩️ Respondendo a: "${originalText.substring(0, 100)}${originalText.length > 100 ? '...' : ''}"\n\n${text}`;
+          
+          // Build request body with optional userId for attribution
+          const requestBody: Record<string, string> = {
+            type: "InternalComment",
+            contactId: mapping.contact_id,
+            message: formattedReplyMessage,
+          };
+          
+          // Priority: ghl_user_id from request > instance's ghl_user_id (fallback)
+          const effectiveUserId = ghl_user_id || config.ghlUserId;
+          if (effectiveUserId) {
+            requestBody.userId = effectiveUserId;
+          }
+          
+          console.log("📝 Sending reply InternalComment to GHL:", {
+            contactId: mapping.contact_id,
+            userId: effectiveUserId || "(not assigned)",
+            originalText: originalText?.substring(0, 30),
+            replyText: text?.substring(0, 30),
+          });
+          
+          const response = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${ghlToken}`,
+              "Version": "2021-04-15",
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+          });
+          
+          const responseText = await response.text();
+          if (!response.ok) {
+            console.error("Failed to send reply InternalComment to GHL:", responseText);
+          } else {
+            console.log("✅ Reply InternalComment sent to GHL:", responseText.substring(0, 200));
+            ghlInternalCommentSent = true;
+          }
+        } catch (e) {
+          console.error("Error sending reply InternalComment:", e);
+        }
+      }
+
       return new Response(
         JSON.stringify({ 
           success: true, 
           whatsapp_sent: true,
-          new_message_id: newMessageId
+          new_message_id: newMessageId,
+          ghl_internal_comment: ghlInternalCommentSent
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
