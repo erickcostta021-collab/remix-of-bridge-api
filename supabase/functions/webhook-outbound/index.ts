@@ -1573,14 +1573,8 @@ serve(async (req: Request) => {
     });
   }
 
-  // RESPOND IMMEDIATELY to avoid GHL timeout (15s limit)
-  const response = new Response(JSON.stringify({ success: true, processing: true }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-
-  // Process the message in background
-  (async () => {
+  // Process inline to avoid message loss when the runtime shuts down (background tasks are not guaranteed).
+  await (async () => {
     try {
     const messageId: string = String(body.messageId ?? "");
     // IMPORTANT: Keep dedupe key format consistent across inbound/outbound.
@@ -2029,5 +2023,8 @@ serve(async (req: Request) => {
   }
   })();
 
-  return response;
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 });
