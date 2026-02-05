@@ -961,16 +961,16 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             // Render reaction badge on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             if (msgEl) {
-                // Detect if message is outbound (from user) or inbound (from lead)
-                // GHL outbound messages have 'ml-auto' class on a parent container
+                // Detect if message is outbound (user bubble on the right) vs inbound (lead on the left)
+                // DOM classes vary across GHL layouts; bounding-box is the most reliable signal.
                 let isOutbound = false;
-                let parent = msgEl.parentElement;
-                for (let i = 0; i < 10 && parent; i++) {
-                    if (parent.classList && parent.classList.contains('ml-auto')) {
-                        isOutbound = true;
-                        break;
-                    }
-                    parent = parent.parentElement;
+                try {
+                    const rect = msgEl.getBoundingClientRect();
+                    const mid = rect.left + rect.width / 2;
+                    isOutbound = mid > (window.innerWidth * 0.5);
+                } catch (e) {
+                    // fail-open: default to inbound (left)
+                    isOutbound = false;
                 }
                 const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
                 
@@ -1107,16 +1107,14 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         const currentReaction = state.reactions[state.reactions.length - 1];
                         const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
                         if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
-                            // Detect if message is outbound or inbound for badge positioning
-                            // GHL outbound messages have 'ml-auto' class on a parent container
+                            // Detect if message is outbound (right) vs inbound (left) using bounding-box.
                             let isOutbound = false;
-                            let parent = msgEl.parentElement;
-                            for (let i = 0; i < 10 && parent; i++) {
-                                if (parent.classList && parent.classList.contains('ml-auto')) {
-                                    isOutbound = true;
-                                    break;
-                                }
-                                parent = parent.parentElement;
+                            try {
+                                const rect = msgEl.getBoundingClientRect();
+                                const mid = rect.left + rect.width / 2;
+                                isOutbound = mid > (window.innerWidth * 0.5);
+                            } catch (e) {
+                                isOutbound = false;
                             }
                             const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
                             
