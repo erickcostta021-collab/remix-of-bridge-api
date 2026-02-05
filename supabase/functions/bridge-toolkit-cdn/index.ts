@@ -686,8 +686,8 @@ const BRIDGE_TOOLKIT_SCRIPT = `
 
         const parentItem = triggerEl.closest('[data-message-id]');
         const ghlId = parentItem ? parentItem.getAttribute('data-message-id') : null;
-        const msgContainer = triggerEl.closest('.message-container');
-        const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
+        // Use getIsOutbound for consistent position detection
+        const isOutbound = parentItem ? (getIsOutbound(parentItem) || parentItem.classList.contains('ml-auto')) : false;
         
         if (!ghlId) {
             console.error("❌ ID da mensagem não encontrado no DOM");
