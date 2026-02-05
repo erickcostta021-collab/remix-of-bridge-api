@@ -6,38 +6,16 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.14.1 - Outbound switch notification (fix conversationId)
-console.log('🚀 BRIDGE LOADER: v6.14.1 Iniciado');
+// 🚀 BRIDGE LOADER: v6.14.2 - Restored working version
+console.log('🚀 BRIDGE LOADER: v6.14.2 Iniciado');
 
 try {
     (function() {
         const LOG_PREFIX = "[Bridge]";
-
-        // Resolve the correct functions origin from the script tag (works across preview/prod/CDN variations)
-        function resolveFunctionsOrigin() {
-            try {
-                const src = (document.currentScript && document.currentScript.src) ||
-                    Array.from(document.scripts).map(s => s.src).find(s => s && s.includes('/functions/v1/bridge-switcher-cdn')) ||
-                    Array.from(document.scripts).map(s => s.src).find(s => s && s.includes('bridge-switcher-cdn'));
-                if (src) return new URL(src).origin;
-            } catch (e) {}
-            // Fallback to the hardcoded project origin
-            return 'https://jsupvprudyxyiyxwqxuq.supabase.co';
-        }
-
-        const FUNCTIONS_ORIGIN = resolveFunctionsOrigin();
-        const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzdXB2cHJ1ZHl4eWl5eHdxeHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MzMwNDAsImV4cCI6MjA4NDUwOTA0MH0._Ge7hb5CHCE6mchtjGLbWXx5Q9i_D7P0dn7OlMYlvyM';
-
         const CONFIG = {
-            api_url: FUNCTIONS_ORIGIN + '/functions/v1/get-instances',
-            save_url: FUNCTIONS_ORIGIN + '/functions/v1/bridge-switcher',
+            api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
+            save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
             theme: { primary: '#22c55e', border: '#d1d5db', text: '#374151' }
-        };
-
-        const FUNCTION_HEADERS = {
-            'Content-Type': 'application/json',
-            apikey: ANON_KEY,
-            Authorization: 'Bearer ' + ANON_KEY,
         };
 
         let state = { instances: [], lastPhoneFound: null, currentLocationId: null, currentInstanceName: null, currentConversationId: null };
@@ -92,8 +70,8 @@ try {
             if (existing) existing.remove();
             const toast = document.createElement('div');
             toast.id = 'bridge-notify';
-            toast.style.cssText = \`position: fixed; bottom: 20px; right: 20px; z-index: 10000; background: #1f2937; color: white; padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border-left: 4px solid \${CONFIG.theme.primary}; transition: opacity 0.3s;\`;
-            toast.innerHTML = \`✅ Instância <b>\${instanceName}</b> selecionada.\`;
+            toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 10000; background: #1f2937; color: white; padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border-left: 4px solid ' + CONFIG.theme.primary + '; transition: opacity 0.3s;';
+            toast.innerHTML = '✅ Instância <b>' + instanceName + '</b> selecionada.';
             document.body.appendChild(toast);
             setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
         }
@@ -146,22 +124,9 @@ try {
                 
                 const overlay = document.createElement('div');
                 overlay.id = 'bridge-switch-overlay';
-                overlay.style.cssText = \`
-                    position: fixed;
-                    top: 80px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    z-index: 10001;
-                    padding: 10px 20px;
-                    background: #1f2937;
-                    color: white;
-                    border-radius: 8px;
-                    font-size: 13px;
-                    font-weight: 600;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-                \`;
+                overlay.style.cssText = 'position: fixed; top: 80px; left: 50%; transform: translateX(-50%); z-index: 10001; padding: 10px 20px; background: #1f2937; color: white; border-radius: 8px; font-size: 13px; font-weight: 600; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);';
                 
-                overlay.innerHTML = \`🔄 Instância alterada: <b>\${fromInstance}</b> → <b>\${toInstance}</b>\`;
+                overlay.innerHTML = '🔄 Instância alterada: <b>' + fromInstance + '</b> → <b>' + toInstance + '</b>';
                 document.body.appendChild(overlay);
                 
                 setTimeout(() => {
@@ -180,29 +145,13 @@ try {
             const msgWrapper = document.createElement('div');
             msgWrapper.className = 'bridge-switch-notification hl-message hl-message-outgoing';
             msgWrapper.setAttribute('data-bridge-notification', 'true');
-            msgWrapper.style.cssText = \`
-                display: flex;
-                flex-direction: row-reverse;
-                align-items: flex-end;
-                padding: 4px 16px;
-                margin: 4px 0;
-                width: 100%;
-            \`;
+            msgWrapper.style.cssText = 'display: flex; flex-direction: row-reverse; align-items: flex-end; padding: 4px 16px; margin: 4px 0; width: 100%;';
             
             // Create the message bubble (outgoing style - right aligned, blue/green background)
             const bubble = document.createElement('div');
             bubble.className = 'hl-message-bubble hl-message-bubble-outgoing';
-            bubble.style.cssText = \`
-                background: #3b82f6;
-                color: white;
-                padding: 8px 12px;
-                border-radius: 12px 12px 2px 12px;
-                font-size: 13px;
-                max-width: 70%;
-                word-wrap: break-word;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-            \`;
-            bubble.innerHTML = \`🔄 Instância alterada: <b>\${fromInstance}</b> → <b>\${toInstance}</b>\`;
+            bubble.style.cssText = 'background: #3b82f6; color: white; padding: 8px 12px; border-radius: 12px 12px 2px 12px; font-size: 13px; max-width: 70%; word-wrap: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
+            bubble.innerHTML = '🔄 Instância alterada: <b>' + fromInstance + '</b> → <b>' + toInstance + '</b>';
             
             msgWrapper.appendChild(bubble);
             
@@ -220,70 +169,33 @@ try {
             if (!select) return;
             const currentVal = select.value;
             
-            if (!state.instances || state.instances.length === 0) {
-                select.innerHTML = '<option value="">Sem instâncias</option>';
-                return;
-            }
-
             select.innerHTML = state.instances.map(i => {
-                const text = showPhone && i.phone ? (String(i.name) + ' (' + String(i.phone) + ')') : i.name;
+                const text = showPhone && i.phone ? (i.name + ' (' + i.phone + ')') : i.name;
                 const selected = i.id === currentVal ? 'selected' : '';
                 return '<option value="' + i.id + '" ' + selected + '>' + text + '</option>';
             }).join('');
         }
 
         async function loadInstances(phone) {
-            const locId = window.location.pathname.match(/location\/([^\/]+)/)?.[1];
-            if (!locId || !phone) {
-                console.log(LOG_PREFIX, '⚠️ Missing locId/phone for loadInstances:', { locId, hasPhone: !!phone, path: window.location.pathname });
-                return;
-            }
+            const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+            if (!locId || !phone) return;
             state.currentLocationId = locId;
             try {
-                const url = CONFIG.api_url + '?locationId=' + encodeURIComponent(locId) + '&phone=' + encodeURIComponent(phone);
-                console.log(LOG_PREFIX, '📡 Fetching instances:', url);
-
-                const res = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        apikey: ANON_KEY,
-                        Authorization: 'Bearer ' + ANON_KEY,
-                    },
-                });
-
-                if (!res.ok) {
-                    const text = await res.text().catch(() => '');
-                    console.log(LOG_PREFIX, '❌ get-instances failed:', res.status, text.slice(0, 300));
-                    state.instances = [];
-                    renderOptions(false);
-                    return;
+                const res = await fetch(CONFIG.api_url + '?locationId=' + locId + '&phone=' + phone);
+                const data = await res.json();
+                if (data.instances) {
+                    state.instances = data.instances;
+                    const activeId = data.activeInstanceId || data.instances[0]?.id;
+                    const activeInstance = data.instances.find(i => i.id === activeId);
+                    state.currentInstanceName = activeInstance?.name || null;
+                    const select = document.getElementById('bridge-instance-selector');
+                    if (select) {
+                        select.value = activeId;
+                        renderOptions(false);
+                        select.value = activeId;
+                    }
                 }
-
-                const data = await res.json().catch(() => null);
-                if (!data || !Array.isArray(data.instances)) {
-                    console.log(LOG_PREFIX, '❌ get-instances invalid JSON:', data);
-                    state.instances = [];
-                    renderOptions(false);
-                    return;
-                }
-
-                state.instances = data.instances;
-                const activeId = data.activeInstanceId || data.instances[0]?.id;
-                const activeInstance = data.instances.find(i => i.id === activeId);
-                state.currentInstanceName = activeInstance?.name || null;
-                const select = document.getElementById('bridge-instance-selector');
-                if (select) {
-                    select.value = activeId;
-                    renderOptions(false);
-                    select.value = activeId;
-                }
-
-                console.log(LOG_PREFIX, '✅ Instances loaded:', { count: state.instances.length, activeId });
-            } catch (e) {
-                console.error(LOG_PREFIX, '❌ loadInstances error:', e);
-                state.instances = [];
-                renderOptions(false);
-            }
+            } catch (e) { console.error(LOG_PREFIX, e); }
         }
 
         function inject() {
@@ -294,58 +206,14 @@ try {
 
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
-            container.style.cssText = \`display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid \${CONFIG.theme.border}; border-radius: 20px;\`;
+            container.style.cssText = 'display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 10px; height: 30px; background: #ffffff; border: 1px solid ' + CONFIG.theme.border + '; border-radius: 20px;';
             
             // CSS para remover a linha azul e resetar o visual do select
             const styleTag = document.createElement('style');
-            styleTag.textContent = \`
-                #bridge-instance-selector {
-                    border: none !important;
-                    background: transparent !important;
-                    font-size: 12px;
-                    font-weight: 700;
-                    color: \${CONFIG.theme.text};
-                    cursor: pointer;
-                    outline: none !important;
-                    box-shadow: none !important;
-                    padding-right: 16px;
-                    max-width: 150px;
-                }
-                #bridge-instance-selector:focus, #bridge-instance-selector:active {
-                    outline: none !important;
-                    box-shadow: none !important;
-                    border: none !important;
-                }
-                #bridge-select-wrapper {
-                    position: relative;
-                    display: inline-flex;
-                    align-items: center;
-                }
-                #bridge-select-wrapper::after {
-                    content: '';
-                    position: absolute;
-                    right: 0;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    width: 0;
-                    height: 0;
-                    border-left: 4px solid transparent;
-                    border-right: 4px solid transparent;
-                    border-top: 5px solid \${CONFIG.theme.text};
-                    pointer-events: none;
-                }
-            \`;
+            styleTag.textContent = '#bridge-instance-selector { border: none !important; background: transparent !important; font-size: 12px; font-weight: 700; color: ' + CONFIG.theme.text + '; cursor: pointer; outline: none !important; box-shadow: none !important; appearance: none; -webkit-appearance: none; max-width: 150px; padding-right: 16px; } #bridge-instance-selector:focus, #bridge-instance-selector:active { outline: none !important; box-shadow: none !important; border: none !important; } #bridge-select-wrapper { position: relative; display: inline-flex; align-items: center; } #bridge-select-wrapper::after { content: \"\"; position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid ' + CONFIG.theme.text + '; pointer-events: none; }';
             document.head.appendChild(styleTag);
 
-            container.innerHTML = \`
-                <div style="display: flex; align-items: center; gap: 6px;">
-                    <div style="width: 8px; height: 8px; background: \${CONFIG.theme.primary}; border-radius: 50%;"></div>
-                    <div id="bridge-select-wrapper">
-                        <select id="bridge-instance-selector">
-                            <option>...</option>
-                        </select>
-                    </div>
-                </div>\`;
+            container.innerHTML = '<div style="display: flex; align-items: center; gap: 6px;"><div style="width: 8px; height: 8px; background: ' + CONFIG.theme.primary + '; border-radius: 50%;"></div><div id="bridge-select-wrapper"><select id="bridge-instance-selector"><option>...</option></select></div></div>';
             
             actionBar.appendChild(container);
             const select = container.querySelector('select');
@@ -367,7 +235,7 @@ try {
                 try {
                     await fetch(CONFIG.save_url, {
                         method: 'POST',
-                        headers: FUNCTION_HEADERS,
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
                             instanceId: e.target.value, 
                             locationId: state.currentLocationId, 
