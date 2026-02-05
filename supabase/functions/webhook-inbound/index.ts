@@ -795,22 +795,24 @@ serve(async (req) => {
       // === DEDUPLICATION FOR EDITS ===
       // Multiple instances may receive the same edit event - deduplicate by original message ID
       const editDedupeKey = `edit:${editedOriginalMsgId || messageDataForEvents.messageid || messageDataForEvents.id}`;
-      const { data: existingEdit } = await supabase
-        .from("ghl_processed_messages")
-        .select("id")
-        .eq("message_id", editDedupeKey)
-        .maybeSingle();
       
-      if (existingEdit) {
-        console.log("⏭️ Edit already processed by another instance, skipping:", editDedupeKey);
+      // Use INSERT with ON CONFLICT to atomically claim this edit event
+      // Only the first insert succeeds - others get count=0
+      const { data: insertResult, error: insertError } = await supabase
+        .from("ghl_processed_messages")
+        .insert({ message_id: editDedupeKey })
+        .select("id");
+      
+      // If insert failed due to unique constraint, another instance already claimed it
+      if (insertError?.code === "23505" || !insertResult || insertResult.length === 0) {
+        console.log("⏭️ Edit already claimed by another instance, skipping:", editDedupeKey);
         return new Response(
           JSON.stringify({ received: true, processed: false, reason: "edit_already_processed" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
-      // Mark edit as processed immediately
-      await supabase.from("ghl_processed_messages").insert({ message_id: editDedupeKey });
+      console.log("✅ Edit claimed for processing:", editDedupeKey);
       
       // Extract the ORIGINAL message ID that was edited
       // - For "edited" field format: the "edited" field IS the original message ID
