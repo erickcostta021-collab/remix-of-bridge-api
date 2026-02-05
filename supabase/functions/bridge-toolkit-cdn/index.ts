@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v19: Iniciando (Performance Otimizada)...");
+    console.log("🚀 Bridge Toolkit v20: Iniciando (Performance Otimizada)...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
@@ -17,9 +17,70 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     let replyContext = null; // Stores message being replied to
     let editContext = null;  // Stores message being edited
     let realtimeChannel = null; // Supabase Realtime channel
+    let cachedGhlUserId = null; // Cached GHL user ID
     
     // Track rendered states to avoid re-rendering
     const renderedStates = new Map(); // ghlId -> { deleted, edited, replied }
+    
+    // ========== GHL USER DETECTION ==========
+    
+    // Try to extract GHL user ID from various sources
+    const getGhlUserId = () => {
+        if (cachedGhlUserId) return cachedGhlUserId;
+        
+        try {
+            // Method 1: Check window.__user or similar global
+            if (window.__user?.id) {
+                cachedGhlUserId = window.__user.id;
+                console.log("👤 Bridge: Found GHL user via window.__user:", cachedGhlUserId);
+                return cachedGhlUserId;
+            }
+            
+            // Method 2: Check localStorage for user data
+            const userStr = localStorage.getItem('user') || localStorage.getItem('ghl_user');
+            if (userStr) {
+                try {
+                    const user = JSON.parse(userStr);
+                    if (user?.id || user?.userId) {
+                        cachedGhlUserId = user.id || user.userId;
+                        console.log("👤 Bridge: Found GHL user via localStorage:", cachedGhlUserId);
+                        return cachedGhlUserId;
+                    }
+                } catch (e) {}
+            }
+            
+            // Method 3: Check for HL_* prefixed localStorage keys (common in GHL)
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key?.startsWith('HL_') || key?.includes('user')) {
+                    try {
+                        const val = localStorage.getItem(key);
+                        if (val?.startsWith('{')) {
+                            const parsed = JSON.parse(val);
+                            if (parsed?.userId || parsed?.id) {
+                                cachedGhlUserId = parsed.userId || parsed.id;
+                                console.log("👤 Bridge: Found GHL user via", key, ":", cachedGhlUserId);
+                                return cachedGhlUserId;
+                            }
+                        }
+                    } catch (e) {}
+                }
+            }
+            
+            // Method 4: Check window.HL or similar
+            if (window.HL?.user?.id) {
+                cachedGhlUserId = window.HL.user.id;
+                console.log("👤 Bridge: Found GHL user via window.HL:", cachedGhlUserId);
+                return cachedGhlUserId;
+            }
+            
+            console.log("👤 Bridge: Could not detect GHL user ID");
+        } catch (e) {
+            console.warn("👤 Bridge: Error detecting GHL user:", e);
+        }
+        
+        return null;
+    };
     
     // ========== PERFORMANCE: Caches and Observers ==========
     
@@ -472,7 +533,9 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                     console.log("✏️ Bridge: Intercepted! Sending edit to WhatsApp...");
                     showToast("Editando mensagem...");
                     
-                    const result = await sendAction('edit', editContext.ghlId, { new_text: text.trim() });
+                    // Include GHL user ID for attribution
+                    const ghlUserId = getGhlUserId();
+                    const result = await sendAction('edit', editContext.ghlId, { new_text: text.trim(), ghl_user_id: ghlUserId });
                     
                     if (result) {
                         console.log("✅ Bridge: Edit sent successfully");
@@ -578,7 +641,9 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                     console.log("✏️ Bridge: Sending edit via button...");
                     showToast("Editando mensagem...");
                     
-                    const result = await sendAction('edit', editContext.ghlId, { new_text: text.trim() });
+                    // Include GHL user ID for attribution
+                    const ghlUserId = getGhlUserId();
+                    const result = await sendAction('edit', editContext.ghlId, { new_text: text.trim(), ghl_user_id: ghlUserId });
                     
                     if (result) {
                         console.log("✅ Bridge: Edit sent successfully via button");
