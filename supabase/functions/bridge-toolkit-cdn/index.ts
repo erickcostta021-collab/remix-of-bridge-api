@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v20: Iniciando (Performance Otimizada)...");
+    console.log("🚀 Bridge Toolkit v22: Iniciando (Menu Fix)...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
@@ -708,11 +708,28 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         const topPos = openDown ? rect.bottom + 5 : rect.top - 300;
         const leftPos = isOutbound ? rect.left - 200 : rect.left;
 
+        // Ensure position doesn't go offscreen
+        const adjustedLeft = Math.max(10, Math.min(leftPos, window.innerWidth - 260));
+        const adjustedTop = Math.max(10, Math.min(topPos, window.innerHeight - 400));
+        
+        console.log("📍 Menu position:", { rect, openDown, topPos: adjustedTop, leftPos: adjustedLeft });
+        
         menu.style.cssText = \`
-            position: fixed; top: \${topPos}px; left: \${leftPos}px; 
-            z-index: 999999; background: white; border-radius: 12px; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2); width: 240px; 
-            border: 1px solid #f0f0f0; font-family: sans-serif;
+            position: fixed !important; 
+            top: \${adjustedTop}px !important; 
+            left: \${adjustedLeft}px !important; 
+            z-index: 2147483647 !important; 
+            background: #ffffff !important; 
+            background-color: #ffffff !important;
+            border-radius: 12px !important; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important; 
+            width: 240px !important; 
+            border: 1px solid #e0e0e0 !important; 
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+            pointer-events: auto !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            display: block !important;
         \`;
 
         const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -785,17 +802,17 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         ];
         
         menu.innerHTML = \`
-            <div id="emoji-quick" style="display:flex; justify-content:space-around; align-items:center; padding:12px; border-bottom:1px solid #f0f0f0;">
+            <div id="emoji-quick" style="display:flex !important; justify-content:space-around; align-items:center; padding:12px; border-bottom:1px solid #e0e0e0; background:#ffffff !important;">
                 \${quickEmojis.map(em => \`<span class="em-btn" style="cursor:pointer; font-size:22px; transition:transform 0.1s;" title="Reagir com \${em}">\${em}</span>\`).join('')}
                 <span id="emoji-expand" style="cursor:pointer; font-size:14px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:#9ca3af; color:white; border-radius:50%; transition:background 0.2s;" title="Mais emojis">+</span>
             </div>
-            <div id="emoji-more" style="display:none; flex-wrap:wrap; justify-content:flex-start; gap:4px; padding:12px; border-bottom:1px solid #f0f0f0; max-height:200px; overflow-y:auto;">
+            <div id="emoji-more" style="display:none; flex-wrap:wrap; justify-content:flex-start; gap:4px; padding:12px; border-bottom:1px solid #e0e0e0; max-height:200px; overflow-y:auto; background:#ffffff !important;">
                 \${allEmojis.map(em => \`<span class="em-btn" style="cursor:pointer; font-size:20px; transition:transform 0.1s; padding:2px;" title="Reagir com \${em}">\${em}</span>\`).join('')}
             </div>
-            <div class="menu-opt" data-act="reply" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>↩️</span> Responder</div>
-            <div class="menu-opt" data-act="copy" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>📋</span> Copiar</div>
-            \${isOutbound ? \`<div class="menu-opt" data-act="edit" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s;"><span>✏️</span> Editar</div>\` : ''}
-            \${isOutbound ? \`<div class="menu-opt" data-act="delete" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; color:#ef4444; transition: background 0.2s;"><span>🗑️</span> Apagar</div>\` : ''}
+            <div class="menu-opt" data-act="reply" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s; background:#ffffff !important; color:#333333 !important;"><span>↩️</span> Responder</div>
+            <div class="menu-opt" data-act="copy" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s; background:#ffffff !important; color:#333333 !important;"><span>📋</span> Copiar</div>
+            \${isOutbound ? \`<div class="menu-opt" data-act="edit" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; transition: background 0.2s; background:#ffffff !important; color:#333333 !important;"><span>✏️</span> Editar</div>\` : ''}
+            \${isOutbound ? \`<div class="menu-opt" data-act="delete" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; color:#ef4444 !important; transition: background 0.2s; background:#ffffff !important;"><span>🗑️</span> Apagar</div>\` : ''}
         \`;
 
         document.body.appendChild(menu);
@@ -1328,7 +1345,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     // Initialize persistence (load states on page load)
     initPersistence();
     
-    console.log("✅ Bridge Toolkit v19 carregado (Performance Otimizada)!");
+    console.log("✅ Bridge Toolkit v22 carregado (Menu Fix)!");
 })();
 `;
 
