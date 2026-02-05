@@ -835,12 +835,18 @@ serve(async (req) => {
       console.log("Edit extracted:", { uazapiMsgId, newText: newText?.substring(0, 50) });
       
       if (uazapiMsgId && newText) {
-        // Find mapping by UAZAPI ID
-        const { data: mapping } = await supabase
+        // Find mapping by UAZAPI ID - use limit(1) to handle potential duplicates
+        const { data: mapping, error: mappingError } = await supabase
           .from("message_map")
           .select("*")
           .eq("uazapi_message_id", uazapiMsgId)
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle();
+        
+        if (mappingError) {
+          console.log("⚠️ Error finding mapping:", mappingError.message);
+        }
         
         if (mapping) {
           // Store original text before updating
