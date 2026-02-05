@@ -9,9 +9,20 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     console.log("🚀 Bridge Toolkit v20: Iniciando (Performance Otimizada)...");
 
     const BRIDGE_CONFIG = {
-        supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
+        // Project URL is still needed for Realtime websocket.
+        project_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
         supabase_anon_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzdXB2cHJ1ZHl4eWl5eHdxeHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MzMwNDAsImV4cCI6MjA4NDUwOTA0MH0._Ge7hb5CHCE6mchtjGLbWXx5Q9i_D7P0dn7OlMYlvyM',
-        endpoint: '/functions/v1/map-messages'
+        endpoint: '/functions/v1/map-messages',
+        // Prefer the origin where THIS script was loaded from (avoids CSP/connect-src blocks).
+        // Falls back to project_url if currentScript is unavailable.
+        functions_origin: (() => {
+            try {
+                const src = document.currentScript && document.currentScript.src;
+                return src ? new URL(src).origin : null;
+            } catch (e) {
+                return null;
+            }
+        })() || 'https://jsupvprudyxyiyxwqxuq.supabase.co'
     };
 
     let replyContext = null; // Stores message being replied to
@@ -185,21 +196,25 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     const sendAction = async (action, ghlId, extra = {}) => {
-        console.log(\`📡 Bridge Toolkit - Ação: \${action} | GHL ID: \${ghlId}\`, extra);
+        console.log(`📡 Bridge Toolkit - Ação: ${action} | GHL ID: ${ghlId}`, extra);
         try {
-            const url = BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint;
+            const url = BRIDGE_CONFIG.functions_origin + BRIDGE_CONFIG.endpoint;
             console.log("📤 Enviando para:", url);
-            
+
             const response = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': BRIDGE_CONFIG.supabase_anon_key,
+                    'Authorization': `Bearer ${BRIDGE_CONFIG.supabase_anon_key}`,
+                },
                 body: JSON.stringify({ action, ghl_id: ghlId, ...extra })
             });
-            
+
             console.log("📥 Response status:", response.status);
             const data = await response.json();
             console.log("📥 Response data:", data);
-            
+
             if (data.success) {
                 console.log("✅ Ação executada com sucesso:", action);
                 return data;
@@ -404,10 +419,14 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         console.log(\`↩️ Sending reply to \${ghlId} with text: \${replyText.substring(0, 50)}...\`);
         
         try {
-            const url = BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint;
+            const url = BRIDGE_CONFIG.functions_origin + BRIDGE_CONFIG.endpoint;
             const response = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': BRIDGE_CONFIG.supabase_anon_key,
+                    'Authorization': `Bearer ${BRIDGE_CONFIG.supabase_anon_key}`,
+                },
                 body: JSON.stringify({ 
                     action: 'reply', 
                     ghl_id: ghlId, 
@@ -1150,7 +1169,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         
         // Create a simple Realtime connection using native WebSocket
         // Supabase Realtime uses Phoenix protocol
-        const wsUrl = BRIDGE_CONFIG.supabase_url.replace('https://', 'wss://') + 
+        const wsUrl = BRIDGE_CONFIG.project_url.replace('https://', 'wss://') + 
                       '/realtime/v1/websocket?apikey=' + BRIDGE_CONFIG.supabase_anon_key + 
                       '&vsn=1.0.0';
         
@@ -1239,10 +1258,14 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         console.log("📋 Bridge: Loading persisted states for", ghlIds.length, "messages");
         
         try {
-            const url = BRIDGE_CONFIG.supabase_url + BRIDGE_CONFIG.endpoint;
+            const url = BRIDGE_CONFIG.functions_origin + BRIDGE_CONFIG.endpoint;
             const response = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': BRIDGE_CONFIG.supabase_anon_key,
+                    'Authorization': `Bearer ${BRIDGE_CONFIG.supabase_anon_key}`,
+                },
                 body: JSON.stringify({ action: 'list-states', ghl_ids: ghlIds })
             });
             
