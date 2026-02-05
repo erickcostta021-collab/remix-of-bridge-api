@@ -12,10 +12,32 @@ console.log('🚀 BRIDGE LOADER: v6.14.1 Iniciado');
 try {
     (function() {
         const LOG_PREFIX = "[Bridge]";
+
+        // Resolve the correct functions origin from the script tag (works across preview/prod/CDN variations)
+        function resolveFunctionsOrigin() {
+            try {
+                const src = (document.currentScript && document.currentScript.src) ||
+                    Array.from(document.scripts).map(s => s.src).find(s => s && s.includes('/functions/v1/bridge-switcher-cdn')) ||
+                    Array.from(document.scripts).map(s => s.src).find(s => s && s.includes('bridge-switcher-cdn'));
+                if (src) return new URL(src).origin;
+            } catch (e) {}
+            // Fallback to the hardcoded project origin
+            return 'https://jsupvprudyxyiyxwqxuq.supabase.co';
+        }
+
+        const FUNCTIONS_ORIGIN = resolveFunctionsOrigin();
+        const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzdXB2cHJ1ZHl4eWl5eHdxeHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MzMwNDAsImV4cCI6MjA4NDUwOTA0MH0._Ge7hb5CHCE6mchtjGLbWXx5Q9i_D7P0dn7OlMYlvyM';
+
         const CONFIG = {
-            api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
-            save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
+            api_url: FUNCTIONS_ORIGIN + '/functions/v1/get-instances',
+            save_url: FUNCTIONS_ORIGIN + '/functions/v1/bridge-switcher',
             theme: { primary: '#22c55e', border: '#d1d5db', text: '#374151' }
+        };
+
+        const FUNCTION_HEADERS = {
+            'Content-Type': 'application/json',
+            apikey: ANON_KEY,
+            Authorization: 'Bearer ' + ANON_KEY,
         };
 
         let state = { instances: [], lastPhoneFound: null, currentLocationId: null, currentInstanceName: null, currentConversationId: null };
@@ -198,32 +220,70 @@ try {
             if (!select) return;
             const currentVal = select.value;
             
+            if (!state.instances || state.instances.length === 0) {
+                select.innerHTML = '<option value="">Sem instâncias</option>';
+                return;
+            }
+
             select.innerHTML = state.instances.map(i => {
-                const text = showPhone && i.phone ? \`\${i.name} (\${i.phone})\` : i.name;
-                return \`<option value="\${i.id}" \${i.id === currentVal ? 'selected' : ''}>\${text}</option>\`;
+                const text = showPhone && i.phone ? (String(i.name) + ' (' + String(i.phone) + ')') : i.name;
+                const selected = i.id === currentVal ? 'selected' : '';
+                return '<option value="' + i.id + '" ' + selected + '>' + text + '</option>';
             }).join('');
         }
 
         async function loadInstances(phone) {
-            const locId = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
-            if (!locId || !phone) return;
+            const locId = window.location.pathname.match(/location\/([^\/]+)/)?.[1];
+            if (!locId || !phone) {
+                console.log(LOG_PREFIX, '⚠️ Missing locId/phone for loadInstances:', { locId, hasPhone: !!phone, path: window.location.pathname });
+                return;
+            }
             state.currentLocationId = locId;
             try {
-                const res = await fetch(\`\${CONFIG.api_url}?locationId=\${locId}&phone=\${phone}\`);
-                const data = await res.json();
-                if (data.instances) {
-                    state.instances = data.instances;
-                    const activeId = data.activeInstanceId || data.instances[0]?.id;
-                    const activeInstance = data.instances.find(i => i.id === activeId);
-                    state.currentInstanceName = activeInstance?.name || null;
-                    const select = document.getElementById('bridge-instance-selector');
-                    if (select) {
-                        select.value = activeId;
-                        renderOptions(false);
-                        select.value = activeId;
-                    }
+                const url = CONFIG.api_url + '?locationId=' + encodeURIComponent(locId) + '&phone=' + encodeURIComponent(phone);
+                console.log(LOG_PREFIX, '📡 Fetching instances:', url);
+
+                const res = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        apikey: ANON_KEY,
+                        Authorization: 'Bearer ' + ANON_KEY,
+                    },
+                });
+
+                if (!res.ok) {
+                    const text = await res.text().catch(() => '');
+                    console.log(LOG_PREFIX, '❌ get-instances failed:', res.status, text.slice(0, 300));
+                    state.instances = [];
+                    renderOptions(false);
+                    return;
                 }
-            } catch (e) { console.error(LOG_PREFIX, e); }
+
+                const data = await res.json().catch(() => null);
+                if (!data || !Array.isArray(data.instances)) {
+                    console.log(LOG_PREFIX, '❌ get-instances invalid JSON:', data);
+                    state.instances = [];
+                    renderOptions(false);
+                    return;
+                }
+
+                state.instances = data.instances;
+                const activeId = data.activeInstanceId || data.instances[0]?.id;
+                const activeInstance = data.instances.find(i => i.id === activeId);
+                state.currentInstanceName = activeInstance?.name || null;
+                const select = document.getElementById('bridge-instance-selector');
+                if (select) {
+                    select.value = activeId;
+                    renderOptions(false);
+                    select.value = activeId;
+                }
+
+                console.log(LOG_PREFIX, '✅ Instances loaded:', { count: state.instances.length, activeId });
+            } catch (e) {
+                console.error(LOG_PREFIX, '❌ loadInstances error:', e);
+                state.instances = [];
+                renderOptions(false);
+            }
         }
 
         function inject() {
@@ -307,7 +367,7 @@ try {
                 try {
                     await fetch(CONFIG.save_url, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: FUNCTION_HEADERS,
                         body: JSON.stringify({ 
                             instanceId: e.target.value, 
                             locationId: state.currentLocationId, 
