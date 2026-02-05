@@ -961,29 +961,9 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             // Render reaction badge on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             if (msgEl) {
-                // Detect if message is outbound (user) vs inbound (lead)
-                // GHL chat is a panel, not full window. Find chat container and compare positions.
-                let isOutbound = false;
-                try {
-                    // Find the scrollable chat container (parent with overflow)
-                    let chatContainer = msgEl.parentElement;
-                    for (let i = 0; i < 15 && chatContainer; i++) {
-                        const style = window.getComputedStyle(chatContainer);
-                        if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-                        chatContainer = chatContainer.parentElement;
-                    }
-                    
-                    if (chatContainer) {
-                        const containerRect = chatContainer.getBoundingClientRect();
-                        const msgRect = msgEl.getBoundingClientRect();
-                        // Message center relative to chat container
-                        const msgCenter = msgRect.left + msgRect.width / 2;
-                        const containerCenter = containerRect.left + containerRect.width / 2;
-                        isOutbound = msgCenter > containerCenter;
-                    }
-                } catch (e) {
-                    isOutbound = false;
-                }
+                // Use same logic as dropdown menu: find .message-container and check ml-auto class
+                const msgContainer = msgEl.closest('.message-container');
+                const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
                 const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
                 
                 // Replace reaction (not accumulate) - user can only have one active reaction
@@ -1119,26 +1099,9 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                         const currentReaction = state.reactions[state.reactions.length - 1];
                         const msgEl = document.querySelector(\`[data-message-id="\${state.ghl_id}"]\`);
                         if (msgEl && !msgEl.querySelector('.bridge-reaction-badge')) {
-                            // Detect if message is outbound (user) vs inbound (lead)
-                            let isOutbound = false;
-                            try {
-                                let chatContainer = msgEl.parentElement;
-                                for (let i = 0; i < 15 && chatContainer; i++) {
-                                    const style = window.getComputedStyle(chatContainer);
-                                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-                                    chatContainer = chatContainer.parentElement;
-                                }
-                                
-                                if (chatContainer) {
-                                    const containerRect = chatContainer.getBoundingClientRect();
-                                    const msgRect = msgEl.getBoundingClientRect();
-                                    const msgCenter = msgRect.left + msgRect.width / 2;
-                                    const containerCenter = containerRect.left + containerRect.width / 2;
-                                    isOutbound = msgCenter > containerCenter;
-                                }
-                            } catch (e) {
-                                isOutbound = false;
-                            }
+                            // Use same logic as dropdown menu: find .message-container and check ml-auto class
+                            const msgContainer = msgEl.closest('.message-container');
+                            const isOutbound = msgContainer ? msgContainer.classList.contains('ml-auto') : false;
                             const badgePosition = isOutbound ? 'right: 8px;' : 'left: 8px;';
                             
                             const badge = document.createElement('span');
