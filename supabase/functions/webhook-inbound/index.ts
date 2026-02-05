@@ -830,7 +830,71 @@ serve(async (req) => {
             .update({ message_text: newText, is_edited: true })
             .eq("id", mapping.id);
           
-          // Broadcast to frontend - INCLUDE original_text for overlay rendering
+          // === SEND EDIT AS FORMATTED INBOUND MESSAGE TO GHL ===
+          // Only send formatted message for lead edits (not our own outbound edits)
+          if (!mapping.from_me && mapping.contact_id && mapping.location_id) {
+            // Get instance and token for this location to send message to GHL
+            const { data: instanceData } = await supabase
+              .from("instances")
+              .select("*, ghl_subaccounts!inner(*)")
+              .eq("ghl_subaccounts.location_id", mapping.location_id)
+              .eq("instance_status", "connected")
+              .limit(1)
+              .maybeSingle();
+            
+            if (instanceData?.ghl_subaccounts) {
+              const subaccount = instanceData.ghl_subaccounts;
+              
+              // Get user settings for OAuth credentials
+              const { data: settings } = await supabase
+                .from("user_settings")
+                .select("ghl_client_id, ghl_client_secret")
+                .eq("user_id", subaccount.user_id)
+                .single();
+              
+              if (settings?.ghl_client_id && subaccount.ghl_access_token) {
+                // Get valid token (refresh if needed)
+                const token = await getValidToken(supabase, subaccount, settings);
+                
+                // Format the edit message exactly as requested:
+                // texto original│✏️editado
+                // ──────────────────────────
+                // texto editado
+                const formattedEditMessage = `${originalText}│✏️editado\n──────────────────────────\n${newText}`;
+                
+                console.log("📝 Sending formatted edit message to GHL:", {
+                  contactId: mapping.contact_id,
+                  originalText: originalText?.substring(0, 30),
+                  newText: newText?.substring(0, 30),
+                });
+                
+                // Send as inbound message (from lead)
+                const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Version": "2021-04-15",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                  },
+                  body: JSON.stringify({
+                    type: "SMS",
+                    contactId: mapping.contact_id,
+                    message: formattedEditMessage,
+                  }),
+                });
+                
+                const responseText = await response.text();
+                if (!response.ok) {
+                  console.error("Failed to send edit message to GHL:", responseText);
+                } else {
+                  console.log("✅ Edit message sent to GHL successfully:", responseText.substring(0, 200));
+                }
+              }
+            }
+          }
+          
+          // Also broadcast to frontend for any UI updates needed
           await supabase.channel("ghl_updates").send({
             type: "broadcast",
             event: "msg_update",
