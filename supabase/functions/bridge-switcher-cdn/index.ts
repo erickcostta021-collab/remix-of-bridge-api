@@ -233,9 +233,28 @@ try {
             }
 
             if (!actionBar) {
-                console.log(LOG_PREFIX, '⚠️ Bridge Switcher: actionBar não encontrado ainda (vai tentar de novo).');
-                return;
+                console.log(LOG_PREFIX, '⚠️ Bridge Switcher: actionBar não encontrado — criando dock fixo (fallback).');
+
+                let dock = document.getElementById('bridge-fallback-dock');
+                if (!dock) {
+                    dock = document.createElement('div');
+                    dock.id = 'bridge-fallback-dock';
+                    dock.style.cssText = [
+                        'position: fixed',
+                        'right: 16px',
+                        'bottom: 88px',
+                        'z-index: 2147483647',
+                        'display: flex',
+                        'align-items: center',
+                        'justify-content: flex-end',
+                        'pointer-events: auto'
+                    ].join(';');
+                    document.body.appendChild(dock);
+                }
+
+                actionBar = dock;
             }
+
 
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
