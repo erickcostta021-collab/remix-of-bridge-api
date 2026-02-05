@@ -828,7 +828,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         // Hover effect
         menu.querySelectorAll('.menu-opt').forEach(opt => {
             opt.addEventListener('mouseenter', () => opt.style.background = '#f5f5f5');
-            opt.addEventListener('mouseleave', () => opt.style.background = 'transparent');
+            opt.addEventListener('mouseleave', () => opt.style.background = '#ffffff');
         });
 
         // Expand emoji button
