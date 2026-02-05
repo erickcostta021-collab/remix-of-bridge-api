@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v17: Iniciando...");
+    console.log("🚀 Bridge Toolkit v18: Iniciando...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
@@ -913,7 +913,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     const handleRealtimeUpdate = (payload) => {
         console.log("📡 Bridge Realtime:", payload);
         
-        const { ghl_id, type, new_text, original_text, emoji, quoted_text, reply_text, fromMe } = payload;
+        const { ghl_id, type, new_text, original_text, emoji, replyData, fromMe } = payload;
         
         if (!ghl_id) return;
         
@@ -940,8 +940,23 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             
             renderEditedState(ghl_id, new_text, origText);
             console.log("✏️ Bridge: Processed edit event", { ghl_id, new_text: new_text?.substring(0, 30), fromMe, hasOriginalText: !!original_text });
-        } else if (type === 'reply' && quoted_text) {
-            renderRepliedState(ghl_id, quoted_text, reply_text);
+        } else if (type === 'reply' && replyData?.text) {
+            // The ghl_id here is the MESSAGE BEING REPLIED TO
+            // We show a badge/indicator that someone replied to this message
+            const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
+            if (msgEl) {
+                // Check if we already have a replied indicator
+                if (!msgEl.querySelector('.bridge-was-replied-badge')) {
+                    const badge = document.createElement('span');
+                    badge.className = 'bridge-was-replied-badge';
+                    badge.style.cssText = 'position: absolute; bottom: -8px; left: 8px; background: #e0f2fe; border: 1px solid #0ea5e9; border-radius: 8px; padding: 2px 8px; font-size: 11px; color: #0369a1; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.1);';
+                    badge.innerText = '↩️ Respondida';
+                    badge.title = 'Alguém respondeu a esta mensagem: ' + (replyData.text || '').substring(0, 50);
+                    msgEl.style.position = 'relative';
+                    msgEl.appendChild(badge);
+                }
+            }
+            console.log("↩️ Bridge: Processed reply event", { ghl_id, replyText: replyData?.text?.substring(0, 30) });
         } else if (type === 'react' && emoji) {
             // Render reaction badge on message
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
