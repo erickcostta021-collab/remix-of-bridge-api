@@ -792,28 +792,6 @@ serve(async (req) => {
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
       
-      // === DEDUPLICATION FOR EDITS ===
-      // Multiple instances may receive the same edit event - deduplicate by original message ID
-      const editDedupeKey = `edit:${editedOriginalMsgId || messageDataForEvents.messageid || messageDataForEvents.id}`;
-      
-      // Use INSERT with ON CONFLICT to atomically claim this edit event
-      // Only the first insert succeeds - others get count=0
-      const { data: insertResult, error: insertError } = await supabase
-        .from("ghl_processed_messages")
-        .insert({ message_id: editDedupeKey })
-        .select("id");
-      
-      // If insert failed due to unique constraint, another instance already claimed it
-      if (insertError?.code === "23505" || !insertResult || insertResult.length === 0) {
-        console.log("⏭️ Edit already claimed by another instance, skipping:", editDedupeKey);
-        return new Response(
-          JSON.stringify({ received: true, processed: false, reason: "edit_already_processed" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      console.log("✅ Edit claimed for processing:", editDedupeKey);
-      
       // Extract the ORIGINAL message ID that was edited
       // - For "edited" field format: the "edited" field IS the original message ID
       // - For protocolMessage format: key.id contains the original ID
@@ -846,33 +824,41 @@ serve(async (req) => {
           // Store original text before updating
           const originalText = mapping.message_text || "";
           
-          // Update in database
+          // Update message text in database (for reference/history)
           await supabase
             .from("message_map")
             .update({ message_text: newText, is_edited: true })
             .eq("id", mapping.id);
           
-          // Broadcast edit overlay to Bridge Toolkit for real-time update
-          // The overlay handles both inbound and outbound edits visually
-          await supabase.channel("ghl_updates").send({
-            type: "broadcast",
-            event: "msg_update",
-            payload: {
-              ghl_id: mapping.ghl_message_id,
-              type: "edit",
-              new_text: newText,
-              original_text: originalText,
-              location_id: mapping.location_id,
-              fromMe: mapping.from_me,
-            },
-          });
+          // For INBOUND edits (from lead): GHL updates the message natively via Conversation Provider
+          // No broadcast needed - GHL handles it automatically
           
-          console.log("✅ Edit event broadcasted:", { 
-            ghl_id: mapping.ghl_message_id, 
-            new_text: newText?.substring(0, 30),
-            original_text: originalText?.substring(0, 30),
-            fromMe: mapping.from_me,
-          });
+          // For OUTBOUND edits (from CRM user): Need to broadcast overlay to Bridge Toolkit
+          // This handles edits made by the CRM user via UAZAPI (e.g., from another device)
+          if (mapping.from_me) {
+            await supabase.channel("ghl_updates").send({
+              type: "broadcast",
+              event: "msg_update",
+              payload: {
+                ghl_id: mapping.ghl_message_id,
+                type: "edit",
+                new_text: newText,
+                original_text: originalText,
+                location_id: mapping.location_id,
+                fromMe: true,
+              },
+            });
+            
+            console.log("✅ Outbound edit broadcasted for overlay:", { 
+              ghl_id: mapping.ghl_message_id, 
+              new_text: newText?.substring(0, 30),
+            });
+          } else {
+            console.log("📝 Inbound edit - GHL handles natively, no action needed:", { 
+              ghl_id: mapping.ghl_message_id, 
+              new_text: newText?.substring(0, 30),
+            });
+          }
         } else {
           console.log("⚠️ No mapping found for edited message:", uazapiMsgId);
           console.log("⚠️ Available in payload: messageid=" + messageDataForEvents.messageid + ", id=" + messageDataForEvents.id + ", edited=" + editedOriginalMsgId);
