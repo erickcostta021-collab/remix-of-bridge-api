@@ -128,6 +128,7 @@ async function getInstanceForLocation(supabase: any, locationId: string) {
     settings,
     baseUrl: settings.uazapi_base_url,
     token: instance.uazapi_instance_token,
+    ghlUserId: instance.ghl_user_id, // GHL user assigned to this instance
   };
 }
 
@@ -276,8 +277,21 @@ serve(async (req) => {
           // Format: ✏️ Editado: "texto original" → novo texto
           const formattedEditMessage = `✏️ Editado: "${originalText}"\n\n${new_text}`;
           
+          // Build request body with optional userId for attribution
+          const requestBody: Record<string, string> = {
+            type: "InternalComment",
+            contactId: mapping.contact_id,
+            message: formattedEditMessage,
+          };
+          
+          // If the instance has a GHL user assigned, attribute the comment to them
+          if (config.ghlUserId) {
+            requestBody.userId = config.ghlUserId;
+          }
+          
           console.log("📝 Sending edit InternalComment to GHL:", {
             contactId: mapping.contact_id,
+            userId: config.ghlUserId || "(not assigned)",
             originalText: originalText?.substring(0, 30),
             newText: new_text?.substring(0, 30),
           });
@@ -290,11 +304,7 @@ serve(async (req) => {
               "Content-Type": "application/json",
               "Accept": "application/json",
             },
-            body: JSON.stringify({
-              type: "InternalComment",
-              contactId: mapping.contact_id,
-              message: formattedEditMessage,
-            }),
+            body: JSON.stringify(requestBody),
           });
           
           const responseText = await response.text();
