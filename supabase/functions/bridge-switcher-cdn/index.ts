@@ -200,9 +200,42 @@ try {
 
         function inject() {
             if (document.getElementById('bridge-api-container')) return;
-            const actionBar = document.querySelector('.msg-composer-actions') || 
-                              document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
-            if (!actionBar) return;
+
+            // GHL muda bastante a estrutura do composer; tentamos vários alvos possíveis.
+            const actionBarSelectors = [
+                '.msg-composer-actions',
+                '.msg-composer__actions',
+                '[class*="composer-actions"]',
+                '[class*="msg-composer-actions"]',
+                '[data-testid="composer-actions"]',
+                // fallback antigo
+                '.flex.flex-row.gap-2.items-center.pl-2',
+            ];
+
+            let actionBar = null;
+            for (const sel of actionBarSelectors) {
+                const el = document.querySelector(sel);
+                if (el) { actionBar = el; break; }
+            }
+
+            // Fallback: tenta achar o container do composer e anexar no final dele.
+            if (!actionBar) {
+                const composerFallbackSelectors = [
+                    '.hl_conversations--composer',
+                    '.conversation-composer',
+                    '[class*="composer"] [class*="actions"]',
+                    '[class*="message-box"]',
+                ];
+                for (const sel of composerFallbackSelectors) {
+                    const el = document.querySelector(sel);
+                    if (el) { actionBar = el; break; }
+                }
+            }
+
+            if (!actionBar) {
+                console.log(LOG_PREFIX, '⚠️ Bridge Switcher: actionBar não encontrado ainda (vai tentar de novo).');
+                return;
+            }
 
             const container = document.createElement('div');
             container.id = 'bridge-api-container';
