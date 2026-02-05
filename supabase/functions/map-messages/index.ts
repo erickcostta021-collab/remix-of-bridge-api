@@ -453,7 +453,7 @@ serve(async (req) => {
 
     // Action: delete - Mark message as deleted
     if (action === "delete") {
-      const { ghl_id, from_me } = body;
+      const { ghl_id, from_me, ghl_user_id } = body;
 
       if (!ghl_id) {
         return new Response(
@@ -478,10 +478,11 @@ serve(async (req) => {
       }
 
       let uazapiSuccess = false;
+      let config: Awaited<ReturnType<typeof getInstanceForLocation>> = null;
 
       // Send delete to UAZAPI if we have the ID and it's from_me
       if (mapping.uazapi_message_id && from_me) {
-        const config = await getInstanceForLocation(supabase, mapping.location_id);
+        config = await getInstanceForLocation(supabase, mapping.location_id);
 
         if (config) {
           // Try multiple endpoint formats for delete
@@ -517,15 +518,73 @@ serve(async (req) => {
         );
       }
 
-      // Broadcast deletion
-      await supabase.channel("ghl_updates").send({
-        type: "broadcast",
-        event: "msg_update",
-        payload: { ghl_id, type: "delete", fromMe: from_me, location_id: mapping.location_id },
-      });
+      // Send InternalComment to GHL with deletion notice (like we do for edits/replies)
+      let ghlInternalCommentSent = false;
+      const originalText = mapping.message_text || '(mensagem)';
+      
+      // Get config if we don't have it yet
+      if (!config) {
+        config = await getInstanceForLocation(supabase, mapping.location_id);
+      }
+      
+      if (config?.subaccount && config?.settings?.ghl_client_id && mapping.contact_id) {
+        try {
+          const ghlToken = await getValidToken(supabase, config.subaccount, config.settings);
+          
+          // Format: 🗑️ Mensagem apagada: "texto original"
+          const formattedDeleteMessage = `🗑️ Mensagem apagada: "${originalText.substring(0, 150)}${originalText.length > 150 ? '...' : ''}"`;
+          
+          // Build request body with optional userId for attribution
+          const requestBody: Record<string, string> = {
+            type: "InternalComment",
+            contactId: mapping.contact_id,
+            message: formattedDeleteMessage,
+          };
+          
+          // Priority: ghl_user_id from request > instance's ghl_user_id (fallback)
+          const effectiveUserId = ghl_user_id || config.ghlUserId;
+          if (effectiveUserId) {
+            requestBody.userId = effectiveUserId;
+          }
+          
+          console.log("📝 Sending delete InternalComment to GHL:", {
+            contactId: mapping.contact_id,
+            userId: effectiveUserId || "(not assigned)",
+            originalText: originalText?.substring(0, 30),
+          });
+          
+          const response = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${ghlToken}`,
+              "Version": "2021-04-15",
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+          });
+          
+          const responseText = await response.text();
+          if (!response.ok) {
+            console.error("Failed to send delete InternalComment to GHL:", responseText);
+          } else {
+            console.log("✅ Delete InternalComment sent to GHL:", responseText.substring(0, 200));
+            ghlInternalCommentSent = true;
+          }
+        } catch (e) {
+          console.error("Error sending delete InternalComment:", e);
+        }
+      }
+
+      // No broadcast needed - we use InternalComment instead of overlay now
 
       return new Response(
-        JSON.stringify({ success: true, data: updated, whatsapp_sent: uazapiSuccess }),
+        JSON.stringify({ 
+          success: true, 
+          data: updated, 
+          whatsapp_sent: uazapiSuccess,
+          ghl_internal_comment: ghlInternalCommentSent
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

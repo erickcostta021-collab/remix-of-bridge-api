@@ -877,7 +877,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 
                 if (act === 'delete') {
                     if (confirm("Apagar esta mensagem para todos?")) {
-                        const result = await sendAction('delete', ghlId, { from_me: isOutbound });
+                        const result = await sendAction('delete', ghlId, { from_me: isOutbound, ghl_user_id: getGhlUserId() });
                         if (result) showToast("Mensagem apagada!");
                     }
                     return;
