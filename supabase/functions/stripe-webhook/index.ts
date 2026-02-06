@@ -192,6 +192,85 @@ serve(async (req) => {
       }
     }
 
+    // Handle payment failures (pause account until payment succeeds)
+    if (event.type === "invoice.payment_failed") {
+      const invoice = event.data.object as Stripe.Invoice;
+      
+      // Only pause if this is a subscription payment (not initial)
+      if (invoice.billing_reason === "subscription_cycle" || invoice.billing_reason === "subscription_update") {
+        const customer = await stripe.customers.retrieve(invoice.customer as string);
+        if (customer.deleted) {
+          return new Response(JSON.stringify({ received: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const customerEmail = customer.email;
+        
+        if (customerEmail) {
+          const { data: users } = await supabaseAdmin.auth.admin.listUsers();
+          const user = users?.users.find(
+            (u) => u.email?.toLowerCase() === customerEmail.toLowerCase()
+          );
+
+          if (user) {
+            // Pause account due to failed payment
+            const { error: updateError } = await supabaseAdmin
+              .from("profiles")
+              .update({ 
+                is_paused: true,
+                paused_at: new Date().toISOString()
+              })
+              .eq("user_id", user.id);
+
+            if (updateError) {
+              logStep("Error pausing user after payment failure", { error: updateError.message });
+            } else {
+              logStep("Payment failed, account paused", { userId: user.id, email: customerEmail });
+            }
+          }
+        }
+      }
+    }
+
+    // Handle successful payment (reactivate if was paused)
+    if (event.type === "invoice.payment_succeeded") {
+      const invoice = event.data.object as Stripe.Invoice;
+      
+      const customer = await stripe.customers.retrieve(invoice.customer as string);
+      if (customer.deleted) {
+        return new Response(JSON.stringify({ received: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const customerEmail = customer.email;
+      
+      if (customerEmail) {
+        const { data: users } = await supabaseAdmin.auth.admin.listUsers();
+        const user = users?.users.find(
+          (u) => u.email?.toLowerCase() === customerEmail.toLowerCase()
+        );
+
+        if (user) {
+          // Reactivate account after successful payment
+          const { error: updateError } = await supabaseAdmin
+            .from("profiles")
+            .update({ 
+              is_paused: false,
+              paused_at: null
+            })
+            .eq("user_id", user.id);
+
+          if (updateError) {
+            logStep("Error reactivating user after payment", { error: updateError.message });
+          } else {
+            logStep("Payment succeeded, account reactivated", { userId: user.id, email: customerEmail });
+          }
+        }
+      }
+    }
+
     return new Response(JSON.stringify({ received: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
