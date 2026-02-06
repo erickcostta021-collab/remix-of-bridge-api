@@ -6,6 +6,8 @@ export interface UserProfile {
   id: string;
   user_id: string;
   email: string | null;
+  full_name: string | null;
+  phone: string | null;
   is_paused: boolean;
   paused_at: string | null;
   instance_limit: number;
