@@ -712,15 +712,24 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         menu.id = 'bridge-whatsapp-menu';
         
         const rect = triggerEl.getBoundingClientRect();
-        const openDown = rect.top < 300;
-        const topPos = openDown ? rect.bottom + 5 : rect.top - 300;
+        
+        // Calculate menu height estimate (quick emojis + options)
+        // Quick emojis: ~50px, each option: ~45px, base padding: ~20px
+        const hasEditDelete = isOutbound;
+        const menuHeight = 50 + (hasEditDelete ? 4 * 45 : 2 * 45) + 20; // ~230px for outbound, ~140px for inbound
+        
+        // Open down if not enough space above
+        const openDown = rect.top < menuHeight + 20;
+        
+        // When opening up, position menu so its bottom aligns just above the trigger
+        const topPos = openDown ? rect.bottom + 5 : rect.top - menuHeight - 5;
         const leftPos = isOutbound ? rect.left - 200 : rect.left;
 
         // Ensure position doesn't go offscreen
         const adjustedLeft = Math.max(10, Math.min(leftPos, window.innerWidth - 260));
         const adjustedTop = Math.max(10, Math.min(topPos, window.innerHeight - 400));
         
-        console.log("📍 Menu position:", { rect, openDown, topPos: adjustedTop, leftPos: adjustedLeft });
+        console.log("📍 Menu position:", { rect, openDown, menuHeight, topPos: adjustedTop, leftPos: adjustedLeft });
         
         menu.style.cssText = \`
             position: fixed !important; 
