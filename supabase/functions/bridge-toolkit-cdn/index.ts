@@ -1106,6 +1106,13 @@ const BRIDGE_TOOLKIT_SCRIPT = `
         if (!ghl_id) return;
         
         if (type === 'delete') {
+            // Only show overlay for inbound (lead) deletions
+            // Outbound (user) deletions are handled via InternalComment in GHL
+            if (fromMe) {
+                console.log("🗑️ Bridge: Outbound delete - handled via InternalComment, no overlay", { ghl_id });
+                return;
+            }
+            
             // Use original_text from payload if available, otherwise try to get from DOM
             const msgEl = document.querySelector(\`[data-message-id="\${ghl_id}"]\`);
             const textFromDom = msgEl?.querySelector('.text-\\\\[14px\\\\]')?.innerText || 
@@ -1118,7 +1125,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             }
             
             renderDeletedState(ghl_id);
-            console.log("🗑️ Bridge: Processed delete event", { ghl_id, fromMe, hasOriginalText: !!original_text });
+            console.log("🗑️ Bridge: Processed inbound delete event", { ghl_id, fromMe, hasOriginalText: !!original_text });
         } else if (type === 'edit') {
             // All edits are now handled via InternalComment in GHL
             // No overlay needed for either inbound or outbound
@@ -1281,7 +1288,9 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 console.log("📋 Bridge: Received", data.states.length, "modified message states");
                 
                 data.states.forEach(state => {
-                    if (state.is_deleted) {
+                    // Only show overlay for inbound (lead) deletions
+                    // Outbound (user) deletions are handled via InternalComment in GHL
+                    if (state.is_deleted && !state.from_me) {
                         renderDeletedState(state.ghl_id);
                     }
                     // Edit states are now handled via InternalComment - no overlay needed
