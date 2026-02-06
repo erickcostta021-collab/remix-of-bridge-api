@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import MainLogin from "./pages/MainLogin";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
 import Checkout from "./pages/Checkout";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
@@ -51,6 +52,7 @@ const App = () => (
           <Route path="/login" element={<MainLogin />} />
           <Route path="/convidadospormim" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route
             path="/dashboard"

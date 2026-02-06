@@ -58,3 +58,6 @@ verify_jwt = false
 
 [functions.customer-portal]
 verify_jwt = false
+
+[functions.check-email-exists]
+verify_jwt = false
