@@ -13,6 +13,8 @@ import {
   RefreshCw
 } from "lucide-react";
 import logo from "@/assets/logo.png";
+import bridgeImage from "@/assets/bridge.png";
+import whatsappLogo from "@/assets/whatsapp-logo.svg";
 
 const LandingPage = () => {
   const [instanceCount, setInstanceCount] = useState(1);
@@ -73,30 +75,42 @@ const LandingPage = () => {
             </Button>
           </div>
 
-          {/* Visual Element */}
+          {/* Visual Element - Bridge with logos */}
           <div className="mt-16 relative">
             <div className="absolute inset-0 bg-gradient-to-r from-brand-blue/20 via-transparent to-brand-green/20 rounded-3xl blur-3xl" />
-            <div className="relative bg-card rounded-2xl shadow-2xl shadow-black/20 border border-border p-8 md:p-12">
-              <div className="flex items-center justify-center gap-8 md:gap-16">
-                <div className="flex flex-col items-center">
-                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-brand-green/20 flex items-center justify-center">
-                    <MessageCircle className="h-8 w-8 md:h-10 md:w-10 text-brand-green" />
-                  </div>
-                  <span className="mt-3 text-sm font-medium text-muted-foreground">WhatsApp</span>
+            <div className="relative flex items-center justify-center py-8">
+              {/* WhatsApp Logo - Left Side */}
+              <div className="flex flex-col items-center z-10 -mr-8 md:-mr-12">
+                <div className="w-16 h-16 md:w-24 md:h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center border border-border">
+                  <img src={whatsappLogo} alt="WhatsApp" className="h-10 w-10 md:h-16 md:w-16" />
                 </div>
-                
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-1 bg-brand-blue rounded-full" />
-                  <RefreshCw className="h-6 w-6 text-brand-blue animate-spin" style={{ animationDuration: '3s' }} />
-                  <div className="w-8 h-1 bg-brand-green rounded-full" />
+                <span className="mt-3 text-sm font-medium text-muted-foreground">WhatsApp</span>
+              </div>
+              
+              {/* Bridge Image */}
+              <div className="relative">
+                <img 
+                  src={bridgeImage} 
+                  alt="Bridge connecting WhatsApp and GoHighLevel" 
+                  className="h-32 md:h-48 lg:h-56 w-auto object-contain"
+                />
+              </div>
+              
+              {/* GoHighLevel Logo - Right Side */}
+              <div className="flex flex-col items-center z-10 -ml-8 md:-ml-12">
+                <div className="w-16 h-16 md:w-24 md:h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center border border-border overflow-hidden">
+                  <svg viewBox="0 0 100 100" className="h-10 w-10 md:h-16 md:w-16">
+                    <defs>
+                      <linearGradient id="ghl-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#F97316" />
+                        <stop offset="100%" stopColor="#EA580C" />
+                      </linearGradient>
+                    </defs>
+                    <rect width="100" height="100" rx="20" fill="url(#ghl-gradient)" />
+                    <text x="50" y="68" textAnchor="middle" fill="white" fontSize="48" fontWeight="bold" fontFamily="Arial, sans-serif">G</text>
+                  </svg>
                 </div>
-                
-                <div className="flex flex-col items-center">
-                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-brand-blue/20 flex items-center justify-center">
-                    <Shield className="h-8 w-8 md:h-10 md:w-10 text-brand-blue" />
-                  </div>
-                  <span className="mt-3 text-sm font-medium text-muted-foreground">GoHighLevel</span>
-                </div>
+                <span className="mt-3 text-sm font-medium text-muted-foreground">GoHighLevel</span>
               </div>
             </div>
           </div>
