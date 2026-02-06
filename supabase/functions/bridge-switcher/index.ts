@@ -348,10 +348,10 @@ Deno.serve(async (req) => {
 
       console.log("Preference saved successfully:", { contactId, instanceId, leadPhone });
 
-      // Create GHL Contact Note (visible only to agents in the Notes tab, NOT sent to contact)
-      // Using POST /contacts/:contactId/notes endpoint
+      // Create GHL InternalComment (visible in conversation history, NOT sent to contact)
+      // Using POST /conversations/:conversationId/messages endpoint with type: InternalComment
       if (conversationId && previousInstanceName && newInstanceName && previousInstanceName !== newInstanceName) {
-        console.log("Creating GHL contact note for instance switch");
+        console.log("Creating GHL InternalComment for instance switch");
         
         try {
           // Get the GHL access token for this location
@@ -367,58 +367,38 @@ Deno.serve(async (req) => {
             const needsRefresh = expiresAt && expiresAt.getTime() - Date.now() < 5 * 60 * 1000;
             
             if (needsRefresh) {
-              console.log("Token needs refresh, skipping note creation");
+              console.log("Token needs refresh, skipping InternalComment creation");
             } else {
-              // Get the contactId from the conversation
-              const convResponse = await fetch(`https://services.leadconnectorhq.com/conversations/${conversationId}`, {
+              // Create InternalComment via GHL Conversations API
+              const commentContent = "🔄 Instância alterada: " + previousInstanceName + " → " + newInstanceName;
+              
+              const ghlResponse = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+                method: "POST",
                 headers: {
-                  "Authorization": `Bearer ${subaccount.ghl_access_token}`,
-                  "Version": "2021-04-15",
-                  "Accept": "application/json",
-                }
+                  "Authorization": "Bearer " + subaccount.ghl_access_token,
+                  "Content-Type": "application/json",
+                  "Version": "2021-04-15"
+                },
+                body: JSON.stringify({
+                  type: "InternalComment",
+                  conversationId: conversationId,
+                  message: commentContent
+                })
               });
               
-              if (convResponse.ok) {
-                const convData = await convResponse.json();
-                const contactIdFromConv = convData.conversation?.contactId || convData.contactId;
-                console.log("Got contactId from conversation:", contactIdFromConv);
-                
-                if (contactIdFromConv) {
-                  // Create contact note via GHL API - visible in Notes tab only
-                  const noteContent = `🔄 Instância alterada: ${previousInstanceName} → ${newInstanceName}`;
-                  
-                  const ghlResponse = await fetch(`https://services.leadconnectorhq.com/contacts/${contactIdFromConv}/notes`, {
-                    method: "POST",
-                    headers: {
-                      "Authorization": `Bearer ${subaccount.ghl_access_token}`,
-                      "Content-Type": "application/json",
-                      "Version": "2021-07-28"
-                    },
-                    body: JSON.stringify({
-                      body: noteContent
-                    })
-                  });
-                  
-                  if (ghlResponse.ok) {
-                    console.log("GHL contact note created successfully for contact:", contactIdFromConv);
-                  } else {
-                    const errorText = await ghlResponse.text();
-                    console.error("Failed to create GHL contact note:", ghlResponse.status, errorText);
-                  }
-                } else {
-                  console.log("Could not get contactId from conversation:", conversationId);
-                }
+              if (ghlResponse.ok) {
+                console.log("GHL InternalComment created successfully for conversation:", conversationId);
               } else {
-                const errorText = await convResponse.text();
-                console.error("Failed to get conversation details:", convResponse.status, errorText);
+                const errorText = await ghlResponse.text();
+                console.error("Failed to create GHL InternalComment:", ghlResponse.status, errorText);
               }
             }
           } else {
             console.log("No GHL access token found for location:", locationId);
           }
-        } catch (noteError) {
-          console.error("Error creating GHL note:", noteError);
-          // Don't fail the request just because note creation failed
+        } catch (commentError) {
+          console.error("Error creating GHL InternalComment:", commentError);
+          // Don't fail the request just because comment creation failed
         }
       }
 
