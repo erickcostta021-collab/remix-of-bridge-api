@@ -409,9 +409,8 @@ const LandingPage = () => {
               Otimize seu tempo, melhore a experiência do cliente e escale seu atendimento com a Bridge API.
             </p>
             <Link to="/register">
-              <Button size="lg" className="bg-white text-brand-blue hover:bg-white/90 px-8 py-6 text-lg font-semibold">
-                Quero Conectar Minha Conta
-                <ArrowRight className="ml-2 h-5 w-5" />
+            <Button size="lg" className="bg-white text-brand-blue hover:bg-white/90 px-8 py-6 text-lg font-semibold">
+                Ir para o Próximo Level 🚀
               </Button>
             </Link>
           </div>
