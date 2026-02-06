@@ -330,8 +330,8 @@ const LandingPage = () => {
                 Fotos Atualizadas
               </h3>
               <p className="text-muted-foreground leading-relaxed">
-                Sincronização automática das fotos de perfil dos contatos, mantendo sua base 
-                sempre atualizada e profissional.
+                As fotos de perfil dos seus contatos são atualizadas automaticamente no CRM, 
+                garantindo uma base de dados sempre com informações visuais em dia.
               </p>
             </div>
 
