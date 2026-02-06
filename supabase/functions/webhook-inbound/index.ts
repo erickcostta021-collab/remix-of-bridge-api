@@ -952,8 +952,60 @@ serve(async (req) => {
             }
           }
           
-          // Only broadcast edit overlay for OUTBOUND edits (from CRM user)
-          // For inbound edits (from lead), we send formatted message instead - no overlay needed
+          // If this was an OUTBOUND edit (agent edited on mobile), mirror the action in GHL using InternalComment
+          // (same UX as when the edit is made inside GHL via the Toolkit)
+          if (mapping.from_me && mapping.contact_id && mapping.location_id) {
+            try {
+              const { data: instanceData } = await supabase
+                .from("instances")
+                .select("ghl_user_id, ghl_subaccounts!inner(*)")
+                .eq("ghl_subaccounts.location_id", mapping.location_id)
+                .eq("instance_status", "connected")
+                .limit(1)
+                .maybeSingle();
+
+              if (instanceData?.ghl_subaccounts) {
+                const subaccount = instanceData.ghl_subaccounts;
+                const { data: settings } = await supabase
+                  .from("user_settings")
+                  .select("ghl_client_id, ghl_client_secret")
+                  .eq("user_id", subaccount.user_id)
+                  .maybeSingle();
+
+                if (settings?.ghl_client_id && subaccount.ghl_access_token) {
+                  const token = await getValidToken(supabase, subaccount, settings);
+                  const formattedEditComment = `✏️ Editado: "${originalText}"\n\n${newText}`;
+
+                  const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+                    method: "POST",
+                    headers: {
+                      "Authorization": `Bearer ${token}`,
+                      "Version": "2021-04-15",
+                      "Content-Type": "application/json",
+                      "Accept": "application/json",
+                    },
+                    body: JSON.stringify({
+                      type: "InternalComment",
+                      contactId: mapping.contact_id,
+                      message: formattedEditComment,
+                      ...(instanceData.ghl_user_id && { userId: instanceData.ghl_user_id }),
+                    }),
+                  });
+
+                  const icText = await icRes.text();
+                  if (!icRes.ok) {
+                    console.error("Failed to send edit InternalComment (mobile) to GHL:", icText.substring(0, 300));
+                  } else {
+                    console.log("✅ Edit InternalComment mirrored (mobile):", icText.substring(0, 200));
+                  }
+                }
+              }
+            } catch (e) {
+              console.error("Error mirroring mobile edit as InternalComment:", e);
+            }
+          }
+
+          // Also broadcast for any UI that uses realtime overlays
           if (mapping.from_me) {
             await supabase.channel("ghl_updates").send({
               type: "broadcast",
@@ -966,12 +1018,6 @@ serve(async (req) => {
                 location_id: mapping.location_id,
                 fromMe: mapping.from_me,
               },
-            });
-          
-            console.log("✅ Edit event broadcasted (outbound):", { 
-              ghl_id: mapping.ghl_message_id, 
-              new_text: newText?.substring(0, 30),
-              original_text: originalText?.substring(0, 30),
             });
           } else {
             console.log("📝 Inbound edit handled via formatted message, no overlay broadcast");
@@ -1736,11 +1782,13 @@ serve(async (req) => {
         const bodyText = await res.text();
         console.log("GHL outbound-text response (no webhook):", { status: res.status, ms: Date.now() - before, body: bodyText.substring(0, 500) });
         if (!res.ok) throw new Error("Failed to send outbound message to GHL");
+
         try {
           const parsed = JSON.parse(bodyText);
           const ghlMessageId = String(parsed?.messageId || "");
           if (ghlMessageId) {
             await markIfNew(supabase, `ghl:${ghlMessageId}`);
+
             // Save message mapping for edit/react/delete functionality
             const uazapiMsgId = messageData.messageid || messageData.id || "";
             await supabase.from("message_map").upsert({
@@ -1754,6 +1802,54 @@ serve(async (req) => {
               original_timestamp: new Date().toISOString(),
             }, { onConflict: "ghl_message_id" });
             console.log("Message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+
+            // If this outbound message was a WhatsApp Reply (sent from mobile), mirror the action in GHL using InternalComment
+            // (same UX as when the reply is made inside GHL via the Toolkit)
+            if ((quotedMessageId || quotedText) && contact?.id) {
+              try {
+                let originalText = quotedText || "";
+
+                if (!originalText && quotedMessageId) {
+                  const { data: originalMapping } = await supabase
+                    .from("message_map")
+                    .select("message_text")
+                    .eq("uazapi_message_id", quotedMessageId)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  if (originalMapping?.message_text) originalText = originalMapping.message_text;
+                }
+
+                if (originalText) {
+                  const formattedReplyComment = `↩️ Respondendo a: "${originalText.substring(0, 100)}${originalText.length > 100 ? '...' : ''}"\n\n${textMessage}`;
+
+                  const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+                    method: "POST",
+                    headers: {
+                      "Authorization": `Bearer ${token}`,
+                      "Version": "2021-04-15",
+                      "Content-Type": "application/json",
+                      "Accept": "application/json",
+                    },
+                    body: JSON.stringify({
+                      type: "InternalComment",
+                      contactId: contact.id,
+                      message: formattedReplyComment,
+                      ...(instance.ghl_user_id && { userId: instance.ghl_user_id }),
+                    }),
+                  });
+
+                  const icText = await icRes.text();
+                  if (!icRes.ok) {
+                    console.error("Failed to send reply InternalComment (mobile) to GHL:", icText.substring(0, 300));
+                  } else {
+                    console.log("✅ Reply InternalComment mirrored (mobile):", icText.substring(0, 200));
+                  }
+                }
+              } catch (e) {
+                console.error("Error mirroring mobile reply as InternalComment:", e);
+              }
+            }
           }
         } catch {
           // ignore
