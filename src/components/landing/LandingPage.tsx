@@ -14,7 +14,6 @@ import {
   Gift
 } from "lucide-react";
 import logo from "@/assets/logo.png";
-import bridgeImage from "@/assets/bridge.png";
 import whatsappLogo from "@/assets/whatsapp-logo.svg";
 
 const LandingPage = () => {
@@ -108,28 +107,25 @@ const LandingPage = () => {
             </Button>
           </div>
 
-          {/* Visual Element - Bridge with logos */}
+          {/* Visual Element - Logos */}
           <div className="mt-16 relative">
-            <div className="relative flex items-end justify-center">
-              {/* WhatsApp Logo - Left Side */}
+            <div className="relative flex items-center justify-center gap-12">
+              {/* WhatsApp Logo */}
               <div className="flex flex-col items-center z-20 group">
                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border group-hover:border-muted-foreground/50 transition-all duration-500 group-hover:scale-105">
                   <img src={whatsappLogo} alt="WhatsApp" className="h-10 w-10 md:h-12 md:w-12" />
                 </div>
                 <span className="mt-2 text-sm font-medium text-muted-foreground">WhatsApp</span>
               </div>
-              
-              {/* Bridge Image - Center */}
-              <div className="relative z-10 -mb-2 md:-mb-3 -mx-2 md:-mx-4">
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-20 pointer-events-none" />
-                <img 
-                  src={bridgeImage} 
-                  alt="Bridge connecting WhatsApp and GoHighLevel" 
-                  className="h-64 md:h-80 lg:h-96 xl:h-[28rem] w-auto object-contain"
-                />
+
+              {/* Connection indicator */}
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-brand-green animate-pulse" />
+                <div className="w-8 h-0.5 bg-gradient-to-r from-brand-green to-brand-blue" />
+                <div className="w-2 h-2 rounded-full bg-brand-blue animate-pulse" />
               </div>
               
-              {/* GoHighLevel Logo - Right Side */}
+              {/* GoHighLevel Logo */}
               <div className="flex flex-col items-center z-20 group">
                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border group-hover:border-muted-foreground/50 transition-all duration-500 group-hover:scale-105 overflow-hidden">
                   <svg viewBox="0 0 100 100" className="h-10 w-10 md:h-12 md:w-12">
