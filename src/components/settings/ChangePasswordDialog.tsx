@@ -19,15 +19,22 @@ interface ChangePasswordDialogProps {
 }
 
 export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialogProps) {
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const resetForm = () => {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (newPassword.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres");
+      toast.error("A nova senha deve ter pelo menos 6 caracteres");
       return;
     }
 
@@ -38,12 +45,27 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
 
     setLoading(true);
     try {
+      // Verify current password by re-authenticating
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) throw new Error("Usuário não encontrado");
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        toast.error("Senha atual incorreta");
+        setLoading(false);
+        return;
+      }
+
+      // Update to new password
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
 
       toast.success("Senha alterada com sucesso!");
-      setNewPassword("");
-      setConfirmPassword("");
+      resetForm();
       onOpenChange(false);
     } catch (error: any) {
       toast.error(error.message || "Erro ao alterar senha");
@@ -53,7 +75,7 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -61,10 +83,22 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
             Alterar Senha
           </DialogTitle>
           <DialogDescription>
-            Digite sua nova senha abaixo
+            Confirme sua senha atual e defina a nova senha
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="current-password">Senha Atual</Label>
+            <Input
+              id="current-password"
+              type="password"
+              placeholder="••••••••"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+              className="bg-secondary border-border"
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="new-password">Nova Senha</Label>
             <Input
@@ -92,7 +126,7 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>
               Cancelar
             </Button>
             <Button type="submit" disabled={loading}>
