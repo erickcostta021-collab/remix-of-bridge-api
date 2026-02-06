@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate, Link } from "react-router-dom";
-import { Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -158,6 +158,15 @@ const MainLogin = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+      {/* Back to Landing Page */}
+      <Link
+        to="/"
+        className="absolute top-6 left-6 z-10 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors duration-200 group"
+      >
+        <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform duration-200" />
+        <span className="text-sm font-medium">Voltar</span>
+      </Link>
+
       {/* Subtle background glow */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-primary/5 blur-[120px]" />
