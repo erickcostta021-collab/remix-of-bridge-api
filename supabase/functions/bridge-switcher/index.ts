@@ -349,10 +349,10 @@ Deno.serve(async (req) => {
       console.log("Preference saved successfully:", { contactId, instanceId, leadPhone });
 
       // Create GHL InternalComment (visible in conversation history, NOT sent to contact)
-      // Using POST /conversations/:conversationId/messages endpoint with type: InternalComment
+      // Using Conversations API (requires contactId)
       if (conversationId && previousInstanceName && newInstanceName && previousInstanceName !== newInstanceName) {
         console.log("Creating GHL InternalComment for instance switch");
-        
+
         try {
           // Get the GHL access token for this location
           const { data: subaccount } = await supabase
@@ -360,37 +360,66 @@ Deno.serve(async (req) => {
             .select("ghl_access_token, ghl_token_expires_at")
             .eq("location_id", locationId)
             .maybeSingle();
-          
+
           if (subaccount?.ghl_access_token) {
             // Check if token needs refresh (expires in less than 5 minutes)
             const expiresAt = subaccount.ghl_token_expires_at ? new Date(subaccount.ghl_token_expires_at) : null;
             const needsRefresh = expiresAt && expiresAt.getTime() - Date.now() < 5 * 60 * 1000;
-            
+
             if (needsRefresh) {
               console.log("Token needs refresh, skipping InternalComment creation");
             } else {
-              // Create InternalComment via GHL Conversations API
               const commentContent = "🔄 Instância alterada: " + previousInstanceName + " → " + newInstanceName;
-              
-              const ghlResponse = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
-                method: "POST",
-                headers: {
-                  "Authorization": "Bearer " + subaccount.ghl_access_token,
-                  "Content-Type": "application/json",
-                  "Version": "2021-04-15"
-                },
-                body: JSON.stringify({
-                  type: "InternalComment",
-                  conversationId: conversationId,
-                  message: commentContent
-                })
-              });
-              
-              if (ghlResponse.ok) {
-                console.log("GHL InternalComment created successfully for conversation:", conversationId);
+
+              // 1) Resolve contactId from conversation
+              const convResponse = await fetch(
+                "https://services.leadconnectorhq.com/conversations/" + conversationId,
+                {
+                  headers: {
+                    Authorization: "Bearer " + subaccount.ghl_access_token,
+                    Version: "2021-04-15",
+                    Accept: "application/json",
+                  },
+                }
+              );
+
+              if (!convResponse.ok) {
+                const errorText = await convResponse.text();
+                console.error("Failed to get conversation details:", convResponse.status, errorText);
               } else {
-                const errorText = await ghlResponse.text();
-                console.error("Failed to create GHL InternalComment:", ghlResponse.status, errorText);
+                const convData = await convResponse.json();
+                const contactIdFromConv = convData?.conversation?.contactId || convData?.contactId;
+                console.log("Got contactId from conversation:", contactIdFromConv);
+
+                if (!contactIdFromConv) {
+                  console.log("No contactId found for conversation:", conversationId);
+                } else {
+                  // 2) Create InternalComment
+                  const ghlResponse = await fetch(
+                    "https://services.leadconnectorhq.com/conversations/messages",
+                    {
+                      method: "POST",
+                      headers: {
+                        Authorization: "Bearer " + subaccount.ghl_access_token,
+                        "Content-Type": "application/json",
+                        Version: "2021-04-15",
+                      },
+                      body: JSON.stringify({
+                        type: "InternalComment",
+                        conversationId: conversationId,
+                        contactId: contactIdFromConv,
+                        message: commentContent,
+                      }),
+                    }
+                  );
+
+                  if (ghlResponse.ok) {
+                    console.log("GHL InternalComment created successfully for conversation:", conversationId);
+                  } else {
+                    const errorText = await ghlResponse.text();
+                    console.error("Failed to create GHL InternalComment:", ghlResponse.status, errorText);
+                  }
+                }
               }
             }
           } else {
