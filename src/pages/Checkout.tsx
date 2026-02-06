@@ -81,6 +81,16 @@ const Checkout = () => {
 
       if (error) throw error;
 
+      // Check for email exists error
+      if (data?.code === "EMAIL_EXISTS") {
+        toast.error(data.error);
+        return;
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
       if (data?.url) {
         window.location.href = data.url;
       } else {

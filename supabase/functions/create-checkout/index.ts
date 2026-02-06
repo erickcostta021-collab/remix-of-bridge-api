@@ -25,9 +25,10 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseClient = createClient(
+  // Use service role key to check auth.users
+  const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
 
   try {
@@ -38,6 +39,37 @@ serve(async (req) => {
 
     if (!plan || !email) {
       throw new Error("Plan and email are required");
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error("Formato de email inválido");
+    }
+
+    // Check if user already exists in auth.users
+    const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (listError) {
+      logStep("Error checking existing users", { error: listError.message });
+    } else {
+      const userExists = existingUsers.users.some(
+        (user) => user.email?.toLowerCase() === email.toLowerCase()
+      );
+      
+      if (userExists) {
+        logStep("Email already registered", { email });
+        return new Response(
+          JSON.stringify({ 
+            error: "Este email já está cadastrado. Por favor, faça login ou use outro email.",
+            code: "EMAIL_EXISTS"
+          }),
+          { 
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 400,
+          }
+        );
+      }
     }
 
     // Validate plan
