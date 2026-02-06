@@ -24,7 +24,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Loader2, RefreshCw, HelpCircle, User } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Plus, Loader2, RefreshCw, HelpCircle, User, AlertTriangle } from "lucide-react";
 import { useInstances, UazapiInstance } from "@/hooks/useInstances";
 import { useGHLUsers, GHLUser } from "@/hooks/useGHLUsers";
 import { Subaccount } from "@/hooks/useSubaccounts";
@@ -54,7 +55,15 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
   const [ghlUsers, setGhlUsers] = useState<GHLUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   
-  const { createInstance, importInstance, instances, fetchUazapiInstances } = useInstances(subaccount.id);
+  const { 
+    createInstance, 
+    importInstance, 
+    instances, 
+    fetchUazapiInstances,
+    instanceLimit,
+    totalInstanceCount,
+    canCreateInstance,
+  } = useInstances(subaccount.id);
   const { fetchLocationUsers } = useGHLUsers();
 
   // Load GHL users when dialog opens
@@ -193,8 +202,23 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
           </DialogTitle>
           <DialogDescription>
             Crie uma nova ou vincule uma existente.
+            {instanceLimit > 0 && (
+              <span className="block mt-1 text-xs">
+                Usando {totalInstanceCount} de {instanceLimit} instâncias
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Instance limit warning */}
+        {!canCreateInstance && instanceLimit > 0 && (
+          <Alert variant="destructive" className="mb-2">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Limite de {instanceLimit} instâncias atingido. Faça upgrade do seu plano para adicionar mais.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Tabs */}
         <div className="flex border border-border rounded-lg overflow-hidden">
@@ -297,13 +321,13 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
             <Button
               className="w-full bg-primary hover:bg-primary/90"
               onClick={handleCreate}
-              disabled={!name.trim() || createInstance.isPending}
+              disabled={!name.trim() || createInstance.isPending || !canCreateInstance}
             >
               {createInstance.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               <Plus className="h-4 w-4 mr-2" />
-              Criar Instância
+              {canCreateInstance ? "Criar Instância" : "Limite Atingido"}
             </Button>
           </div>
         )}
@@ -376,14 +400,16 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
             <Button
               className="w-full bg-primary/80 hover:bg-primary"
               onClick={handleImport}
-              disabled={selectedInstances.size === 0 || importInstance.isPending}
+              disabled={selectedInstances.size === 0 || importInstance.isPending || !canCreateInstance}
             >
               {importInstance.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               <Plus className="h-4 w-4 mr-2" />
-              Vincular Instâncias
-              {selectedInstances.size > 0 && ` (${selectedInstances.size})`}
+              {canCreateInstance 
+                ? `Vincular Instâncias${selectedInstances.size > 0 ? ` (${selectedInstances.size})` : ""}`
+                : "Limite Atingido"
+              }
             </Button>
           </div>
         )}
