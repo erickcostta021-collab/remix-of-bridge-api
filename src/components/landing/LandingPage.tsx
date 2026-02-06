@@ -125,7 +125,7 @@ const LandingPage = () => {
                   <div 
                     className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
                     style={{
-                      animation: 'signalRight 2s ease-in-out infinite',
+                      animation: 'signalRight 3s ease-in-out infinite',
                       boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
                     }}
                   />
@@ -136,8 +136,8 @@ const LandingPage = () => {
                   <div 
                     className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
                     style={{
-                      animation: 'signalLeft 2s ease-in-out infinite',
-                      animationDelay: '1s',
+                      animation: 'signalLeft 3s ease-in-out infinite',
+                      animationDelay: '1.5s',
                       boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
                     }}
                   />
