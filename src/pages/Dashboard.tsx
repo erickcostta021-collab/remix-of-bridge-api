@@ -11,6 +11,7 @@ import { useSubaccounts, Subaccount } from "@/hooks/useSubaccounts";
 import { useInstances } from "@/hooks/useInstances";
 import { useSettings } from "@/hooks/useSettings";
 import { useSubscription } from "@/hooks/useSubscription";
+import { PlansDialog } from "@/components/dashboard/PlansDialog";
 import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone, Link2, Eye, Lock, CreditCard } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
@@ -113,12 +114,12 @@ export default function Dashboard() {
                   <AddInstanceDialog subaccount={selectedSubaccount} />
                 )}
                 {!hasActiveSubscription && !isSharedAccount && (
-                  <Link to="/checkout">
+                  <PlansDialog>
                     <Button className="bg-brand-green hover:bg-brand-green/90">
                       <Lock className="h-4 w-4 mr-2" />
                       Assinar Plano
                     </Button>
-                  </Link>
+                  </PlansDialog>
                 )}
               </div>
             </div>
@@ -129,7 +130,11 @@ export default function Dashboard() {
             <Alert className="border-amber-500 bg-amber-500/10">
               <CreditCard className="h-4 w-4 text-amber-500" />
               <AlertDescription className="text-amber-500">
-                Você não possui um plano ativo. <Link to="/checkout" className="underline font-medium">Assine agora</Link> para criar instâncias e baixar o app.
+                Você não possui um plano ativo.{" "}
+                <PlansDialog>
+                  <button className="underline font-medium cursor-pointer">Assine agora</button>
+                </PlansDialog>{" "}
+                para criar instâncias e baixar o app.
               </AlertDescription>
             </Alert>
           )}
