@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { CANONICAL_APP_ORIGIN } from "@/lib/canonicalOrigin";
 import {
   Dialog,
   DialogContent,
@@ -120,15 +121,30 @@ const MainLogin = () => {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forgotEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(forgotEmail)) {
+    const trimmedEmail = forgotEmail.trim().toLowerCase();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       toast.error("Digite um email válido");
       return;
     }
 
     setForgotLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: `${window.location.origin}/login`,
+      // Check if email exists before sending recovery
+      const { data: checkData, error: checkError } = await supabase.functions.invoke(
+        "check-email-exists",
+        { body: { email: trimmedEmail } }
+      );
+
+      if (checkError) throw checkError;
+
+      if (!checkData?.exists) {
+        toast.error("Este email não está cadastrado no sistema");
+        setForgotLoading(false);
+        return;
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo: `${CANONICAL_APP_ORIGIN}/reset-password`,
       });
       if (error) throw error;
       setForgotSent(true);
