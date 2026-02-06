@@ -8,13 +8,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   LayoutDashboard,
   Settings,
-  Menu,
-  X,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
 } from "lucide-react";
-
-
-// Admin emails are now handled in Settings.tsx
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -48,7 +45,7 @@ export function Sidebar() {
       {/* Mobile overlay */}
       {!collapsed && (
         <div
-          className="fixed inset-0 top-16 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 top-16 bg-black/60 backdrop-blur-sm z-40 lg:hidden animate-fade-in"
           onClick={toggle}
         />
       )}
@@ -56,77 +53,110 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 top-16 lg:top-0 left-0 z-50 lg:z-auto flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300",
-          collapsed ? "w-16" : "w-64",
+          "fixed lg:static inset-y-0 top-16 lg:top-0 left-0 z-50 lg:z-auto flex flex-col border-r border-sidebar-border",
+          "bg-gradient-to-b from-sidebar to-sidebar/95",
+          "transition-all duration-300 ease-in-out",
+          collapsed ? "w-[68px]" : "w-64",
           "lg:translate-x-0",
           collapsed ? "-translate-x-full lg:translate-x-0" : "translate-x-0"
         )}
       >
-        {/* Collapse toggle (desktop only) */}
-        <div className="hidden lg:flex items-center justify-end h-12 px-2 border-b border-sidebar-border">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggle}
-            className="text-sidebar-foreground hover:bg-sidebar-accent"
-          >
-            {collapsed ? <Menu className="h-5 w-5" /> : <X className="h-5 w-5" />}
-          </Button>
-        </div>
-
         {/* Navigation */}
-        <nav className="flex-1 p-2 space-y-1">
+        <nav className="flex-1 p-3 space-y-1.5 mt-2">
           {navItems.map((item) => {
             const isActive = location.pathname === item.to;
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
-                  isActive
-                    ? "bg-sidebar-accent text-primary"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent"
-                )}
-              >
-                <item.icon className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
-              </NavLink>
+              <TooltipProvider key={item.to} delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <NavLink
+                      to={item.to}
+                      className={cn(
+                        "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 relative overflow-hidden",
+                        isActive
+                          ? "bg-primary/15 text-primary shadow-sm shadow-primary/10"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                      )}
+                    >
+                      {/* Active indicator bar */}
+                      {isActive && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
+                      )}
+                      <item.icon className={cn(
+                        "h-5 w-5 flex-shrink-0 transition-transform duration-200",
+                        isActive ? "text-primary" : "group-hover:scale-110"
+                      )} />
+                      <span className={cn(
+                        "transition-all duration-300 whitespace-nowrap",
+                        collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
+                      )}>
+                        {item.label}
+                      </span>
+                    </NavLink>
+                  </TooltipTrigger>
+                  {collapsed && (
+                    <TooltipContent side="right" className="font-medium">
+                      {item.label}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
             );
           })}
+
           {/* Install App Button */}
           {oauthUrl && (
-            <TooltipProvider>
+            <TooltipProvider delayDuration={0}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     onClick={hasActiveSubscription ? handleInstallApp : undefined}
                     disabled={!hasActiveSubscription}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors w-full text-left",
+                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 w-full text-left relative overflow-hidden",
                       hasActiveSubscription
-                        ? "text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
-                        : "text-sidebar-foreground/40 cursor-not-allowed"
+                        ? "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
+                        : "text-sidebar-foreground/30 cursor-not-allowed"
                     )}
                   >
-                    <ExternalLink className="h-5 w-5 flex-shrink-0" />
-                    {!collapsed && <span>Instalar App</span>}
+                    <ExternalLink className={cn(
+                      "h-5 w-5 flex-shrink-0 transition-transform duration-200",
+                      hasActiveSubscription && "group-hover:scale-110"
+                    )} />
+                    <span className={cn(
+                      "transition-all duration-300 whitespace-nowrap",
+                      collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
+                    )}>
+                      Instalar App
+                    </span>
                   </button>
                 </TooltipTrigger>
-                {!hasActiveSubscription && (
-                  <TooltipContent side="right">
-                    <p>Assine um plano para instalar o app</p>
-                  </TooltipContent>
-                )}
+                <TooltipContent side="right" className="font-medium">
+                  {hasActiveSubscription
+                    ? "Instalar App"
+                    : "Assine um plano para instalar o app"}
+                </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}
         </nav>
 
-        {/* Spacer at bottom */}
-        <div className="p-2 border-t border-sidebar-border" />
+        {/* Collapse toggle at bottom (desktop only) */}
+        <div className="hidden lg:flex items-center justify-center p-3 border-t border-sidebar-border/50">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggle}
+            className={cn(
+              "h-8 w-8 rounded-lg text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200",
+            )}
+          >
+            <div className="transition-transform duration-300">
+              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </div>
+          </Button>
+        </div>
       </aside>
-
     </>
   );
 }
