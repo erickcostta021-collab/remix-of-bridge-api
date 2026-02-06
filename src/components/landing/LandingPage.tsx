@@ -285,10 +285,16 @@ const LandingPage = () => {
                 </li>
               </ul>
               <Link to={`/checkout?plan=flexible&quantity=${instanceCount}`} className="w-full">
-                <Button className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white transition-all duration-300">
-                  <Gift className="mr-2 h-4 w-4" />
-                  Testar Grátis
-                </Button>
+                {instanceCount === 1 ? (
+                  <Button className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white transition-all duration-300">
+                    <Gift className="mr-2 h-4 w-4" />
+                    Testar Grátis
+                  </Button>
+                ) : (
+                  <Button className="w-full bg-brand-green hover:bg-brand-green/90 text-white transition-all duration-300">
+                    Começar Agora
+                  </Button>
+                )}
               </Link>
             </div>
 
