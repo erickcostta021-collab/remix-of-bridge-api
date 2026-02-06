@@ -185,7 +185,7 @@ const LandingPage = () => {
             {/* 50 Instances Plan */}
             <div className="bg-card rounded-2xl p-8 border border-border hover:border-brand-blue/50 transition-colors flex flex-col">
               <div className="mb-6">
-                <h3 className="text-xl font-semibold text-foreground mb-2">Profissional</h3>
+                <h3 className="text-xl font-semibold text-foreground mb-2">50 Instâncias</h3>
                 <p className="text-muted-foreground text-sm">Para negócios em crescimento</p>
               </div>
               <div className="mb-6">
@@ -227,7 +227,7 @@ const LandingPage = () => {
                 Mais Popular
               </div>
               <div className="mb-6">
-                <h3 className="text-xl font-semibold text-foreground mb-2">Business</h3>
+                <h3 className="text-xl font-semibold text-foreground mb-2">100 Instâncias</h3>
                 <p className="text-muted-foreground text-sm">Para agências e equipes</p>
               </div>
               <div className="mb-6">
@@ -266,7 +266,7 @@ const LandingPage = () => {
             {/* 300 Instances Plan */}
             <div className="bg-card rounded-2xl p-8 border border-border hover:border-brand-blue/50 transition-colors flex flex-col">
               <div className="mb-6">
-                <h3 className="text-xl font-semibold text-foreground mb-2">Enterprise</h3>
+                <h3 className="text-xl font-semibold text-foreground mb-2">300 Instâncias</h3>
                 <p className="text-muted-foreground text-sm">Para grandes operações</p>
               </div>
               <div className="mb-6">
@@ -288,16 +288,16 @@ const LandingPage = () => {
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  API dedicada
+                  Switcher automático
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  Suporte 24/7 dedicado
+                  Suporte prioritário
                 </li>
               </ul>
               <Link to="/login" className="w-full">
                 <Button className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white">
-                  Falar com Vendas
+                  Começar Agora
                 </Button>
               </Link>
             </div>
