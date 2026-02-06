@@ -46,6 +46,12 @@
     --success: 142 71% 45%;
     --warning: 38 92% 50%;
     --info: 199 89% 48%;
+    
+    /* Brand colors */
+    --brand-blue: 211 100% 50%;
+    --brand-green: 134 61% 41%;
+    --brand-blue-light: 211 100% 96%;
+    --brand-green-light: 134 61% 96%;
   }
 
   .dark {

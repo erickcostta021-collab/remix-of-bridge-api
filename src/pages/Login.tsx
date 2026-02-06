@@ -1,9 +1,9 @@
 import { useAuth } from "@/hooks/useAuth";
+import { AuthForm } from "@/components/auth/AuthForm";
 import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import LandingPage from "@/components/landing/LandingPage";
 
-const Index = () => {
+const Login = () => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -18,7 +18,7 @@ const Index = () => {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <LandingPage />;
+  return <AuthForm />;
 };
 
-export default Index;
+export default Login;

@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePausedCheck } from "@/hooks/usePausedCheck";
 import { Loader2 } from "lucide-react";
 import Index from "./pages/Index";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import SubaccountSettings from "./pages/SubaccountSettings";
@@ -44,6 +45,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/login" element={<Login />} />
           <Route
             path="/dashboard"
             element={

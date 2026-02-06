@@ -60,6 +60,12 @@ export default {
         success: "hsl(var(--success))",
         warning: "hsl(var(--warning))",
         info: "hsl(var(--info))",
+        brand: {
+          blue: "hsl(var(--brand-blue))",
+          green: "hsl(var(--brand-green))",
+          "blue-light": "hsl(var(--brand-blue-light))",
+          "green-light": "hsl(var(--brand-green-light))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
