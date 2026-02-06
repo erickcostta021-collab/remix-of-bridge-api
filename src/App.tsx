@@ -8,6 +8,7 @@ import { usePausedCheck } from "@/hooks/usePausedCheck";
 import { Loader2 } from "lucide-react";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
 import Checkout from "./pages/Checkout";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
@@ -47,6 +48,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route
             path="/dashboard"
