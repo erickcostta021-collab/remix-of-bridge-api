@@ -237,7 +237,7 @@ const LandingPage = () => {
                   Switcher automático
                 </li>
               </ul>
-              <Link to="/login" className="w-full">
+              <Link to={`/checkout?plan=flexible&quantity=${instanceCount}`} className="w-full">
                 <Button className="w-full bg-brand-green hover:bg-brand-green/90 text-white">
                   Começar Agora
                 </Button>
@@ -276,7 +276,7 @@ const LandingPage = () => {
                   Suporte prioritário
                 </li>
               </ul>
-              <Link to="/login" className="w-full">
+              <Link to="/checkout?plan=plan_50" className="w-full">
                 <Button className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white">
                   Começar Agora
                 </Button>
@@ -318,7 +318,7 @@ const LandingPage = () => {
                   Suporte prioritário
                 </li>
               </ul>
-              <Link to="/login" className="w-full">
+              <Link to="/checkout?plan=plan_100" className="w-full">
                 <Button className="w-full bg-brand-green hover:bg-brand-green/90 text-white">
                   Começar Agora
                 </Button>
@@ -357,7 +357,7 @@ const LandingPage = () => {
                   Suporte prioritário
                 </li>
               </ul>
-              <Link to="/login" className="w-full">
+              <Link to="/checkout?plan=plan_300" className="w-full">
                 <Button className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white">
                   Começar Agora
                 </Button>
