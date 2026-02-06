@@ -12,7 +12,8 @@ import {
   Shield,
   RefreshCw,
   Gift,
-  Link2
+  Link2,
+  ImageUp
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import whatsappLogo from "@/assets/whatsapp-logo.svg";
@@ -312,15 +313,29 @@ const LandingPage = () => {
                 <Users className="h-7 w-7 text-brand-green" />
               </div>
               <h3 className="text-xl font-semibold text-foreground mb-3">
-                Atualização de Perfil e Gestão de Grupos
+                Gestão de Grupos
               </h3>
               <p className="text-muted-foreground leading-relaxed">
-                Mantenha o perfil da sua instância sempre atualizado e gerencie seus grupos de WhatsApp 
-                diretamente do GoHighLevel, facilitando campanhas e comunicações em massa.
+                Gerencie seus grupos de WhatsApp diretamente do GoHighLevel, facilitando 
+                campanhas e comunicações em massa com comandos simples.
               </p>
             </div>
 
             {/* Feature 5 */}
+            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
+                <ImageUp className="h-7 w-7 text-brand-green" />
+              </div>
+              <h3 className="text-xl font-semibold text-foreground mb-3">
+                Fotos Atualizadas
+              </h3>
+              <p className="text-muted-foreground leading-relaxed">
+                Sincronização automática das fotos de perfil dos contatos, mantendo sua base 
+                sempre atualizada e profissional.
+              </p>
+            </div>
+
+            {/* Feature 6 */}
             <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
               <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
                 <Link2 className="h-7 w-7 text-brand-green" />
