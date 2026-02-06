@@ -169,10 +169,10 @@ const LandingPage = () => {
               100% { left: 100%; opacity: 0; }
             }
             @keyframes signalLeftAlt {
-              0% { right: 100%; opacity: 0; }
-              10% { right: calc(100% - 32px); opacity: 1; }
-              95% { right: 0; opacity: 1; }
-              100% { right: -32px; opacity: 0; }
+              0% { left: calc(100%); opacity: 0; }
+              5% { left: calc(100% - 32px); opacity: 1; }
+              90% { left: 0; opacity: 1; }
+              100% { left: -32px; opacity: 0; }
             }
           `}</style>
         </div>
