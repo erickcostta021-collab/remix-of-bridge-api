@@ -11,7 +11,8 @@ import {
   Zap,
   Shield,
   RefreshCw,
-  Gift
+  Gift,
+  Link2
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import whatsappLogo from "@/assets/whatsapp-logo.svg";
@@ -316,6 +317,20 @@ const LandingPage = () => {
               <p className="text-muted-foreground leading-relaxed">
                 Mantenha o perfil da sua instância sempre atualizado e gerencie seus grupos de WhatsApp 
                 diretamente do GoHighLevel, facilitando campanhas e comunicações em massa.
+              </p>
+            </div>
+
+            {/* Feature 5 */}
+            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
+                <Link2 className="h-7 w-7 text-brand-green" />
+              </div>
+              <h3 className="text-xl font-semibold text-foreground mb-3">
+                Link White Label para Conexão
+              </h3>
+              <p className="text-muted-foreground leading-relaxed">
+                Gere um link personalizado para que seus clientes conectem o WhatsApp diretamente 
+                por dentro do GoHighLevel, sem sair do CRM. Experiência integrada e profissional.
               </p>
             </div>
           </div>
