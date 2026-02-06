@@ -264,7 +264,7 @@ const LandingPage = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Flexible Plan */}
             <div className="group bg-card rounded-2xl p-8 border border-border hover:border-muted-foreground/30 transition-all duration-300 flex flex-col">
               <div className="mb-6">
@@ -409,8 +409,8 @@ const LandingPage = () => {
               </Link>
             </div>
 
-            {/* 300 Instances Plan */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-muted-foreground/30 transition-all duration-300 flex flex-col">
+            {/* 300 Instances Plan - Hidden for now */}
+            {/* <div className="group bg-card rounded-2xl p-8 border border-border hover:border-muted-foreground/30 transition-all duration-300 flex flex-col">
               <div className="mb-6">
                 <h3 className="text-xl font-semibold text-foreground mb-2">300 Instâncias</h3>
                 <p className="text-muted-foreground text-sm">Para grandes operações</p>
@@ -446,7 +446,7 @@ const LandingPage = () => {
                   Começar Agora
                 </Button>
               </Link>
-            </div>
+            </div> */}
           </div>
         </div>
       </section>
