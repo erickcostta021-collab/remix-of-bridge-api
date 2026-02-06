@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -13,7 +14,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Menu, KeyRound, LogOut, CreditCard, User } from "lucide-react";
+import { Menu, KeyRound, LogOut, CreditCard, User, Wallet } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import logo from "@/assets/logo.png";
 
 export function DashboardHeader() {
@@ -34,6 +37,26 @@ export function DashboardHeader() {
 
   const handleChangePassword = () => {
     navigate("/settings", { state: { openPasswordChange: true } });
+  };
+
+  const [loadingPortal, setLoadingPortal] = useState(false);
+
+  const handleManagePayment = async () => {
+    setLoadingPortal(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-portal");
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, "_blank");
+      } else {
+        throw new Error("URL do portal não retornada");
+      }
+    } catch (err: any) {
+      console.error("Portal error:", err);
+      toast.error(err?.message || "Erro ao abrir gerenciamento de pagamento");
+    } finally {
+      setLoadingPortal(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -107,6 +130,14 @@ export function DashboardHeader() {
             <DropdownMenuItem onClick={handleChangePassword} className="cursor-pointer">
               <KeyRound className="h-4 w-4 mr-2" />
               Alterar Senha
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleManagePayment}
+              disabled={loadingPortal}
+              className="cursor-pointer"
+            >
+              <Wallet className="h-4 w-4 mr-2" />
+              {loadingPortal ? "Abrindo..." : "Gerenciar Pagamento"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
