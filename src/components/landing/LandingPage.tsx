@@ -84,7 +84,7 @@ const LandingPage = () => {
                 <img 
                   src={bridgeImage} 
                   alt="Bridge connecting WhatsApp and GoHighLevel" 
-                  className="h-64 md:h-80 lg:h-96 xl:h-[28rem] w-auto object-contain"
+                  className="h-[32rem] md:h-[40rem] lg:h-[48rem] xl:h-[56rem] w-auto object-contain"
                 />
               </div>
               
