@@ -78,39 +78,42 @@ const LandingPage = () => {
           {/* Visual Element - Bridge with logos */}
           <div className="mt-16 relative">
             <div className="absolute inset-0 bg-gradient-to-r from-brand-blue/20 via-transparent to-brand-green/20 rounded-3xl blur-3xl" />
-            <div className="relative flex items-center justify-center py-8">
-              {/* WhatsApp Logo - Left Side */}
-              <div className="flex flex-col items-center z-10 -mr-8 md:-mr-12">
-                <div className="w-16 h-16 md:w-24 md:h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center border border-border">
-                  <img src={whatsappLogo} alt="WhatsApp" className="h-10 w-10 md:h-16 md:w-16" />
-                </div>
-                <span className="mt-3 text-sm font-medium text-muted-foreground">WhatsApp</span>
-              </div>
-              
-              {/* Bridge Image */}
-              <div className="relative">
+            <div className="relative flex flex-col items-center">
+              {/* Bridge Image - On Top */}
+              <div className="relative z-10">
                 <img 
                   src={bridgeImage} 
                   alt="Bridge connecting WhatsApp and GoHighLevel" 
-                  className="h-32 md:h-48 lg:h-56 w-auto object-contain"
+                  className="h-48 md:h-64 lg:h-80 w-auto object-contain"
                 />
               </div>
               
-              {/* GoHighLevel Logo - Right Side */}
-              <div className="flex flex-col items-center z-10 -ml-8 md:-ml-12">
-                <div className="w-16 h-16 md:w-24 md:h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center border border-border overflow-hidden">
-                  <svg viewBox="0 0 100 100" className="h-10 w-10 md:h-16 md:w-16">
-                    <defs>
-                      <linearGradient id="ghl-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#F97316" />
-                        <stop offset="100%" stopColor="#EA580C" />
-                      </linearGradient>
-                    </defs>
-                    <rect width="100" height="100" rx="20" fill="url(#ghl-gradient)" />
-                    <text x="50" y="68" textAnchor="middle" fill="white" fontSize="48" fontWeight="bold" fontFamily="Arial, sans-serif">G</text>
-                  </svg>
+              {/* Logos - Below the bridge */}
+              <div className="flex items-center justify-between w-full max-w-md md:max-w-lg -mt-6 md:-mt-8">
+                {/* WhatsApp Logo - Left Side */}
+                <div className="flex flex-col items-center z-20">
+                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white shadow-lg flex items-center justify-center border border-border">
+                    <img src={whatsappLogo} alt="WhatsApp" className="h-10 w-10 md:h-12 md:w-12" />
+                  </div>
+                  <span className="mt-2 text-sm font-medium text-muted-foreground">WhatsApp</span>
                 </div>
-                <span className="mt-3 text-sm font-medium text-muted-foreground">GoHighLevel</span>
+                
+                {/* GoHighLevel Logo - Right Side */}
+                <div className="flex flex-col items-center z-20">
+                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white shadow-lg flex items-center justify-center border border-border overflow-hidden">
+                    <svg viewBox="0 0 100 100" className="h-10 w-10 md:h-12 md:w-12">
+                      <defs>
+                        <linearGradient id="ghl-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#F97316" />
+                          <stop offset="100%" stopColor="#EA580C" />
+                        </linearGradient>
+                      </defs>
+                      <rect width="100" height="100" rx="20" fill="url(#ghl-gradient)" />
+                      <text x="50" y="68" textAnchor="middle" fill="white" fontSize="48" fontWeight="bold" fontFamily="Arial, sans-serif">G</text>
+                    </svg>
+                  </div>
+                  <span className="mt-2 text-sm font-medium text-muted-foreground">GoHighLevel</span>
+                </div>
               </div>
             </div>
           </div>
