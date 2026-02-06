@@ -13,7 +13,6 @@ import {
   ExternalLink,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
-import ghlIcon from "@/assets/ghl-icon.png";
 
 // Admin emails are now handled in Settings.tsx
 
@@ -116,7 +115,7 @@ export function Sidebar() {
                         : "text-sidebar-foreground/40 cursor-not-allowed"
                     )}
                   >
-                    <img src={ghlIcon} alt="GoHighLevel" className="h-5 w-5 flex-shrink-0 rounded" />
+                    <ExternalLink className="h-5 w-5 flex-shrink-0" />
                     {!collapsed && <span>Instalar App</span>}
                   </button>
                 </TooltipTrigger>

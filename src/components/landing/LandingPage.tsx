@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import whatsappLogo from "@/assets/whatsapp-logo.svg";
+import ghlIcon from "@/assets/ghl-icon.png";
 
 const LandingPage = () => {
   const [instanceCount, setInstanceCount] = useState(1);
@@ -146,16 +147,7 @@ const LandingPage = () => {
               {/* GoHighLevel Logo */}
               <div className="flex flex-col items-center z-20 group">
                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border group-hover:border-muted-foreground/50 transition-all duration-500 group-hover:scale-105 overflow-hidden">
-                  <svg viewBox="0 0 100 100" className="h-10 w-10 md:h-12 md:w-12">
-                    <defs>
-                      <linearGradient id="ghl-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#F97316" />
-                        <stop offset="100%" stopColor="#EA580C" />
-                      </linearGradient>
-                    </defs>
-                    <rect width="100" height="100" rx="20" fill="url(#ghl-gradient)" />
-                    <text x="50" y="68" textAnchor="middle" fill="white" fontSize="48" fontWeight="bold" fontFamily="Arial, sans-serif">G</text>
-                  </svg>
+                  <img src={ghlIcon} alt="GoHighLevel" className="h-10 w-10 md:h-12 md:w-12 rounded-lg" />
                 </div>
                 <span className="mt-2 text-sm font-medium text-muted-foreground">GoHighLevel</span>
               </div>
