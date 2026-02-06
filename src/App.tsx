@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePausedCheck } from "@/hooks/usePausedCheck";
 import { Loader2 } from "lucide-react";
 import Index from "./pages/Index";
+import MainLogin from "./pages/MainLogin";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Checkout from "./pages/Checkout";
@@ -33,7 +34,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user || isPaused) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;
@@ -47,7 +48,8 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<MainLogin />} />
+          <Route path="/convidadospormim" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route
