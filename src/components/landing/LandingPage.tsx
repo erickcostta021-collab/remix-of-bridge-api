@@ -49,18 +49,18 @@ const LandingPage = () => {
           
           {/* Center Navigation */}
           <nav className="hidden md:flex items-center gap-8">
-            <a 
-              href="#" 
+            <button 
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="text-muted-foreground hover:text-foreground transition-colors duration-300 font-medium"
             >
               Início
-            </a>
-            <a 
-              href="#precos" 
+            </button>
+            <button 
+              onClick={() => document.getElementById('precos')?.scrollIntoView({ behavior: 'smooth' })}
               className="text-muted-foreground hover:text-foreground transition-colors duration-300 font-medium"
             >
               Preços
-            </a>
+            </button>
           </nav>
           
           <div className="flex items-center gap-3">
