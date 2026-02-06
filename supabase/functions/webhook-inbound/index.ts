@@ -723,11 +723,13 @@ serve(async (req) => {
       console.log("Reaction extracted:", { targetMsgId, emoji, fromMe });
       
       if (targetMsgId && emoji) {
-        // Find mapping by UAZAPI ID
+        // Find mapping by UAZAPI ID - use order + limit to handle duplicates
         const { data: mapping } = await supabase
           .from("message_map")
           .select("*")
           .eq("uazapi_message_id", targetMsgId)
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle();
         
         if (mapping) {
