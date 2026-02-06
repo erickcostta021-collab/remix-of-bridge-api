@@ -1,4 +1,4 @@
-import { useState } from "react";
+
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -31,8 +31,10 @@ const navItems = [
   { to: "/settings", icon: Settings, label: "Configurações" },
 ];
 
+import { useSidebarState } from "@/hooks/useSidebarState";
+
 export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, toggle } = useSidebarState();
   const { signOut } = useAuth();
   const { getOAuthUrl } = useSettings();
   const { profile } = useProfile();
@@ -77,7 +79,7 @@ export function Sidebar() {
       {!collapsed && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setCollapsed(true)}
+          onClick={toggle}
         />
       )}
 
@@ -101,7 +103,7 @@ export function Sidebar() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={toggle}
             className="text-sidebar-foreground hover:bg-sidebar-accent"
           >
             {collapsed ? <Menu className="h-5 w-5" /> : <X className="h-5 w-5" />}
@@ -197,7 +199,7 @@ export function Sidebar() {
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => setCollapsed(false)}
+        onClick={toggle}
         className="fixed top-4 left-4 z-30 lg:hidden text-foreground"
       >
         <Menu className="h-6 w-6" />
