@@ -182,24 +182,24 @@ const LandingPage = () => {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Starter Plan */}
+            {/* 50 Instances Plan */}
             <div className="bg-card rounded-2xl p-8 border border-border hover:border-brand-blue/50 transition-colors flex flex-col">
               <div className="mb-6">
-                <h3 className="text-xl font-semibold text-foreground mb-2">Starter</h3>
-                <p className="text-muted-foreground text-sm">Para quem está começando</p>
+                <h3 className="text-xl font-semibold text-foreground mb-2">Profissional</h3>
+                <p className="text-muted-foreground text-sm">Para negócios em crescimento</p>
               </div>
               <div className="mb-6">
-                <span className="text-4xl font-bold text-foreground">R$97</span>
+                <span className="text-4xl font-bold text-foreground">R$798</span>
                 <span className="text-muted-foreground">/mês</span>
               </div>
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  1 Instância WhatsApp
+                  50 Instâncias WhatsApp
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  1 Subconta GHL
+                  Subcontas ilimitadas
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
@@ -207,7 +207,11 @@ const LandingPage = () => {
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  Suporte por email
+                  Switcher automático
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Suporte prioritário
                 </li>
               </ul>
               <Link to="/login" className="w-full">
@@ -217,27 +221,27 @@ const LandingPage = () => {
               </Link>
             </div>
 
-            {/* Pro Plan */}
+            {/* 100 Instances Plan */}
             <div className="bg-card rounded-2xl p-8 border-2 border-brand-green relative flex flex-col shadow-lg shadow-brand-green/10">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full">
                 Mais Popular
               </div>
               <div className="mb-6">
-                <h3 className="text-xl font-semibold text-foreground mb-2">Pro</h3>
-                <p className="text-muted-foreground text-sm">Para negócios em crescimento</p>
+                <h3 className="text-xl font-semibold text-foreground mb-2">Business</h3>
+                <p className="text-muted-foreground text-sm">Para agências e equipes</p>
               </div>
               <div className="mb-6">
-                <span className="text-4xl font-bold text-foreground">R$197</span>
+                <span className="text-4xl font-bold text-foreground">R$1.298</span>
                 <span className="text-muted-foreground">/mês</span>
               </div>
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  5 Instâncias WhatsApp
+                  100 Instâncias WhatsApp
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  5 Subcontas GHL
+                  Subcontas ilimitadas
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
@@ -259,20 +263,20 @@ const LandingPage = () => {
               </Link>
             </div>
 
-            {/* Enterprise Plan */}
+            {/* 300 Instances Plan */}
             <div className="bg-card rounded-2xl p-8 border border-border hover:border-brand-blue/50 transition-colors flex flex-col">
               <div className="mb-6">
                 <h3 className="text-xl font-semibold text-foreground mb-2">Enterprise</h3>
-                <p className="text-muted-foreground text-sm">Para agências e grandes equipes</p>
+                <p className="text-muted-foreground text-sm">Para grandes operações</p>
               </div>
               <div className="mb-6">
-                <span className="text-4xl font-bold text-foreground">R$497</span>
+                <span className="text-4xl font-bold text-foreground">R$2.998</span>
                 <span className="text-muted-foreground">/mês</span>
               </div>
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  Instâncias ilimitadas
+                  300 Instâncias WhatsApp
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
