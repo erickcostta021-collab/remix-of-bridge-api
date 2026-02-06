@@ -801,7 +801,7 @@ serve(async (req) => {
 
       let query = supabase
         .from("message_map")
-        .select("ghl_message_id, message_text, is_deleted, is_edited, reactions")
+        .select("ghl_message_id, message_text, is_deleted, is_edited, reactions, from_me")
         .or("is_deleted.eq.true,is_edited.eq.true,reactions.neq.null");
 
       if (location_id) {
@@ -832,6 +832,7 @@ serve(async (req) => {
         is_deleted: row.is_deleted || false,
         is_edited: row.is_edited || false,
         reactions: row.reactions || [],
+        from_me: row.from_me || false,
       }));
 
       return new Response(
