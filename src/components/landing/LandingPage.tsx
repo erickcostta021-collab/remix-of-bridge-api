@@ -119,26 +119,26 @@ const LandingPage = () => {
               </div>
 
               {/* Connection Lines with animated signals */}
-              <div className="relative w-24 md:w-40 h-16 flex flex-col justify-center gap-3">
+              <div className="relative w-24 md:w-40 h-12 flex flex-col justify-center gap-4">
                 {/* Line 1 - Signal going right (WhatsApp to GHL) */}
-                <div className="relative h-1 w-full">
-                  <div className="absolute inset-0 bg-gradient-to-r from-brand-green/30 to-orange-500/30 rounded-full" />
+                <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
                   <div 
-                    className="absolute h-3 w-3 rounded-full bg-brand-green shadow-lg shadow-brand-green/50 top-1/2 -translate-y-1/2"
+                    className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
                     style={{
                       animation: 'signalRight 2s ease-in-out infinite',
+                      boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
                     }}
                   />
                 </div>
                 
                 {/* Line 2 - Signal going left (GHL to WhatsApp) */}
-                <div className="relative h-1 w-full">
-                  <div className="absolute inset-0 bg-gradient-to-l from-brand-green/30 to-orange-500/30 rounded-full" />
+                <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
                   <div 
-                    className="absolute h-3 w-3 rounded-full bg-orange-500 shadow-lg shadow-orange-500/50 top-1/2 -translate-y-1/2"
+                    className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
                     style={{
                       animation: 'signalLeft 2s ease-in-out infinite',
                       animationDelay: '1s',
+                      boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
                     }}
                   />
                 </div>
