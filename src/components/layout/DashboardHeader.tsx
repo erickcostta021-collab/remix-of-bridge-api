@@ -41,8 +41,8 @@ export function DashboardHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 lg:px-8 bg-card/80 backdrop-blur-md border-b border-border">
-      {/* Left: mobile menu + branding */}
+    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 lg:px-8 bg-background/80 backdrop-blur-xl border-b border-border">
+      {/* Left: mobile menu + branding (always visible) */}
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
@@ -52,9 +52,9 @@ export function DashboardHeader() {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="flex items-center gap-2 lg:hidden">
-          <img src={logo} alt="Bridge API" className="h-8 w-8 rounded-full" />
-          <span className="font-semibold text-foreground text-sm">Bridge API</span>
+        <div className="flex items-center gap-2">
+          <img src={logo} alt="Bridge API" className="h-10 w-10 rounded-full" />
+          <span className="text-xl font-semibold text-foreground">Bridge API</span>
         </div>
       </div>
 
