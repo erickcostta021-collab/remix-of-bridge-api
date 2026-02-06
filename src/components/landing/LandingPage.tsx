@@ -28,11 +28,11 @@ const LandingPage = () => {
         {/* Single subtle orb */}
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-muted/30 rounded-full blur-[200px]" />
         
-        {/* Grid Pattern */}
+        {/* Interactive Grid Pattern */}
         <div 
-          className="absolute inset-0 opacity-[0.02]"
+          className="absolute inset-0 opacity-30 hover:opacity-100 transition-opacity duration-500 pointer-events-auto cursor-default"
           style={{
-            backgroundImage: `linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)`,
+            backgroundImage: `linear-gradient(hsl(var(--brand-blue) / 0.4) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--brand-blue) / 0.4) 1px, transparent 1px)`,
             backgroundSize: '60px 60px'
           }}
         />
