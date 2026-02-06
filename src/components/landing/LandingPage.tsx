@@ -169,7 +169,137 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Secondary CTA Section */}
+      {/* Pricing Section */}
+      <section className="py-20 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              Planos e Preços
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Escolha o plano ideal para o tamanho do seu negócio.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Starter Plan */}
+            <div className="bg-card rounded-2xl p-8 border border-border hover:border-brand-blue/50 transition-colors flex flex-col">
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold text-foreground mb-2">Starter</h3>
+                <p className="text-muted-foreground text-sm">Para quem está começando</p>
+              </div>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-foreground">R$97</span>
+                <span className="text-muted-foreground">/mês</span>
+              </div>
+              <ul className="space-y-3 mb-8 flex-grow">
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  1 Instância WhatsApp
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  1 Subconta GHL
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Mensagens ilimitadas
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Suporte por email
+                </li>
+              </ul>
+              <Link to="/login" className="w-full">
+                <Button className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white">
+                  Começar Agora
+                </Button>
+              </Link>
+            </div>
+
+            {/* Pro Plan */}
+            <div className="bg-card rounded-2xl p-8 border-2 border-brand-green relative flex flex-col shadow-lg shadow-brand-green/10">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full">
+                Mais Popular
+              </div>
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold text-foreground mb-2">Pro</h3>
+                <p className="text-muted-foreground text-sm">Para negócios em crescimento</p>
+              </div>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-foreground">R$197</span>
+                <span className="text-muted-foreground">/mês</span>
+              </div>
+              <ul className="space-y-3 mb-8 flex-grow">
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  5 Instâncias WhatsApp
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  5 Subcontas GHL
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Mensagens ilimitadas
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Switcher automático
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Suporte prioritário
+                </li>
+              </ul>
+              <Link to="/login" className="w-full">
+                <Button className="w-full bg-brand-green hover:bg-brand-green/90 text-white">
+                  Começar Agora
+                </Button>
+              </Link>
+            </div>
+
+            {/* Enterprise Plan */}
+            <div className="bg-card rounded-2xl p-8 border border-border hover:border-brand-blue/50 transition-colors flex flex-col">
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold text-foreground mb-2">Enterprise</h3>
+                <p className="text-muted-foreground text-sm">Para agências e grandes equipes</p>
+              </div>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-foreground">R$497</span>
+                <span className="text-muted-foreground">/mês</span>
+              </div>
+              <ul className="space-y-3 mb-8 flex-grow">
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Instâncias ilimitadas
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Subcontas ilimitadas
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Mensagens ilimitadas
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  API dedicada
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Suporte 24/7 dedicado
+                </li>
+              </ul>
+              <Link to="/login" className="w-full">
+                <Button className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white">
+                  Falar com Vendas
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
       <section className="py-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-gradient-to-br from-brand-blue to-brand-green rounded-3xl p-12 md:p-16">
