@@ -315,10 +315,11 @@ try {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
   return new Response(BRIDGE_SWITCHER_SCRIPT, {
+    status: 200,
     headers: {
       ...corsHeaders,
       "Content-Type": "application/javascript; charset=utf-8",
