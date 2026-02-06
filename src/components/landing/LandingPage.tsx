@@ -36,7 +36,7 @@ const LandingPage = () => {
                 Entrar
               </Button>
             </Link>
-            <Link to="/login">
+            <Link to="/register">
               <Button className="bg-brand-green hover:bg-brand-green/90 text-white">
                 Inicie Agora
               </Button>
@@ -64,7 +64,7 @@ const LandingPage = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/login">
+            <Link to="/register">
               <Button size="lg" className="bg-brand-green hover:bg-brand-green/90 text-white px-8 py-6 text-lg">
                 Inicie Agora
                 <ArrowRight className="ml-2 h-5 w-5" />
@@ -392,7 +392,7 @@ const LandingPage = () => {
             <p className="text-lg text-white/90 max-w-2xl mx-auto mb-8">
               Otimize seu tempo, melhore a experiência do cliente e escale seu atendimento com a Bridge API.
             </p>
-            <Link to="/login">
+            <Link to="/register">
               <Button size="lg" className="bg-white text-brand-blue hover:bg-white/90 px-8 py-6 text-lg font-semibold">
                 Quero Conectar Minha Conta
                 <ArrowRight className="ml-2 h-5 w-5" />

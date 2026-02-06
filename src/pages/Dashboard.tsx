@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { SubaccountCard } from "@/components/dashboard/SubaccountCard";
 import { InstanceCard } from "@/components/dashboard/InstanceCard";
@@ -9,7 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useSubaccounts, Subaccount } from "@/hooks/useSubaccounts";
 import { useInstances } from "@/hooks/useInstances";
 import { useSettings } from "@/hooks/useSettings";
-import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone, Link2, Eye } from "lucide-react";
+import { useSubscription } from "@/hooks/useSubscription";
+import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone, Link2, Eye, Lock, CreditCard } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -21,6 +23,7 @@ export default function Dashboard() {
   const { subaccounts, isLoading, syncSubaccounts, isSharedAccount } = useSubaccounts();
   const { instances, syncAllInstancesStatus } = useInstances(selectedSubaccount?.id);
   const { settings } = useSettings();
+  const { hasActiveSubscription } = useSubscription();
 
   const filteredSubaccounts = subaccounts.filter((s) =>
     s.account_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -106,12 +109,30 @@ export default function Dashboard() {
                   <Link2 className="h-4 w-4 mr-2" />
                   Copiar Link GHL
                 </Button>
-                {hasUAZAPIConfig && !isSharedAccount && (
+                {hasUAZAPIConfig && !isSharedAccount && hasActiveSubscription && (
                   <AddInstanceDialog subaccount={selectedSubaccount} />
+                )}
+                {!hasActiveSubscription && !isSharedAccount && (
+                  <Link to="/checkout">
+                    <Button className="bg-brand-green hover:bg-brand-green/90">
+                      <Lock className="h-4 w-4 mr-2" />
+                      Assinar Plano
+                    </Button>
+                  </Link>
                 )}
               </div>
             </div>
           </div>
+
+          {/* No Subscription Alert */}
+          {!hasActiveSubscription && !isSharedAccount && (
+            <Alert className="border-amber-500 bg-amber-500/10">
+              <CreditCard className="h-4 w-4 text-amber-500" />
+              <AlertDescription className="text-amber-500">
+                Você não possui um plano ativo. <Link to="/checkout" className="underline font-medium">Assine agora</Link> para criar instâncias e baixar o app.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Shared Account Alert */}
           {isSharedAccount && (
@@ -124,7 +145,7 @@ export default function Dashboard() {
           )}
 
           {/* Alert if UAZAPI not configured */}
-          {!hasUAZAPIConfig && !isSharedAccount && (
+          {!hasUAZAPIConfig && !isSharedAccount && hasActiveSubscription && (
             <Alert className="border-warning bg-warning/10">
               <AlertCircle className="h-4 w-4 text-warning" />
               <AlertDescription className="text-warning">
@@ -135,8 +156,6 @@ export default function Dashboard() {
 
           {/* Instances Grid */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {/* Add Instance Card */}
-
             {/* Instance Cards */}
             {instances.map((instance) => (
               <InstanceCard key={instance.id} instance={instance} />
