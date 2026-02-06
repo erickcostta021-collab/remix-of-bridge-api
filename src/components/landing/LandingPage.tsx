@@ -22,11 +22,18 @@ const LandingPage = () => {
             <img src={logo} alt="Bridge API" className="h-10 w-10" />
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
           </div>
-          <Link to="/login">
-            <Button className="bg-brand-blue hover:bg-brand-blue/90 text-white">
-              Entrar
-            </Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link to="/login">
+              <Button variant="outline" className="border-border text-foreground hover:bg-secondary">
+                Entrar
+              </Button>
+            </Link>
+            <Link to="/login">
+              <Button className="bg-brand-green hover:bg-brand-green/90 text-white">
+                Inicie Agora
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
