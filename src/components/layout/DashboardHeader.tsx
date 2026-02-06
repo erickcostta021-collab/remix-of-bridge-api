@@ -20,7 +20,7 @@ export function DashboardHeader() {
   const { signOut } = useAuth();
   const { profile } = useProfile();
   const { hasActiveSubscription } = useSubscription();
-  const { toggle, collapsed } = useSidebarState();
+  const { toggle } = useSidebarState();
   const navigate = useNavigate();
 
   const getInitials = (name: string | null | undefined) => {
@@ -41,28 +41,46 @@ export function DashboardHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 lg:px-8 bg-background/80 backdrop-blur-xl border-b border-border">
-      {/* Left: mobile menu + branding (always visible) */}
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 lg:px-8 bg-gradient-to-r from-background/95 via-background/90 to-background/95 backdrop-blur-xl border-b border-border/50 shadow-[0_1px_3px_0_hsl(var(--background)/0.5),0_4px_12px_-2px_hsl(var(--primary)/0.08)]">
+      {/* Left: mobile menu + branding */}
+      <div className="flex items-center gap-4">
         <Button
           variant="ghost"
           size="icon"
           onClick={toggle}
-          className="lg:hidden text-foreground"
+          className="lg:hidden text-foreground hover:bg-sidebar-accent"
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="flex items-center gap-2">
-          <img src={logo} alt="Bridge API" className="h-10 w-10 rounded-full" />
-          <span className="text-xl font-semibold text-foreground">Bridge API</span>
+
+        <div className="group flex items-center gap-3 cursor-default select-none">
+          <div className="relative">
+            <img
+              src={logo}
+              alt="Bridge API"
+              className="h-10 w-10 rounded-full ring-2 ring-primary/20 transition-all duration-500 group-hover:scale-110 group-hover:ring-primary/40 group-hover:shadow-[0_0_16px_hsl(var(--primary)/0.25)]"
+            />
+            <div className="absolute -inset-1 rounded-full bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10 blur-sm" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-lg font-bold tracking-tight text-foreground leading-tight">
+              Bridge API
+            </span>
+            <span className="text-[10px] font-medium tracking-widest uppercase text-muted-foreground/60 leading-tight">
+              Instance Manager
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Right: plans + avatar */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         {!hasActiveSubscription && (
           <PlansDialog>
-            <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Button
+              size="sm"
+              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all duration-300"
+            >
               <CreditCard className="h-4 w-4 mr-2" />
               Assinar Plano
             </Button>
@@ -71,28 +89,29 @@ export function DashboardHeader() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 rounded-full hover:ring-2 hover:ring-primary/30 transition-all p-0.5">
-              <Avatar className="h-9 w-9">
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
+            <button className="group relative flex items-center gap-2 rounded-full p-0.5 transition-all duration-300 hover:ring-2 hover:ring-primary/30">
+              <Avatar className="h-9 w-9 transition-transform duration-300 group-hover:scale-105">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-sm font-semibold">
                   {getInitials(profile?.full_name)}
                 </AvatarFallback>
               </Avatar>
+              <div className="absolute -inset-1 rounded-full bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <div className="px-2 py-1.5">
-              <p className="text-sm font-medium">{profile?.full_name || "Usuário"}</p>
+          <DropdownMenuContent align="end" className="w-56 mt-1">
+            <div className="px-3 py-2">
+              <p className="text-sm font-semibold">{profile?.full_name || "Usuário"}</p>
               <p className="text-xs text-muted-foreground">{profile?.email}</p>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleChangePassword}>
+            <DropdownMenuItem onClick={handleChangePassword} className="cursor-pointer">
               <KeyRound className="h-4 w-4 mr-2" />
               Alterar Senha
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={handleSignOut}
-              className="text-destructive focus:text-destructive"
+              className="text-destructive focus:text-destructive cursor-pointer"
             >
               <LogOut className="h-4 w-4 mr-2" />
               Sair da Conta
