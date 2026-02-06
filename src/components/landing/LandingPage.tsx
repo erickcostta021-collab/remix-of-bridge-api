@@ -134,7 +134,7 @@ const LandingPage = () => {
                 {/* Line 2 - Signal going left (GHL to WhatsApp) */}
                 <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
                   <div 
-                    className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
+                    className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent right-0"
                     style={{
                       animation: 'signalLeftAlt 4s ease-in-out infinite',
                       boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
@@ -165,18 +165,16 @@ const LandingPage = () => {
           {/* CSS Keyframes for signal animations */}
           <style>{`
             @keyframes signalRightAlt {
-              0% { left: -32px; opacity: 0; }
-              5% { opacity: 1; }
-              45% { left: calc(100%); opacity: 1; }
-              50% { left: calc(100%); opacity: 0; }
-              100% { left: calc(100%); opacity: 0; }
+              0% { transform: translateX(-32px); opacity: 0; }
+              5% { transform: translateX(0); opacity: 1; }
+              45% { transform: translateX(calc(var(--line-width, 160px) - 32px)); opacity: 1; }
+              50%, 100% { transform: translateX(calc(var(--line-width, 160px))); opacity: 0; }
             }
             @keyframes signalLeftAlt {
-              0% { right: calc(100%); left: auto; opacity: 0; }
-              50% { right: calc(100%); left: auto; opacity: 0; }
-              55% { right: -32px; left: auto; opacity: 1; }
-              95% { right: calc(100%); left: auto; opacity: 1; }
-              100% { right: calc(100%); left: auto; opacity: 0; }
+              0%, 50% { transform: translateX(0); opacity: 0; }
+              55% { transform: translateX(0); opacity: 1; }
+              95% { transform: translateX(calc(-1 * (var(--line-width, 160px) - 32px))); opacity: 1; }
+              100% { transform: translateX(calc(-1 * var(--line-width, 160px))); opacity: 0; }
             }
           `}</style>
         </div>
