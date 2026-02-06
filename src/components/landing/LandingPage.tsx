@@ -32,7 +32,13 @@ const LandingPage = () => {
           </div>
           
           {/* Center Navigation */}
-          <nav className="hidden md:flex items-center">
+          <nav className="hidden md:flex items-center gap-8">
+            <a 
+              href="#" 
+              className="text-muted-foreground hover:text-foreground transition-colors font-medium"
+            >
+              Início
+            </a>
             <a 
               href="#precos" 
               className="text-muted-foreground hover:text-foreground transition-colors font-medium"
