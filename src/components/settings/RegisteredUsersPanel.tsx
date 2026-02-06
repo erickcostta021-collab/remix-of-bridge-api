@@ -5,11 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Loader2, Trash2, Users, RefreshCw, Pause, Play } from "lucide-react";
+import { Loader2, Trash2, Users, RefreshCw, Pause, Play, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 interface RegisteredUser {
   id: string;
@@ -18,19 +19,21 @@ interface RegisteredUser {
   user_id: string;
   is_paused: boolean;
   paused_at: string | null;
+  instance_limit: number;
 }
 
 export function RegisteredUsersPanel() {
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [updatingLimitId, setUpdatingLimitId] = useState<string | null>(null);
 
   const { data: users, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["registered-users"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, email, created_at, user_id, is_paused, paused_at")
+        .select("id, email, created_at, user_id, is_paused, paused_at, instance_limit")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -111,6 +114,28 @@ export function RegisteredUsersPanel() {
     },
   });
 
+  const updateInstanceLimit = useMutation({
+    mutationFn: async ({ userId, newLimit }: { userId: string; newLimit: number }) => {
+      const limit = Math.max(0, newLimit);
+      const { error } = await supabase
+        .from("profiles")
+        .update({ instance_limit: limit })
+        .eq("user_id", userId);
+
+      if (error) throw error;
+      return { userId, limit };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["registered-users"] });
+      toast.success(`Limite atualizado para ${data.limit} instâncias`);
+      setUpdatingLimitId(null);
+    },
+    onError: (error) => {
+      toast.error("Erro ao atualizar limite: " + error.message);
+      setUpdatingLimitId(null);
+    },
+  });
+
   const handleDelete = (userId: string) => {
     setDeletingId(userId);
     deleteUser.mutate(userId);
@@ -119,6 +144,18 @@ export function RegisteredUsersPanel() {
   const handleTogglePause = (userId: string, isPaused: boolean) => {
     setTogglingId(userId);
     togglePause.mutate({ userId, isPaused });
+  };
+
+  const handleUpdateLimit = (userId: string, currentLimit: number, delta: number) => {
+    setUpdatingLimitId(userId);
+    updateInstanceLimit.mutate({ userId, newLimit: currentLimit + delta });
+  };
+
+  const handleSetLimit = (userId: string, value: string) => {
+    const num = parseInt(value, 10);
+    if (isNaN(num) || num < 0) return;
+    setUpdatingLimitId(userId);
+    updateInstanceLimit.mutate({ userId, newLimit: num });
   };
 
   return (
@@ -156,6 +193,7 @@ export function RegisteredUsersPanel() {
                 <TableRow className="border-border">
                   <TableHead className="text-muted-foreground">Email</TableHead>
                   <TableHead className="text-muted-foreground">Status</TableHead>
+                  <TableHead className="text-muted-foreground">Limite</TableHead>
                   <TableHead className="text-muted-foreground">Cadastrado em</TableHead>
                   <TableHead className="text-muted-foreground w-[140px]">Ações</TableHead>
                 </TableRow>
@@ -178,6 +216,35 @@ export function RegisteredUsersPanel() {
                           Ativo
                         </Badge>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={updatingLimitId === user.user_id || user.instance_limit <= 0}
+                          onClick={() => handleUpdateLimit(user.user_id, user.instance_limit, -1)}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={user.instance_limit}
+                          onChange={(e) => handleSetLimit(user.user_id, e.target.value)}
+                          className="h-7 w-14 text-center text-sm bg-secondary border-border px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={updatingLimitId === user.user_id}
+                          onClick={() => handleUpdateLimit(user.user_id, user.instance_limit, 1)}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {format(new Date(user.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
