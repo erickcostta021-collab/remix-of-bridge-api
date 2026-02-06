@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { Slider } from "@/components/ui/slider";
 import { 
   MessageCircle, 
   Mic, 
@@ -13,6 +15,10 @@ import {
 import logo from "@/assets/logo.png";
 
 const LandingPage = () => {
+  const [instanceCount, setInstanceCount] = useState(1);
+  const pricePerInstance = 35;
+  const totalPrice = instanceCount * pricePerInstance;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -181,7 +187,63 @@ const LandingPage = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {/* Flexible Plan */}
+            <div className="bg-card rounded-2xl p-8 border border-border hover:border-brand-green/50 transition-colors flex flex-col">
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold text-foreground mb-2">Flexível</h3>
+                <p className="text-muted-foreground text-sm">Escolha a quantidade ideal</p>
+              </div>
+              <div className="mb-4">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-bold text-foreground">R${totalPrice}</span>
+                  <span className="text-muted-foreground">/mês</span>
+                </div>
+                <p className="text-sm text-brand-green font-medium mt-1">R$35 por instância</p>
+              </div>
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm text-muted-foreground">Instâncias</span>
+                  <span className="text-lg font-bold text-brand-green">{instanceCount}</span>
+                </div>
+                <Slider
+                  value={[instanceCount]}
+                  onValueChange={(value) => setInstanceCount(value[0])}
+                  min={1}
+                  max={10}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                  <span>1</span>
+                  <span>10</span>
+                </div>
+              </div>
+              <ul className="space-y-3 mb-8 flex-grow">
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  {instanceCount} Instância{instanceCount > 1 ? 's' : ''} WhatsApp
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Subcontas ilimitadas
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Mensagens ilimitadas
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Zap className="h-4 w-4 text-brand-green" />
+                  Switcher automático
+                </li>
+              </ul>
+              <Link to="/login" className="w-full">
+                <Button className="w-full bg-brand-green hover:bg-brand-green/90 text-white">
+                  Começar Agora
+                </Button>
+              </Link>
+            </div>
+
             {/* 50 Instances Plan */}
             <div className="bg-card rounded-2xl p-8 border border-border hover:border-brand-blue/50 transition-colors flex flex-col">
               <div className="mb-6">
