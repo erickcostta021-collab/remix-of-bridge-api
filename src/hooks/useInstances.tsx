@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { useSettings, getEffectiveUserId } from "./useSettings";
+import { useProfile } from "./useProfile";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -31,10 +32,29 @@ export interface UazapiInstance {
 export function useInstances(subaccountId?: string) {
   const { user } = useAuth();
   const { settings } = useSettings();
+  const { profile, instanceLimit } = useProfile();
   const queryClient = useQueryClient();
 
   // Check if this account is sharing from another user
   const isSharedAccount = !!settings?.shared_from_user_id;
+
+  // Get total instance count for limit checking
+  const { data: totalInstanceCount = 0 } = useQuery({
+    queryKey: ["instance-count", user?.id, settings?.shared_from_user_id],
+    queryFn: async () => {
+      if (!user) return 0;
+      const effectiveUserId = await getEffectiveUserId(user.id);
+      
+      const { count, error } = await supabase
+        .from("instances")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", effectiveUserId);
+      
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: !!user,
+  });
 
   const { data: instances, isLoading } = useQuery({
     queryKey: ["instances", user?.id, subaccountId, settings?.shared_from_user_id],
@@ -351,6 +371,11 @@ export function useInstances(subaccountId?: string) {
     }) => {
       if (!user) throw new Error("Não autenticado");
 
+      // Check instance limit
+      if (instanceLimit > 0 && totalInstanceCount >= instanceLimit) {
+        throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
+      }
+
       // Check if already imported
       const { data: existing } = await supabase
         .from("instances")
@@ -399,6 +424,11 @@ export function useInstances(subaccountId?: string) {
     mutationFn: async ({ name, subaccountId }: { name: string; subaccountId: string }) => {
       if (!user || !settings?.uazapi_admin_token || !settings?.uazapi_base_url) {
         throw new Error("Configurações UAZAPI não encontradas");
+      }
+
+      // Check instance limit
+      if (instanceLimit > 0 && totalInstanceCount >= instanceLimit) {
+        throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
       }
 
       const base = settings.uazapi_base_url.replace(/\/$/, "");
@@ -825,5 +855,9 @@ export function useInstances(subaccountId?: string) {
     updateInstanceGHLUser,
     reconfigureWebhook,
     fetchUazapiInstances,
+    // Instance limit info
+    instanceLimit,
+    totalInstanceCount,
+    canCreateInstance: instanceLimit === 0 || totalInstanceCount < instanceLimit,
   };
 }
