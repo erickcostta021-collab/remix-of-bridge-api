@@ -114,51 +114,6 @@ const LandingPage = () => {
             </Button>
           </div>
 
-          {/* Visual Element - Logos */}
-          <div className="mt-16 relative">
-            <div className="relative flex items-center justify-center gap-6 md:gap-12">
-              {/* WhatsApp Logo */}
-              <div className="flex flex-col items-center z-20 group">
-                <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border group-hover:border-muted-foreground/50 transition-all duration-500 group-hover:scale-105">
-                  <img src={whatsappLogo} alt="WhatsApp" className="h-10 w-10 md:h-12 md:w-12" />
-                </div>
-                <span className="mt-2 text-sm font-medium text-muted-foreground">WhatsApp</span>
-              </div>
-
-              {/* Connection Lines with animated signals */}
-              <div className="relative w-24 md:w-40 h-12 flex flex-col justify-center gap-4">
-                {/* Line 1 - Signal going right (WhatsApp to GHL) */}
-                <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
-                  <div 
-                    className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
-                    style={{
-                      animation: 'signalRightAlt 4s ease-in-out infinite',
-                      boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
-                    }}
-                  />
-                </div>
-                
-                {/* Line 2 - Signal going left (GHL to WhatsApp) */}
-                <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
-                  <div 
-                    className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
-                    style={{
-                      animation: 'signalLeftAlt 4s ease-in-out infinite',
-                      boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
-                    }}
-                  />
-                </div>
-              </div>
-              
-              {/* GoHighLevel Logo */}
-              <div className="flex flex-col items-center z-20 group">
-                <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border group-hover:border-muted-foreground/50 transition-all duration-500 group-hover:scale-105 overflow-hidden">
-                  <img src={ghlIcon} alt="GoHighLevel" className="h-10 w-10 md:h-12 md:w-12 rounded-lg" />
-                </div>
-                <span className="mt-2 text-sm font-medium text-muted-foreground">GoHighLevel</span>
-              </div>
-            </div>
-          </div>
 
           {/* CSS Keyframes for signal animations */}
           <style>{`
