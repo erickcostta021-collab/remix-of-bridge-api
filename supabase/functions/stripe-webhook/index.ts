@@ -193,7 +193,12 @@ serve(async (req) => {
     }
 
     // Handle payment failures (pause account until payment succeeds)
-    if (event.type === "invoice.payment_failed") {
+    // Support multiple event name variations
+    if (
+      event.type === "invoice.payment_failed" ||
+      event.type === "invoice.payment.failed" ||
+      event.type === "payment_intent.payment_failed"
+    ) {
       const invoice = event.data.object as Stripe.Invoice;
       
       // Only pause if this is a subscription payment (not initial)
