@@ -53,9 +53,9 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 top-16 lg:top-0 left-0 z-50 lg:z-auto flex flex-col border-r border-sidebar-border",
-          "bg-gradient-to-b from-sidebar to-sidebar/95",
-          "transition-all duration-300 ease-in-out",
+          "fixed lg:static inset-y-0 top-16 lg:top-0 left-0 z-50 lg:z-auto flex flex-col border-r border-white/[0.08]",
+          "bg-gradient-to-b from-[hsl(210,80%,12%)] via-[hsl(180,50%,10%)] to-[hsl(150,60%,10%)]",
+          "transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
           collapsed ? "w-[68px]" : "w-64",
           "lg:translate-x-0",
           collapsed ? "-translate-x-full lg:translate-x-0" : "translate-x-0"
@@ -142,7 +142,7 @@ export function Sidebar() {
         </nav>
 
         {/* Collapse toggle at bottom (desktop only) */}
-        <div className="hidden lg:flex items-center justify-center p-3 border-t border-sidebar-border/50">
+        <div className="hidden lg:flex items-center justify-center p-3 border-t border-white/[0.08]">
           <Button
             variant="ghost"
             size="icon"
