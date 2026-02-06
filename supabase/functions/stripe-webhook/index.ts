@@ -239,11 +239,12 @@ serve(async (req) => {
     }
 
     // Handle successful payment (reactivate if was paused)
-    // Support both invoice.payment_succeeded and invoice.paid / invoice.payment.paid
+    // Support multiple event name variations from Stripe
     if (
       event.type === "invoice.payment_succeeded" ||
       event.type === "invoice.paid" ||
-      event.type === "invoice.payment.paid"
+      event.type === "invoice.payment.paid" ||
+      event.type === "invoice_payment.paid"
     ) {
       const invoice = event.data.object as Stripe.Invoice;
       
