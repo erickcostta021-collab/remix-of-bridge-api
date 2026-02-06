@@ -79,9 +79,34 @@ const Checkout = () => {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        const anyError = error as any;
+        let serverMessage: string | undefined;
+        let serverCode: string | undefined;
 
-      // Check for email exists error
+        try {
+          const response: Response | undefined = anyError?.context?.response;
+          if (response) {
+            const text = await response.text();
+            if (text) {
+              const parsed = JSON.parse(text);
+              serverMessage = parsed?.error;
+              serverCode = parsed?.code;
+            }
+          }
+        } catch {
+          // ignore parsing errors
+        }
+
+        if (serverCode === "EMAIL_EXISTS" && serverMessage) {
+          toast.error(serverMessage);
+          return;
+        }
+
+        toast.error(serverMessage || error.message || "Erro ao iniciar checkout");
+        return;
+      }
+
       if (data?.code === "EMAIL_EXISTS") {
         toast.error(data.error);
         return;
