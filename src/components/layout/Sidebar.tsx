@@ -131,7 +131,7 @@ export function Sidebar() {
                     </span>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="font-medium z-[100]">
+                <TooltipContent side="right" className="font-medium">
                   {hasActiveSubscription
                     ? "Instalar App"
                     : "Assine um plano para instalar o app"}
