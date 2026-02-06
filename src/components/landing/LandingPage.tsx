@@ -109,7 +109,7 @@ const LandingPage = () => {
 
           {/* Visual Element - Logos */}
           <div className="mt-16 relative">
-            <div className="relative flex items-center justify-center gap-12">
+            <div className="relative flex items-center justify-center gap-6 md:gap-12">
               {/* WhatsApp Logo */}
               <div className="flex flex-col items-center z-20 group">
                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border group-hover:border-muted-foreground/50 transition-all duration-500 group-hover:scale-105">
@@ -118,11 +118,30 @@ const LandingPage = () => {
                 <span className="mt-2 text-sm font-medium text-muted-foreground">WhatsApp</span>
               </div>
 
-              {/* Connection indicator */}
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-brand-green animate-pulse" />
-                <div className="w-8 h-0.5 bg-gradient-to-r from-brand-green to-brand-blue" />
-                <div className="w-2 h-2 rounded-full bg-brand-blue animate-pulse" />
+              {/* Connection Lines with animated signals */}
+              <div className="relative w-24 md:w-40 h-16 flex flex-col justify-center gap-3">
+                {/* Line 1 - Signal going right (WhatsApp to GHL) */}
+                <div className="relative h-1 w-full">
+                  <div className="absolute inset-0 bg-gradient-to-r from-brand-green/30 to-orange-500/30 rounded-full" />
+                  <div 
+                    className="absolute h-3 w-3 rounded-full bg-brand-green shadow-lg shadow-brand-green/50 top-1/2 -translate-y-1/2"
+                    style={{
+                      animation: 'signalRight 2s ease-in-out infinite',
+                    }}
+                  />
+                </div>
+                
+                {/* Line 2 - Signal going left (GHL to WhatsApp) */}
+                <div className="relative h-1 w-full">
+                  <div className="absolute inset-0 bg-gradient-to-l from-brand-green/30 to-orange-500/30 rounded-full" />
+                  <div 
+                    className="absolute h-3 w-3 rounded-full bg-orange-500 shadow-lg shadow-orange-500/50 top-1/2 -translate-y-1/2"
+                    style={{
+                      animation: 'signalLeft 2s ease-in-out infinite',
+                      animationDelay: '1s',
+                    }}
+                  />
+                </div>
               </div>
               
               {/* GoHighLevel Logo */}
@@ -143,6 +162,22 @@ const LandingPage = () => {
               </div>
             </div>
           </div>
+
+          {/* CSS Keyframes for signal animations */}
+          <style>{`
+            @keyframes signalRight {
+              0% { left: 0; opacity: 0; }
+              10% { opacity: 1; }
+              90% { opacity: 1; }
+              100% { left: calc(100% - 12px); opacity: 0; }
+            }
+            @keyframes signalLeft {
+              0% { right: 0; left: auto; opacity: 0; }
+              10% { opacity: 1; }
+              90% { opacity: 1; }
+              100% { right: calc(100% - 12px); left: auto; opacity: 0; }
+            }
+          `}</style>
         </div>
       </section>
 
