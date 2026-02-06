@@ -403,7 +403,7 @@ const LandingPage = () => {
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-gradient-to-br from-brand-blue to-brand-green rounded-3xl p-12 md:p-16">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Pronto para Transformar sua Gestão de WhatsApp?
+              Pronto para ir para o próximo Level?
             </h2>
             <p className="text-lg text-white/90 max-w-2xl mx-auto mb-8">
               Otimize seu tempo, melhore a experiência do cliente e escale seu atendimento com a Bridge API.
