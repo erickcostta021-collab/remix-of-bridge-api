@@ -77,14 +77,6 @@ export function InteractiveGrid() {
       }
     }
 
-    // Glow spot
-    if (mx >= 0 && my >= 0) {
-      const gradient = ctx.createRadialGradient(mx, my, 0, mx, my, GLOW_RADIUS * 0.6);
-      gradient.addColorStop(0, `rgba(${LINE_COLOR_BASE.r}, ${LINE_COLOR_BASE.g}, ${LINE_COLOR_BASE.b}, 0.08)`);
-      gradient.addColorStop(1, `rgba(${LINE_COLOR_BASE.r}, ${LINE_COLOR_BASE.g}, ${LINE_COLOR_BASE.b}, 0)`);
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, height);
-    }
   }, []);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
