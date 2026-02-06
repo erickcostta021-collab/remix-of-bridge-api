@@ -194,7 +194,7 @@ const LandingPage = () => {
 
           <div className="grid md:grid-cols-2 gap-8">
             {/* Feature 1 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-muted-foreground/30 transition-all duration-300 hover:-translate-y-1">
+            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
               <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
                 <MessageCircle className="h-7 w-7 text-brand-green" />
               </div>
@@ -208,7 +208,7 @@ const LandingPage = () => {
             </div>
 
             {/* Feature 2 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-muted-foreground/30 transition-all duration-300 hover:-translate-y-1">
+            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
               <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
                 <Mic className="h-7 w-7 text-brand-green" />
               </div>
@@ -222,7 +222,7 @@ const LandingPage = () => {
             </div>
 
             {/* Feature 3 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-muted-foreground/30 transition-all duration-300 hover:-translate-y-1">
+            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
               <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
                 <Smartphone className="h-7 w-7 text-brand-green" />
               </div>
@@ -236,7 +236,7 @@ const LandingPage = () => {
             </div>
 
             {/* Feature 4 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-muted-foreground/30 transition-all duration-300 hover:-translate-y-1">
+            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
               <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
                 <Users className="h-7 w-7 text-brand-green" />
               </div>
