@@ -83,6 +83,7 @@ export default function Dashboard() {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!hasActiveSubscription}
                   onClick={async () => {
                     try {
                       let token = selectedSubaccount.embed_token;
@@ -105,7 +106,7 @@ export default function Dashboard() {
                       toast.error("Erro ao gerar link");
                     }
                   }}
-                  className="border-border"
+                  className={hasActiveSubscription ? "border-border" : "border-border opacity-40 cursor-not-allowed"}
                 >
                   <Link2 className="h-4 w-4 mr-2" />
                   Copiar Link GHL
