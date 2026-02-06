@@ -234,7 +234,12 @@ serve(async (req) => {
     }
 
     // Handle successful payment (reactivate if was paused)
-    if (event.type === "invoice.payment_succeeded") {
+    // Support both invoice.payment_succeeded and invoice.paid / invoice.payment.paid
+    if (
+      event.type === "invoice.payment_succeeded" ||
+      event.type === "invoice.paid" ||
+      event.type === "invoice.payment.paid"
+    ) {
       const invoice = event.data.object as Stripe.Invoice;
       
       const customer = await stripe.customers.retrieve(invoice.customer as string);
