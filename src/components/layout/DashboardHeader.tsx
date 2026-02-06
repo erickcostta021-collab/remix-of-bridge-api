@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Menu, KeyRound, LogOut, CreditCard } from "lucide-react";
+import { Menu, KeyRound, LogOut, CreditCard, User } from "lucide-react";
 import logo from "@/assets/logo.png";
 
 export function DashboardHeader() {
@@ -91,8 +91,8 @@ export function DashboardHeader() {
           <DropdownMenuTrigger asChild>
             <button className="group relative flex items-center gap-2 rounded-full p-0.5 transition-all duration-300 hover:ring-2 hover:ring-primary/30">
               <Avatar className="h-9 w-9 transition-transform duration-300 group-hover:scale-105">
-                <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-sm font-semibold">
-                  {getInitials(profile?.full_name)}
+                <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground">
+                  <User className="h-5 w-5" />
                 </AvatarFallback>
               </Avatar>
               <div className="absolute -inset-1 rounded-full bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
