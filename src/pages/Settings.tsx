@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,15 +13,27 @@ import { CANONICAL_APP_ORIGIN, getOAuthRedirectUri } from "@/lib/canonicalOrigin
 import { Save, Loader2, Eye, EyeOff, Info, CheckCircle2, Wand2, Copy, Check, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { RegisteredUsersPanel } from "@/components/settings/RegisteredUsersPanel";
+import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
 
 const ADMIN_EMAILS = ["erickcostta021@gmail.com", "erickcostta.br@gmail.com"];
 
 export default function Settings() {
   const { settings, isLoading, updateSettings, applyGlobalWebhook, getOAuthUrl } = useSettings();
   const { user } = useAuth();
+  const location = useLocation();
   const isAdmin = ADMIN_EMAILS.includes(user?.email || "");
   const [showTokens, setShowTokens] = useState(false);
   const [copiedTrackId, setCopiedTrackId] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+
+  // Open password dialog if navigated with state
+  useEffect(() => {
+    if (location.state?.openPasswordChange) {
+      setPasswordDialogOpen(true);
+      // Clear the state so it doesn't reopen on re-render
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
   
   const [formData, setFormData] = useState({
     ghl_agency_token: "",
@@ -406,6 +419,11 @@ export default function Settings() {
           </Button>
         </div>
       </div>
+
+      <ChangePasswordDialog 
+        open={passwordDialogOpen} 
+        onOpenChange={setPasswordDialogOpen} 
+      />
     </DashboardLayout>
   );
 }
