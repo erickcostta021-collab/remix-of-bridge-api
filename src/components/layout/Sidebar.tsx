@@ -12,7 +12,7 @@ import {
   X,
   ExternalLink,
 } from "lucide-react";
-import logo from "@/assets/logo.png";
+
 
 // Admin emails are now handled in Settings.tsx
 
@@ -48,7 +48,7 @@ export function Sidebar() {
       {/* Mobile overlay */}
       {!collapsed && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 top-16 bg-black/50 z-40 lg:hidden"
           onClick={toggle}
         />
       )}
@@ -56,20 +56,14 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300",
+          "fixed lg:static inset-y-0 top-16 lg:top-0 left-0 z-50 lg:z-auto flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300",
           collapsed ? "w-16" : "w-64",
           "lg:translate-x-0",
           collapsed ? "-translate-x-full lg:translate-x-0" : "translate-x-0"
         )}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border">
-          {!collapsed && (
-            <div className="flex items-center gap-2">
-              <img src={logo} alt="Bridge API" className="h-10 w-10 rounded-full" />
-              <span className="font-semibold text-sidebar-foreground">Bridge API</span>
-            </div>
-          )}
+        {/* Collapse toggle (desktop only) */}
+        <div className="hidden lg:flex items-center justify-end h-12 px-2 border-b border-sidebar-border">
           <Button
             variant="ghost"
             size="icon"
