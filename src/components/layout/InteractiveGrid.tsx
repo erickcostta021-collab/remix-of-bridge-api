@@ -6,10 +6,10 @@ export function InteractiveGrid() {
   const animFrameRef = useRef<number>(0);
 
   const CELL_SIZE = 60;
-  const LINE_COLOR_BASE = { r: 56, g: 161, b: 105 }; // brand-green approx
+  const LINE_COLOR = { r: 56, g: 161, b: 105 }; // brand-green
   const BASE_OPACITY = 0.12;
-  const HOVER_OPACITY = 0.7;
-  const GLOW_RADIUS = 180;
+  const HOVER_OPACITY = 0.55;
+  const SNAP_DISTANCE = 12; // px threshold to "snap" highlight to nearest line
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -23,67 +23,36 @@ export function InteractiveGrid() {
 
     ctx.clearRect(0, 0, width, height);
 
+    // Find nearest vertical and horizontal grid lines
+    const nearestVx = mx >= 0 ? Math.round(mx / CELL_SIZE) * CELL_SIZE : -1;
+    const nearestHy = my >= 0 ? Math.round(my / CELL_SIZE) * CELL_SIZE : -1;
+    const distToV = mx >= 0 ? Math.abs(mx - nearestVx) : Infinity;
+    const distToH = my >= 0 ? Math.abs(my - nearestHy) : Infinity;
+
     // Draw vertical lines
     for (let x = 0; x <= width; x += CELL_SIZE) {
-      const segments = Math.ceil(height / CELL_SIZE);
-      for (let i = 0; i <= segments; i++) {
-        const y = i * CELL_SIZE;
-        const dist = Math.sqrt((x - mx) ** 2 + (y - my) ** 2);
-        const intensity = mx < 0 ? 0 : Math.max(0, 1 - dist / GLOW_RADIUS);
-        const opacity = BASE_OPACITY + (HOVER_OPACITY - BASE_OPACITY) * intensity;
+      const isHovered = distToV <= SNAP_DISTANCE && x === nearestVx;
+      const opacity = isHovered ? HOVER_OPACITY : BASE_OPACITY;
 
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x, Math.min(y + CELL_SIZE, height));
-        ctx.strokeStyle = `rgba(${LINE_COLOR_BASE.r}, ${LINE_COLOR_BASE.g}, ${LINE_COLOR_BASE.b}, ${opacity})`;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        if (intensity > 0.1) {
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x, Math.min(y + CELL_SIZE, height));
-          ctx.strokeStyle = `rgba(${LINE_COLOR_BASE.r}, ${LINE_COLOR_BASE.g}, ${LINE_COLOR_BASE.b}, ${intensity * 0.3})`;
-          ctx.lineWidth = 3;
-          ctx.stroke();
-        }
-      }
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.strokeStyle = `rgba(${LINE_COLOR.r}, ${LINE_COLOR.g}, ${LINE_COLOR.b}, ${opacity})`;
+      ctx.lineWidth = isHovered ? 1.5 : 1;
+      ctx.stroke();
     }
 
     // Draw horizontal lines
     for (let y = 0; y <= height; y += CELL_SIZE) {
-      const segments = Math.ceil(width / CELL_SIZE);
-      for (let i = 0; i <= segments; i++) {
-        const x = i * CELL_SIZE;
-        const dist = Math.sqrt((x - mx) ** 2 + (y - my) ** 2);
-        const intensity = mx < 0 ? 0 : Math.max(0, 1 - dist / GLOW_RADIUS);
-        const opacity = BASE_OPACITY + (HOVER_OPACITY - BASE_OPACITY) * intensity;
+      const isHovered = distToH <= SNAP_DISTANCE && y === nearestHy;
+      const opacity = isHovered ? HOVER_OPACITY : BASE_OPACITY;
 
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(Math.min(x + CELL_SIZE, width), y);
-        ctx.strokeStyle = `rgba(${LINE_COLOR_BASE.r}, ${LINE_COLOR_BASE.g}, ${LINE_COLOR_BASE.b}, ${opacity})`;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        if (intensity > 0.1) {
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(Math.min(x + CELL_SIZE, width), y);
-          ctx.strokeStyle = `rgba(${LINE_COLOR_BASE.r}, ${LINE_COLOR_BASE.g}, ${LINE_COLOR_BASE.b}, ${intensity * 0.3})`;
-          ctx.lineWidth = 3;
-          ctx.stroke();
-        }
-      }
-    }
-
-    // Glow spot
-    if (mx >= 0 && my >= 0) {
-      const gradient = ctx.createRadialGradient(mx, my, 0, mx, my, GLOW_RADIUS * 0.6);
-      gradient.addColorStop(0, `rgba(${LINE_COLOR_BASE.r}, ${LINE_COLOR_BASE.g}, ${LINE_COLOR_BASE.b}, 0.08)`);
-      gradient.addColorStop(1, `rgba(${LINE_COLOR_BASE.r}, ${LINE_COLOR_BASE.g}, ${LINE_COLOR_BASE.b}, 0)`);
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, height);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.strokeStyle = `rgba(${LINE_COLOR.r}, ${LINE_COLOR.g}, ${LINE_COLOR.b}, ${opacity})`;
+      ctx.lineWidth = isHovered ? 1.5 : 1;
+      ctx.stroke();
     }
   }, []);
 
