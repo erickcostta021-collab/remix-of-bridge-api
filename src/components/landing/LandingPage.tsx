@@ -193,7 +193,7 @@ const LandingPage = () => {
           {/* Architecture Diagram */}
           <div className="relative flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-0 mb-16">
             {/* WhatsApp Side */}
-            <div className="flex flex-col items-center text-center lg:w-1/5">
+            <div className="flex flex-col items-center text-center lg:w-1/5 relative z-10">
               <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border mb-4">
                 <img src={whatsappLogo} alt="WhatsApp" className="h-12 w-12" />
               </div>
@@ -201,67 +201,59 @@ const LandingPage = () => {
               <p className="text-sm text-muted-foreground">Seus números e conversas com clientes</p>
             </div>
 
-            {/* Animated Lines 1 (WhatsApp → UAZAPI) */}
-            <div className="hidden lg:flex flex-col justify-center gap-4 lg:w-[16%]">
-              <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
-                <div 
-                  className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
-                  style={{
-                    animation: 'signalRightAlt 4s ease-in-out infinite',
-                    boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
-                  }}
-                />
+            {/* Full-width animated lines (WhatsApp → GHL) passing behind UAZAPI */}
+            <div className="hidden lg:block lg:w-[52%] relative">
+              {/* The two continuous lines spanning the full width */}
+              <div className="flex flex-col justify-center gap-4 w-full">
+                {/* Line 1 - Signal going right */}
+                <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
+                  <div 
+                    className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
+                    style={{
+                      animation: 'signalRightAlt 4s ease-in-out infinite',
+                      boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
+                    }}
+                  />
+                </div>
+                {/* Line 2 - Signal going left */}
+                <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
+                  <div 
+                    className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent right-0"
+                    style={{
+                      animation: 'signalLeftAlt 4s ease-in-out infinite',
+                      boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
+                    }}
+                  />
+                </div>
               </div>
-              <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
-                <div 
-                  className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent right-0"
-                  style={{
-                    animation: 'signalLeftAlt 4s ease-in-out infinite',
-                    boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
-                  }}
-                />
+
+              {/* UAZAPI floating on top of the lines */}
+              <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                <div className="flex flex-col items-center text-center pointer-events-auto">
+                  <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-brand-blue mb-4">
+                    <span className="text-lg font-bold text-brand-blue">UAZAPI</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">UAZAPI</h3>
+                  <p className="text-sm text-muted-foreground">API de integração que conecta seu WhatsApp</p>
+                </div>
               </div>
             </div>
-            <div className="lg:hidden flex items-center justify-center">
+
+            {/* Mobile fallback: arrows + UAZAPI */}
+            <div className="lg:hidden flex flex-col items-center gap-4">
               <ArrowRight className="h-6 w-6 text-brand-blue rotate-90" />
-            </div>
-
-            {/* UAZAPI (Engine) - Text only */}
-            <div className="flex flex-col items-center text-center lg:w-1/5">
-              <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-brand-blue mb-4">
-                <span className="text-lg font-bold text-brand-blue">UAZAPI</span>
+              <div className="flex flex-col items-center text-center">
+                <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-brand-blue mb-4">
+                  <span className="text-lg font-bold text-brand-blue">UAZAPI</span>
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-1">UAZAPI</h3>
+                <p className="text-sm text-muted-foreground">API de integração que conecta seu WhatsApp</p>
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-1">UAZAPI</h3>
-              <p className="text-sm text-muted-foreground">API de integração que conecta seu WhatsApp</p>
-            </div>
-
-            {/* Animated Lines 2 (UAZAPI → GHL) */}
-            <div className="hidden lg:flex flex-col justify-center gap-4 lg:w-[16%]">
-              <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
-                <div 
-                  className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
-                  style={{
-                    animation: 'signalRightAlt 4s ease-in-out infinite',
-                    boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
-                  }}
-                />
-              </div>
-              <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
-                <div 
-                  className="absolute h-full w-8 bg-gradient-to-r from-transparent via-brand-blue to-transparent right-0"
-                  style={{
-                    animation: 'signalLeftAlt 4s ease-in-out infinite',
-                    boxShadow: '0 0 12px 4px hsl(var(--brand-blue))',
-                  }}
-                />
-              </div>
-            </div>
-            <div className="lg:hidden flex items-center justify-center">
               <ArrowRight className="h-6 w-6 text-brand-blue rotate-90" />
             </div>
 
             {/* GHL Side */}
-            <div className="flex flex-col items-center text-center lg:w-1/5">
+            <div className="flex flex-col items-center text-center lg:w-1/5 relative z-10">
               <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border mb-4 overflow-hidden">
                 <img src={ghlIcon} alt="GoHighLevel" className="h-12 w-12 rounded-lg" />
               </div>
