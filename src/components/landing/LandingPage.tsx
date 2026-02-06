@@ -266,7 +266,7 @@ const LandingPage = () => {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Flexible Plan */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-muted-foreground/30 transition-all duration-300 flex flex-col">
+            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 flex flex-col">
               <div className="mb-6">
                 <h3 className="text-xl font-semibold text-foreground mb-2">Flexível</h3>
                 <p className="text-muted-foreground text-sm">Escolha a quantidade ideal</p>
@@ -329,7 +329,7 @@ const LandingPage = () => {
             </div>
 
             {/* 50 Instances Plan */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-muted-foreground/30 transition-all duration-300 flex flex-col">
+            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 flex flex-col">
               <div className="mb-6">
                 <h3 className="text-xl font-semibold text-foreground mb-2">50 Instâncias</h3>
                 <p className="text-muted-foreground text-sm">Para negócios em crescimento</p>
@@ -368,7 +368,7 @@ const LandingPage = () => {
             </div>
 
             {/* 100 Instances Plan */}
-            <div className="group relative bg-card rounded-2xl p-8 border-2 border-brand-green flex flex-col">
+            <div className="group relative bg-card rounded-2xl p-8 border-2 border-brand-green hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 flex flex-col">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-4 py-1.5 rounded-full">
                 Mais Popular
               </div>
