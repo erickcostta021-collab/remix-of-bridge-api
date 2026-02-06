@@ -16,6 +16,7 @@ import {
 import logo from "@/assets/logo.png";
 import whatsappLogo from "@/assets/whatsapp-logo.svg";
 import ghlIcon from "@/assets/ghl-icon.png";
+import bridgeImg from "@/assets/bridge.png";
 
 const LandingPage = () => {
   const [instanceCount, setInstanceCount] = useState(1);
@@ -103,7 +104,12 @@ const LandingPage = () => {
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="px-8 py-6 text-lg border-border text-foreground hover:bg-secondary transition-all duration-300">
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="px-8 py-6 text-lg border-border text-foreground hover:bg-secondary transition-all duration-300"
+              onClick={() => document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' })}
+            >
               Saiba Mais
             </Button>
           </div>
@@ -169,6 +175,101 @@ const LandingPage = () => {
               100% { transform: translateX(calc(-1 * var(--line-width, 160px))); opacity: 0; }
             }
           `}</style>
+        </div>
+      </section>
+
+      {/* How it Works Section */}
+      <section id="como-funciona" className="py-20 px-6 scroll-mt-20 relative z-10">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              Como Funciona a Bridge API?
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Uma ponte inteligente que conecta o WhatsApp ao GoHighLevel, usando a UAZAPI como motor de integração.
+            </p>
+          </div>
+
+          {/* Architecture Diagram */}
+          <div className="relative flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-0 mb-16">
+            {/* WhatsApp Side */}
+            <div className="flex flex-col items-center text-center lg:w-1/4">
+              <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border mb-4">
+                <img src={whatsappLogo} alt="WhatsApp" className="h-12 w-12" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-1">WhatsApp</h3>
+              <p className="text-sm text-muted-foreground">Seus números e conversas com clientes</p>
+            </div>
+
+            {/* Arrow 1 */}
+            <div className="hidden lg:flex items-center justify-center lg:w-[12%]">
+              <div className="w-full h-0.5 bg-gradient-to-r from-brand-green to-brand-blue relative">
+                <RefreshCw className="absolute -top-3 left-1/2 -translate-x-1/2 h-6 w-6 text-brand-blue animate-spin" style={{ animationDuration: '4s' }} />
+              </div>
+            </div>
+            <div className="lg:hidden flex items-center justify-center">
+              <ArrowRight className="h-6 w-6 text-brand-blue rotate-90" />
+            </div>
+
+            {/* UAZAPI (Engine) */}
+            <div className="flex flex-col items-center text-center lg:w-1/4">
+              <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-brand-blue mb-4 relative overflow-hidden">
+                <img src={bridgeImg} alt="UAZAPI" className="h-12 w-12 object-contain" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-1">UAZAPI</h3>
+              <p className="text-sm text-muted-foreground">API de integração que conecta seu WhatsApp</p>
+            </div>
+
+            {/* Arrow 2 */}
+            <div className="hidden lg:flex items-center justify-center lg:w-[12%]">
+              <div className="w-full h-0.5 bg-gradient-to-r from-brand-blue to-brand-green relative">
+                <RefreshCw className="absolute -top-3 left-1/2 -translate-x-1/2 h-6 w-6 text-brand-blue animate-spin" style={{ animationDuration: '4s', animationDirection: 'reverse' }} />
+              </div>
+            </div>
+            <div className="lg:hidden flex items-center justify-center">
+              <ArrowRight className="h-6 w-6 text-brand-blue rotate-90" />
+            </div>
+
+            {/* GHL Side */}
+            <div className="flex flex-col items-center text-center lg:w-1/4">
+              <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border mb-4 overflow-hidden">
+                <img src={ghlIcon} alt="GoHighLevel" className="h-12 w-12 rounded-lg" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-1">GoHighLevel</h3>
+              <p className="text-sm text-muted-foreground">Seu CRM para gerenciar tudo em um só lugar</p>
+            </div>
+          </div>
+
+          {/* Steps */}
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="bg-card rounded-2xl p-8 border border-border text-center">
+              <div className="w-12 h-12 rounded-full bg-brand-green/10 flex items-center justify-center mx-auto mb-4">
+                <span className="text-xl font-bold text-brand-green">1</span>
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Conecte sua Instância</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Escaneie o QR Code para vincular seu número de WhatsApp à plataforma via UAZAPI. Simples e rápido.
+              </p>
+            </div>
+            <div className="bg-card rounded-2xl p-8 border border-border text-center">
+              <div className="w-12 h-12 rounded-full bg-brand-blue/10 flex items-center justify-center mx-auto mb-4">
+                <span className="text-xl font-bold text-brand-blue">2</span>
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">A Bridge Sincroniza</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                A Bridge API cria a ponte bidirecional entre o WhatsApp e o GHL. Mensagens, mídias, reações — tudo flui automaticamente.
+              </p>
+            </div>
+            <div className="bg-card rounded-2xl p-8 border border-border text-center">
+              <div className="w-12 h-12 rounded-full bg-brand-green/10 flex items-center justify-center mx-auto mb-4">
+                <span className="text-xl font-bold text-brand-green">3</span>
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Gerencie Tudo no GHL</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Responda, reaja, edite e apague mensagens diretamente do GoHighLevel. Múltiplos números, uma só interface.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
