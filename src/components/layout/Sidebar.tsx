@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettings } from "@/hooks/useSettings";
 import { useProfile } from "@/hooks/useProfile";
+import { useSubscription } from "@/hooks/useSubscription";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   LayoutDashboard,
   Settings,
@@ -38,6 +40,7 @@ export function Sidebar() {
   const { signOut } = useAuth();
   const { getOAuthUrl } = useSettings();
   const { profile } = useProfile();
+  const { hasActiveSubscription } = useSubscription();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -132,16 +135,30 @@ export function Sidebar() {
           })}
           {/* Install App Button */}
           {oauthUrl && (
-            <button
-              onClick={handleInstallApp}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors w-full text-left",
-                "text-sidebar-foreground hover:bg-sidebar-accent"
-              )}
-            >
-              <ExternalLink className="h-5 w-5 flex-shrink-0" />
-              {!collapsed && <span>Instalar App</span>}
-            </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={hasActiveSubscription ? handleInstallApp : undefined}
+                    disabled={!hasActiveSubscription}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors w-full text-left",
+                      hasActiveSubscription
+                        ? "text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
+                        : "text-sidebar-foreground/40 cursor-not-allowed"
+                    )}
+                  >
+                    <ExternalLink className="h-5 w-5 flex-shrink-0" />
+                    {!collapsed && <span>Instalar App</span>}
+                  </button>
+                </TooltipTrigger>
+                {!hasActiveSubscription && (
+                  <TooltipContent side="right">
+                    <p>Assine um plano para instalar o app</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           )}
         </nav>
 
