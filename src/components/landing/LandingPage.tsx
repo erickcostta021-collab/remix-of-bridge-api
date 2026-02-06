@@ -30,7 +30,13 @@ const LandingPage = () => {
             <img src={logo} alt="Bridge API" className="h-10 w-10" />
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-6">
+            <a 
+              href="#precos" 
+              className="text-muted-foreground hover:text-foreground transition-colors font-medium"
+            >
+              Preços
+            </a>
             <Link to="/login">
               <Button variant="outline" className="border-border text-foreground hover:bg-secondary">
                 Entrar
@@ -190,7 +196,7 @@ const LandingPage = () => {
       </section>
 
       {/* Pricing Section */}
-      <section className="py-20 px-6">
+      <section id="precos" className="py-20 px-6 scroll-mt-20">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
