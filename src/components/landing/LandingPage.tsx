@@ -51,7 +51,7 @@ const LandingPage = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link to="/login">
               <Button size="lg" className="bg-brand-green hover:bg-brand-green/90 text-white px-8 py-6 text-lg">
-                Comece Agora
+                Experimente Agora
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
