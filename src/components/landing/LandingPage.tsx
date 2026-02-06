@@ -30,13 +30,18 @@ const LandingPage = () => {
             <img src={logo} alt="Bridge API" className="h-10 w-10" />
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
           </div>
-          <div className="flex items-center gap-6">
+          
+          {/* Center Navigation */}
+          <nav className="hidden md:flex items-center">
             <a 
               href="#precos" 
               className="text-muted-foreground hover:text-foreground transition-colors font-medium"
             >
               Preços
             </a>
+          </nav>
+          
+          <div className="flex items-center gap-3">
             <Link to="/login">
               <Button variant="outline" className="border-border text-foreground hover:bg-secondary">
                 Entrar
