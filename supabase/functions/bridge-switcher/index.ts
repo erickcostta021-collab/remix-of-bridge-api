@@ -349,9 +349,9 @@ Deno.serve(async (req) => {
       console.log("Preference saved successfully:", { contactId, instanceId, leadPhone });
 
       // Create GHL InternalComment (visible in conversation history, NOT sent to contact)
-      // Using Conversations API (requires contactId)
-      if (conversationId && previousInstanceName && newInstanceName && previousInstanceName !== newInstanceName) {
-        console.log("Creating GHL InternalComment for instance switch");
+      // Resolves conversation by PHONE (not frontend conversationId which can be stale)
+      if (previousInstanceName && newInstanceName && previousInstanceName !== newInstanceName && leadPhone) {
+        console.log("Creating GHL InternalComment for instance switch via phone lookup");
 
         try {
           // Get the GHL access token for this location
@@ -371,9 +371,13 @@ Deno.serve(async (req) => {
             } else {
               const commentContent = "🔄 Instância alterada: " + previousInstanceName + " → " + newInstanceName;
 
-              // 1) Resolve contactId from conversation
-              const convResponse = await fetch(
-                "https://services.leadconnectorhq.com/conversations/" + conversationId,
+              // 1) Resolve conversation by phone (not the frontend conversationId which may be stale)
+              // Format phone for GHL search (with country code if available)
+              const phoneForSearch = leadPhone.startsWith("55") ? "+" + leadPhone : leadPhone;
+              console.log("Searching conversation by phone:", phoneForSearch);
+
+              const searchResponse = await fetch(
+                "https://services.leadconnectorhq.com/conversations/search?locationId=" + locationId + "&query=" + encodeURIComponent(phoneForSearch),
                 {
                   headers: {
                     Authorization: "Bearer " + subaccount.ghl_access_token,
@@ -383,41 +387,56 @@ Deno.serve(async (req) => {
                 }
               );
 
-              if (!convResponse.ok) {
-                const errorText = await convResponse.text();
-                console.error("Failed to get conversation details:", convResponse.status, errorText);
+              if (!searchResponse.ok) {
+                const errorText = await searchResponse.text();
+                console.error("Failed to search conversation by phone:", searchResponse.status, errorText);
               } else {
-                const convData = await convResponse.json();
-                const contactIdFromConv = convData?.conversation?.contactId || convData?.contactId;
-                console.log("Got contactId from conversation:", contactIdFromConv);
+                const searchData = await searchResponse.json();
+                const conversations = searchData?.conversations || [];
+                console.log("Found conversations:", conversations.length);
 
-                if (!contactIdFromConv) {
-                  console.log("No contactId found for conversation:", conversationId);
+                // Find the conversation that matches this phone
+                const matchedConv = conversations.find((c: { contactId?: string; phone?: string; id?: string }) => {
+                  const convPhone = c.phone?.replace(/\D/g, '') || '';
+                  const normalizedLead = leadPhone.replace(/\D/g, '');
+                  return convPhone.endsWith(normalizedLead.slice(-10)) || normalizedLead.endsWith(convPhone.slice(-10));
+                }) || conversations[0]; // Fallback to first result
+
+                if (!matchedConv) {
+                  console.log("No conversation found for phone:", phoneForSearch);
                 } else {
-                  // 2) Create InternalComment
-                  const ghlResponse = await fetch(
-                    "https://services.leadconnectorhq.com/conversations/messages",
-                    {
-                      method: "POST",
-                      headers: {
-                        Authorization: "Bearer " + subaccount.ghl_access_token,
-                        "Content-Type": "application/json",
-                        Version: "2021-04-15",
-                      },
-                      body: JSON.stringify({
-                        type: "InternalComment",
-                        conversationId: conversationId,
-                        contactId: contactIdFromConv,
-                        message: commentContent,
-                      }),
-                    }
-                  );
+                  const resolvedConversationId = matchedConv.id;
+                  const resolvedContactId = matchedConv.contactId;
+                  console.log("Resolved conversation:", { resolvedConversationId, resolvedContactId });
 
-                  if (ghlResponse.ok) {
-                    console.log("GHL InternalComment created successfully for conversation:", conversationId);
+                  if (!resolvedContactId) {
+                    console.log("No contactId in matched conversation");
                   } else {
-                    const errorText = await ghlResponse.text();
-                    console.error("Failed to create GHL InternalComment:", ghlResponse.status, errorText);
+                    // 2) Create InternalComment using resolved IDs
+                    const ghlResponse = await fetch(
+                      "https://services.leadconnectorhq.com/conversations/messages",
+                      {
+                        method: "POST",
+                        headers: {
+                          Authorization: "Bearer " + subaccount.ghl_access_token,
+                          "Content-Type": "application/json",
+                          Version: "2021-04-15",
+                        },
+                        body: JSON.stringify({
+                          type: "InternalComment",
+                          conversationId: resolvedConversationId,
+                          contactId: resolvedContactId,
+                          message: commentContent,
+                        }),
+                      }
+                    );
+
+                    if (ghlResponse.ok) {
+                      console.log("GHL InternalComment created successfully for conversation:", resolvedConversationId);
+                    } else {
+                      const errorText = await ghlResponse.text();
+                      console.error("Failed to create GHL InternalComment:", ghlResponse.status, errorText);
+                    }
                   }
                 }
               }
