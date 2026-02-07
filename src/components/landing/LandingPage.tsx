@@ -159,7 +159,7 @@ const LandingPage = () => {
             </div>
 
             {/* Full-width animated lines (WhatsApp → GHL) passing behind UAZAPI */}
-            <div className="hidden lg:block lg:w-[40%] relative" style={{ minHeight: '140px' }}>
+            <div className="hidden lg:block lg:w-[52%] relative" style={{ minHeight: '140px' }}>
               {/* Lines positioned to align with icon centers (icon is 80px tall, center at 40px) */}
               <div className="absolute left-0 right-0 flex flex-col gap-4 w-full" style={{ top: '32px' }}>
                 {/* Line 1 - Signal going right */}
