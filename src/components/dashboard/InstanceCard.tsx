@@ -394,13 +394,13 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
                     onClick={() => {
-                      unlinkInstance.mutate(instance);
+                      setDeleteFromUazapi(false);
+                      setDeleteDialogOpen(true);
                     }}
-                    disabled={unlinkInstance.isPending}
                     className="text-amber-400"
                   >
                     <Unlink className="h-4 w-4 mr-2" />
-                    {unlinkInstance.isPending ? "Desvinculando..." : "Desvincular"}
+                    Desvincular
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={() => {
