@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -5,6 +6,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 
 interface GroupCommandsDialogProps {
   open: boolean;
@@ -101,6 +104,18 @@ const commands = [
 ];
 
 export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogProps) {
+  const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
+
+  const handleCopy = (cmd: typeof commands[0]) => {
+    const fullCommand = cmd.format
+      ? `${cmd.command} ${cmd.format}`
+      : cmd.command;
+    navigator.clipboard.writeText(fullCommand);
+    setCopiedCommand(cmd.command);
+    toast.success("Comando copiado!");
+    setTimeout(() => setCopiedCommand(null), 2000);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
@@ -119,6 +134,7 @@ export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogP
                 <th className="text-left px-4 py-3 font-semibold text-foreground hidden sm:table-cell">Descrição</th>
                 <th className="text-left px-4 py-3 font-semibold text-foreground">Formato</th>
                 <th className="text-left px-4 py-3 font-semibold text-foreground hidden md:table-cell">Contexto</th>
+                <th className="px-3 py-3 w-10"></th>
               </tr>
             </thead>
             <tbody>
@@ -152,6 +168,19 @@ export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogP
                     >
                       {cmd.context}
                     </Badge>
+                  </td>
+                  <td className="px-3 py-3">
+                    <button
+                      onClick={() => handleCopy(cmd)}
+                      className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                      title="Copiar comando"
+                    >
+                      {copiedCommand === cmd.command ? (
+                        <Check className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </button>
                   </td>
                 </tr>
               ))}
