@@ -118,8 +118,11 @@ async function getInstanceForLocation(supabase: any, locationId: string) {
     .eq("user_id", instance.ghl_subaccounts.user_id)
     .maybeSingle();
 
-  if (!settings?.uazapi_base_url) {
-    console.log("⚠️ No UAZAPI base URL configured for user");
+  // Per-instance base URL takes priority over global settings
+  const resolvedBaseUrl = instance.uazapi_base_url || settings?.uazapi_base_url;
+
+  if (!resolvedBaseUrl) {
+    console.log("⚠️ No UAZAPI base URL configured for instance or user");
     return null;
   }
 
@@ -127,7 +130,7 @@ async function getInstanceForLocation(supabase: any, locationId: string) {
     instance,
     subaccount: instance.ghl_subaccounts,
     settings,
-    baseUrl: settings.uazapi_base_url,
+    baseUrl: resolvedBaseUrl,
     token: instance.uazapi_instance_token,
     ghlUserId: instance.ghl_user_id, // GHL user assigned to this instance
   };

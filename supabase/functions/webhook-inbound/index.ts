@@ -808,7 +808,7 @@ serve(async (req) => {
 
       // Try to get caption/transcription from UAZAPI download response
       let fdCaption = "";
-      const fdBaseUrl = fdSettings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
+      const fdBaseUrl = fdInstance.uazapi_base_url?.replace(/\/$/, "") || fdSettings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
       if (fdBaseUrl && fdMessageId) {
         try {
           const dlRes = await fetch(`${fdBaseUrl}/message/download`, {
@@ -1927,7 +1927,7 @@ serve(async (req) => {
     // Prepare media URL if needed
     let publicMediaUrl = mediaUrl;
     if (isMediaMessage && mediaUrl) {
-      const baseUrl = settings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
+      const baseUrl = instance.uazapi_base_url?.replace(/\/$/, "") || settings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
       const messageId = messageData.messageid || messageData.id || "";
       
       // Try to get public URL via UAZAPI download endpoint (POST /message/download)

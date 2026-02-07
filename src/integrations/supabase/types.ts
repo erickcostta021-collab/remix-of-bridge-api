@@ -165,6 +165,7 @@ export type Database = {
           phone: string | null
           profile_pic_url: string | null
           subaccount_id: string | null
+          uazapi_base_url: string | null
           uazapi_instance_token: string
           updated_at: string
           user_id: string
@@ -180,6 +181,7 @@ export type Database = {
           phone?: string | null
           profile_pic_url?: string | null
           subaccount_id?: string | null
+          uazapi_base_url?: string | null
           uazapi_instance_token: string
           updated_at?: string
           user_id: string
@@ -195,6 +197,7 @@ export type Database = {
           phone?: string | null
           profile_pic_url?: string | null
           subaccount_id?: string | null
+          uazapi_base_url?: string | null
           uazapi_instance_token?: string
           updated_at?: string
           user_id?: string
