@@ -380,7 +380,7 @@ export function useInstances(subaccountId?: string) {
     }
   };
 
-  // Import existing instance from UAZAPI
+  // Import existing instance from UAZAPI (or re-link an unlinked one)
   const importInstance = useMutation({
     mutationFn: async ({ 
       uazapiInstance, 
@@ -396,17 +396,32 @@ export function useInstances(subaccountId?: string) {
         throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
       }
 
-      // Check if already imported
+      // Check if already exists in DB
       const { data: existing } = await supabase
         .from("instances")
-        .select("id")
+        .select("id, subaccount_id")
         .eq("uazapi_instance_token", uazapiInstance.token)
         .maybeSingle();
 
-      if (existing) {
-        throw new Error("Esta instância já foi importada");
+      // If exists and already linked to a subaccount, block
+      if (existing && existing.subaccount_id) {
+        throw new Error("Esta instância já está vinculada a uma subconta");
       }
 
+      // If exists but unlinked (subaccount_id = null), re-link it
+      if (existing && !existing.subaccount_id) {
+        const { data, error } = await supabase
+          .from("instances")
+          .update({ subaccount_id: subaccountId })
+          .eq("id", existing.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      }
+
+      // Otherwise, create new record
       let mappedStatus: InstanceStatus = "disconnected";
       if (uazapiInstance.status === "connected" || uazapiInstance.status === "open") {
         mappedStatus = "connected";
@@ -435,7 +450,8 @@ export function useInstances(subaccountId?: string) {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
       queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
-      toast.success("Instância importada com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["all-user-instances"] });
+      toast.success("Instância vinculada com sucesso!");
     },
     onError: (error) => {
       toast.error("Erro ao importar: " + error.message);
