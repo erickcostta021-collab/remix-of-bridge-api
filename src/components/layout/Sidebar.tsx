@@ -16,7 +16,9 @@ import {
   ExternalLink,
   Wrench,
   Users,
+  MessageSquare,
 } from "lucide-react";
+import { CustomizeSmsDialog } from "@/components/dashboard/CustomizeSmsDialog";
 
 import { useSidebarState } from "@/hooks/useSidebarState";
 
@@ -32,6 +34,7 @@ export function Sidebar() {
   const location = useLocation();
   const [utilitiesOpen, setUtilitiesOpen] = useState(false);
   const [groupCommandsOpen, setGroupCommandsOpen] = useState(false);
+  const [customizeSmsOpen, setCustomizeSmsOpen] = useState(false);
 
   const oauthUrl = getOAuthUrl();
 
@@ -165,6 +168,16 @@ export function Sidebar() {
                   <Users className="h-4 w-4 flex-shrink-0" />
                   <span className="whitespace-nowrap">Gerenciar Grupos</span>
                 </button>
+                <button
+                  onClick={() => setCustomizeSmsOpen(true)}
+                  className={cn(
+                    "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
+                    "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                >
+                  <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">Customizar SMS</span>
+                </button>
               </div>
             )}
           </div>
@@ -225,6 +238,9 @@ export function Sidebar() {
 
       {/* Group Commands Dialog */}
       <GroupCommandsDialog open={groupCommandsOpen} onOpenChange={setGroupCommandsOpen} />
+
+      {/* Customize SMS Dialog */}
+      <CustomizeSmsDialog open={customizeSmsOpen} onOpenChange={setCustomizeSmsOpen} />
     </>
   );
 }
