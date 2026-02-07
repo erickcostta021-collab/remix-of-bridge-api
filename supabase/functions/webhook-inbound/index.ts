@@ -1187,7 +1187,23 @@ serve(async (req) => {
           
           // If this was an OUTBOUND edit (agent edited on mobile), mirror the action in GHL using InternalComment
           // (same UX as when the edit is made inside GHL via the Toolkit)
-          if (mapping.from_me && mapping.contact_id && mapping.location_id) {
+          // BUT: skip if map-messages already handled this edit (Bridge Toolkit flow)
+          // to prevent duplicate InternalComments.
+          let editAlreadyHandled = false;
+          if (mapping.from_me && mapping.uazapi_message_id) {
+            const editIcKey = `edit-ic:${mapping.uazapi_message_id}`;
+            const { data: existing } = await supabase
+              .from("ghl_processed_messages")
+              .select("id")
+              .eq("message_id", editIcKey)
+              .maybeSingle();
+            if (existing) {
+              editAlreadyHandled = true;
+              console.log("⏭️ Edit InternalComment already sent by map-messages, skipping duplicate:", editIcKey);
+            }
+          }
+
+          if (mapping.from_me && mapping.contact_id && mapping.location_id && !editAlreadyHandled) {
             try {
               const { data: instanceData } = await supabase
                 .from("instances")
