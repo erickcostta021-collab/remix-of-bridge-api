@@ -132,7 +132,10 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://bridge-api.lovable.app";
     
-    // Create checkout session with 5-day trial
+    // Trial only for flexible plan with exactly 1 instance
+    const isTrialEligible = plan === "flexible" && (quantity || 1) === 1;
+    logStep("Trial eligibility", { isTrialEligible, plan, quantity });
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : userEmail,
@@ -142,10 +145,8 @@ serve(async (req) => {
       cancel_url: `${origin}/?checkout=canceled`,
       allow_promotion_codes: true,
       billing_address_collection: "required",
-      payment_method_collection: "always", // Always collect payment method upfront
-      subscription_data: {
-        trial_period_days: 5, // 5-day free trial
-      },
+      payment_method_collection: "always",
+      ...(isTrialEligible ? { subscription_data: { trial_period_days: 5 } } : {}),
       metadata: {
         plan,
         quantity: quantity || 1,
