@@ -165,7 +165,7 @@ const Checkout = () => {
             </h1>
             <p className="text-muted-foreground">
               {isLoggedIn 
-                ? "Confirme seu plano e continue com o checkout"
+                ? "Confirme seu plano e finalize a assinatura"
                 : "Insira seu email para continuar com o checkout"
               }
             </p>
@@ -239,24 +239,20 @@ const Checkout = () => {
 
             {/* Email Form */}
             <form onSubmit={handleCheckout} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={loading || isLoggedIn}
-                  className={isLoggedIn ? "bg-secondary/50 text-muted-foreground" : ""}
-                />
-                {isLoggedIn && (
-                  <p className="text-xs text-muted-foreground">
-                    Usando o e-mail da sua conta logada
-                  </p>
-                )}
-              </div>
+              {!isLoggedIn && (
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="seu@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={loading}
+                  />
+                </div>
+              )}
 
               <Button
                 type="submit"
@@ -279,18 +275,22 @@ const Checkout = () => {
               </Button>
             </form>
 
-            <p className="text-xs text-muted-foreground text-center mt-4">
-              Ao continuar, você será redirecionado para o Stripe para finalizar o pagamento.
-              Após a confirmação, você poderá criar sua conta.
-            </p>
+            {!isLoggedIn && (
+              <p className="text-xs text-muted-foreground text-center mt-4">
+                Ao continuar, você será redirecionado para o Stripe para finalizar o pagamento.
+                Após a confirmação, você poderá criar sua conta.
+              </p>
+            )}
           </div>
 
-          <p className="text-center text-sm text-muted-foreground mt-6">
-            Já tem uma conta?{" "}
-            <Link to="/login" className="text-brand-green hover:underline">
-              Faça login
-            </Link>
-          </p>
+          {!isLoggedIn && (
+            <p className="text-center text-sm text-muted-foreground mt-6">
+              Já tem uma conta?{" "}
+              <Link to="/login" className="text-brand-green hover:underline">
+                Faça login
+              </Link>
+            </p>
+          )}
         </div>
       </main>
     </div>
