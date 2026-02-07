@@ -61,7 +61,8 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
     instances, 
     fetchUazapiInstances,
     instanceLimit,
-    totalInstanceCount,
+    linkedInstanceCount,
+    unlinkedInstanceCount,
     canCreateInstance,
   } = useInstances(subaccount.id);
   const { fetchLocationUsers } = useGHLUsers();
@@ -204,7 +205,8 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
             Crie uma nova ou vincule uma existente.
             {instanceLimit > 0 && (
               <span className="block mt-1 text-xs">
-                Usando {totalInstanceCount} de {instanceLimit} instâncias
+                {linkedInstanceCount} vinculada{linkedInstanceCount !== 1 ? "s" : ""} de {instanceLimit} do plano
+                {unlinkedInstanceCount > 0 && ` · ${unlinkedInstanceCount} disponíve${unlinkedInstanceCount !== 1 ? "is" : "l"}`}
               </span>
             )}
           </DialogDescription>

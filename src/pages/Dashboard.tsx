@@ -22,7 +22,7 @@ export default function Dashboard() {
   const [selectedSubaccount, setSelectedSubaccount] = useState<Subaccount | null>(null);
   const [search, setSearch] = useState("");
   const { subaccounts, isLoading, syncSubaccounts, isSharedAccount } = useSubaccounts();
-  const { instances, syncAllInstancesStatus } = useInstances(selectedSubaccount?.id);
+  const { instances, syncAllInstancesStatus, linkedInstanceCount, unlinkedInstanceCount, instanceLimit } = useInstances(selectedSubaccount?.id);
   const { settings } = useSettings();
   const { hasActiveSubscription } = useSubscription();
 
@@ -64,6 +64,12 @@ export default function Dashboard() {
               <div>
                 <p className="font-medium text-foreground">{selectedSubaccount.account_name}</p>
                 <p className="text-xs text-muted-foreground font-mono">{selectedSubaccount.location_id}</p>
+                {instanceLimit > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {linkedInstanceCount} vinculada{linkedInstanceCount !== 1 ? "s" : ""} de {instanceLimit}
+                    {unlinkedInstanceCount > 0 && ` · ${unlinkedInstanceCount} disponíve${unlinkedInstanceCount !== 1 ? "is" : "l"}`}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Button

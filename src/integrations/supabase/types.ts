@@ -164,7 +164,7 @@ export type Database = {
           instance_status: Database["public"]["Enums"]["instance_status"]
           phone: string | null
           profile_pic_url: string | null
-          subaccount_id: string
+          subaccount_id: string | null
           uazapi_instance_token: string
           updated_at: string
           user_id: string
@@ -179,7 +179,7 @@ export type Database = {
           instance_status?: Database["public"]["Enums"]["instance_status"]
           phone?: string | null
           profile_pic_url?: string | null
-          subaccount_id: string
+          subaccount_id?: string | null
           uazapi_instance_token: string
           updated_at?: string
           user_id: string
@@ -194,7 +194,7 @@ export type Database = {
           instance_status?: Database["public"]["Enums"]["instance_status"]
           phone?: string | null
           profile_pic_url?: string | null
-          subaccount_id?: string
+          subaccount_id?: string | null
           uazapi_instance_token?: string
           updated_at?: string
           user_id?: string
