@@ -65,7 +65,7 @@ export function AuthForm() {
 
       if (error) throw error;
 
-      toast.success("Solicitação enviada! Aguarde o código de aprovação.");
+      toast.success("Código enviado! Verifique seu e-mail.");
       setStep("enter-code");
     } catch (error: any) {
       console.error("Error requesting code:", error);
@@ -159,8 +159,8 @@ export function AuthForm() {
           </CardTitle>
           <CardDescription className="text-muted-foreground">
             {step === "login" && "Entre para gerenciar suas instâncias"}
-            {step === "request-code" && "Solicite aprovação para criar conta"}
-            {step === "enter-code" && "Digite o código de aprovação"}
+            {step === "request-code" && "Informe seu e-mail para receber o código"}
+            {step === "enter-code" && "Digite o código enviado para seu e-mail"}
             {step === "create-account" && "Crie sua senha"}
           </CardDescription>
         </CardHeader>
@@ -209,8 +209,8 @@ export function AuthForm() {
                 <div className="flex items-start gap-3">
                   <Mail className="h-5 w-5 text-primary mt-0.5" />
                   <div className="text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground mb-1">Sistema de Convite</p>
-                    <p>Ao solicitar uma conta, um código de aprovação será enviado ao administrador. Você receberá o código para prosseguir com o cadastro.</p>
+                    <p className="font-medium text-foreground mb-1">Verificação por E-mail</p>
+                    <p>Enviaremos um código de verificação para o seu e-mail. Use-o para confirmar sua conta e criar sua senha.</p>
                   </div>
                 </div>
               </div>
@@ -232,7 +232,7 @@ export function AuthForm() {
                 disabled={loading}
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Solicitar Código de Aprovação
+                Enviar Código de Verificação
               </Button>
             </form>
           )}
@@ -243,13 +243,13 @@ export function AuthForm() {
                 <div className="flex items-start gap-3">
                   <KeyRound className="h-5 w-5 text-primary mt-0.5" />
                   <div className="text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground mb-1">Aguardando Aprovação</p>
-                    <p>Um código de aprovação foi enviado para o administrador. Quando você receber o código, digite-o abaixo.</p>
+                    <p className="font-medium text-foreground mb-1">Verifique seu E-mail</p>
+                    <p>Enviamos um código de 6 dígitos para <strong>{email}</strong>. Verifique sua caixa de entrada e spam.</p>
                   </div>
                 </div>
               </div>
               <div className="space-y-2">
-                <Label className="text-foreground">Código de Aprovação</Label>
+                <Label className="text-foreground">Código de Verificação</Label>
                 <div className="flex justify-center">
                   <InputOTP
                     maxLength={6}
@@ -280,7 +280,7 @@ export function AuthForm() {
                 onClick={() => setStep("request-code")}
                 className="w-full text-muted-foreground"
               >
-                Solicitar novo código
+                Reenviar código
               </Button>
             </div>
           )}
@@ -291,7 +291,7 @@ export function AuthForm() {
                 <div className="flex items-center gap-3">
                   <CheckCircle className="h-5 w-5 text-primary" />
                   <div className="text-sm">
-                    <p className="font-medium text-foreground">Código Aprovado!</p>
+                    <p className="font-medium text-foreground">E-mail Verificado!</p>
                     <p className="text-muted-foreground">Agora crie sua senha para finalizar o cadastro.</p>
                   </div>
                 </div>

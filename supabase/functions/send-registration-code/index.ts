@@ -9,9 +9,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Email do administrador que recebe os códigos de aprovação
-const ADMIN_EMAIL = "erickcostta021@gmail.com";
-
 interface RegistrationRequest {
   email: string;
 }
@@ -81,39 +78,41 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Enviar email para o administrador
+    // Enviar código de verificação para o próprio usuário
     const emailResponse = await resend.emails.send({
-      from: "Instance Manager Hub <onboarding@resend.dev>",
-      to: [ADMIN_EMAIL],
-      subject: `🔐 Código de Aprovação para: ${email}`,
+      from: "Bridge API <onboarding@resend.dev>",
+      to: [email],
+      subject: `🔐 Seu código de verificação: ${code}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h1 style="color: #22c55e;">Nova Solicitação de Registro</h1>
-          <p>Alguém está tentando criar uma conta no Instance Manager Hub:</p>
-          
-          <div style="background: #f4f4f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 0;"><strong>Email:</strong> ${email}</p>
-            <p style="margin: 10px 0 0 0;"><strong>Data:</strong> ${new Date().toLocaleString("pt-BR")}</p>
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #22c55e; margin: 0;">Bridge API</h1>
+            <p style="color: #666; margin-top: 5px;">Instance Manager</p>
           </div>
           
-          <p>Se você deseja aprovar este registro, forneça o código abaixo:</p>
+          <h2 style="color: #333; text-align: center;">Confirme seu cadastro</h2>
           
-          <div style="background: #22c55e; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
-            <h2 style="margin: 0; font-size: 32px; letter-spacing: 4px;">${code}</h2>
+          <p style="color: #555; text-align: center;">Use o código abaixo para verificar seu e-mail e finalizar a criação da sua conta:</p>
+          
+          <div style="background: #22c55e; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
+            <h2 style="margin: 0; font-size: 36px; letter-spacing: 6px; font-family: monospace;">${code}</h2>
           </div>
           
-          <p style="color: #666; font-size: 14px;">Este código expira em 24 horas.</p>
-          <p style="color: #666; font-size: 14px;">Se você não reconhece esta solicitação, ignore este email.</p>
+          <p style="color: #666; font-size: 14px; text-align: center;">Este código expira em 24 horas.</p>
+          <p style="color: #666; font-size: 14px; text-align: center;">Se você não solicitou este código, ignore este e-mail.</p>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+          <p style="color: #999; font-size: 12px; text-align: center;">Bridge API — Instance Manager Hub</p>
         </div>
       `,
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    console.log("Verification email sent to user:", emailResponse);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: "Código de aprovação enviado para o administrador" 
+        message: "Código de verificação enviado para seu e-mail" 
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
