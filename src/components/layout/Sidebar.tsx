@@ -17,8 +17,10 @@ import {
   Wrench,
   Users,
   MessageSquare,
+  Palette,
 } from "lucide-react";
 import { CustomizeSmsDialog } from "@/components/dashboard/CustomizeSmsDialog";
+import { WhatsAppThemeDialog } from "@/components/dashboard/WhatsAppThemeDialog";
 
 import { useSidebarState } from "@/hooks/useSidebarState";
 
@@ -35,6 +37,7 @@ export function Sidebar() {
   const [utilitiesOpen, setUtilitiesOpen] = useState(false);
   const [groupCommandsOpen, setGroupCommandsOpen] = useState(false);
   const [customizeSmsOpen, setCustomizeSmsOpen] = useState(false);
+  const [whatsappThemeOpen, setWhatsappThemeOpen] = useState(false);
 
   const oauthUrl = getOAuthUrl();
 
@@ -178,6 +181,16 @@ export function Sidebar() {
                   <MessageSquare className="h-4 w-4 flex-shrink-0" />
                   <span className="whitespace-nowrap">Customizar SMS</span>
                 </button>
+                <button
+                  onClick={() => setWhatsappThemeOpen(true)}
+                  className={cn(
+                    "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
+                    "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                >
+                  <Palette className="h-4 w-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">Tema WhatsApp</span>
+                </button>
               </div>
             )}
           </div>
@@ -241,6 +254,9 @@ export function Sidebar() {
 
       {/* Customize SMS Dialog */}
       <CustomizeSmsDialog open={customizeSmsOpen} onOpenChange={setCustomizeSmsOpen} />
+
+      {/* WhatsApp Theme Dialog */}
+      <WhatsAppThemeDialog open={whatsappThemeOpen} onOpenChange={setWhatsappThemeOpen} />
     </>
   );
 }
