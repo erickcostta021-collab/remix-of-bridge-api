@@ -1992,100 +1992,128 @@ serve(async (req) => {
           // ignore
         }
       } else if (textMessage) {
-        console.log("Sending outbound text to GHL (inbound endpoint):", { textMessage: textMessage?.substring(0, 50) });
-        const before = Date.now();
-        // Use /inbound endpoint with direction=outbound to avoid triggering GHL webhooks
-        const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Version": "2021-04-15",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-          },
-          body: JSON.stringify({
-            type: "SMS",
-            contactId: contact.id,
-            message: textMessage,
-            status: "delivered",
-            direction: "outbound", // Critical: marks as outbound but won't trigger webhooks
-            ...(instance.ghl_user_id && { userId: instance.ghl_user_id }), // Show message as sent by assigned user
-          }),
-        });
-        const bodyText = await res.text();
-        console.log("GHL outbound-text response (no webhook):", { status: res.status, ms: Date.now() - before, body: bodyText.substring(0, 500) });
-        if (!res.ok) throw new Error("Failed to send outbound message to GHL");
+        const uazapiMsgId = messageData.messageid || messageData.id || "";
 
-        try {
-          const parsed = JSON.parse(bodyText);
-          const ghlMessageId = String(parsed?.messageId || "");
-          if (ghlMessageId) {
-            await markIfNew(supabase, `ghl:${ghlMessageId}`);
+        // If this outbound message is a WhatsApp Reply (has quoted context),
+        // send ONLY the InternalComment (which already contains the full text + reply context).
+        // This avoids creating a duplicate: the normal text message AND the InternalComment.
+        if ((quotedMessageId || quotedText) && contact?.id) {
+          console.log("Outbound reply detected – sending only InternalComment (no duplicate text):", {
+            textMessage: textMessage?.substring(0, 50),
+            quotedMessageId,
+            quotedText: quotedText?.substring(0, 50),
+          });
 
-            // Save message mapping for edit/react/delete functionality
-            const uazapiMsgId = messageData.messageid || messageData.id || "";
-            await supabase.from("message_map").upsert({
-              ghl_message_id: ghlMessageId,
-              uazapi_message_id: uazapiMsgId || null,
-              location_id: subaccount.location_id,
-              contact_id: contact.id,
-              message_text: textMessage,
-              message_type: "text",
-              from_me: true,
-              original_timestamp: new Date().toISOString(),
-            }, { onConflict: "ghl_message_id" });
-            console.log("Message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+          try {
+            let originalText = quotedText || "";
 
-            // If this outbound message was a WhatsApp Reply (sent from mobile), mirror the action in GHL using InternalComment
-            // (same UX as when the reply is made inside GHL via the Toolkit)
-            if ((quotedMessageId || quotedText) && contact?.id) {
+            if (!originalText && quotedMessageId) {
+              const { data: originalMapping } = await supabase
+                .from("message_map")
+                .select("message_text")
+                .eq("uazapi_message_id", quotedMessageId)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (originalMapping?.message_text) originalText = originalMapping.message_text;
+            }
+
+            const formattedReplyComment = originalText
+              ? `↩️ Respondendo a: "${originalText.substring(0, 100)}${originalText.length > 100 ? '...' : ''}"\n\n${textMessage}`
+              : textMessage;
+
+            const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Version": "2021-04-15",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+              },
+              body: JSON.stringify({
+                type: "InternalComment",
+                contactId: contact.id,
+                message: formattedReplyComment,
+                ...(instance.ghl_user_id && { userId: instance.ghl_user_id }),
+              }),
+            });
+
+            const icText = await icRes.text();
+            if (!icRes.ok) {
+              console.error("Failed to send reply InternalComment (mobile) to GHL:", icText.substring(0, 300));
+            } else {
+              console.log("✅ Reply InternalComment mirrored (mobile):", icText.substring(0, 200));
+
+              // Save mapping from InternalComment response
               try {
-                let originalText = quotedText || "";
-
-                if (!originalText && quotedMessageId) {
-                  const { data: originalMapping } = await supabase
-                    .from("message_map")
-                    .select("message_text")
-                    .eq("uazapi_message_id", quotedMessageId)
-                    .order("created_at", { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
-                  if (originalMapping?.message_text) originalText = originalMapping.message_text;
+                const parsed = JSON.parse(icText);
+                const ghlMessageId = String(parsed?.messageId || "");
+                if (ghlMessageId) {
+                  await markIfNew(supabase, `ghl:${ghlMessageId}`);
+                  await supabase.from("message_map").upsert({
+                    ghl_message_id: ghlMessageId,
+                    uazapi_message_id: uazapiMsgId || null,
+                    location_id: subaccount.location_id,
+                    contact_id: contact.id,
+                    message_text: textMessage,
+                    message_type: "text",
+                    from_me: true,
+                    original_timestamp: new Date().toISOString(),
+                  }, { onConflict: "ghl_message_id" });
+                  console.log("Reply mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
                 }
-
-                if (originalText) {
-                  const formattedReplyComment = `↩️ Respondendo a: "${originalText.substring(0, 100)}${originalText.length > 100 ? '...' : ''}"\n\n${textMessage}`;
-
-                  const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
-                    method: "POST",
-                    headers: {
-                      "Authorization": `Bearer ${token}`,
-                      "Version": "2021-04-15",
-                      "Content-Type": "application/json",
-                      "Accept": "application/json",
-                    },
-                    body: JSON.stringify({
-                      type: "InternalComment",
-                      contactId: contact.id,
-                      message: formattedReplyComment,
-                      ...(instance.ghl_user_id && { userId: instance.ghl_user_id }),
-                    }),
-                  });
-
-                  const icText = await icRes.text();
-                  if (!icRes.ok) {
-                    console.error("Failed to send reply InternalComment (mobile) to GHL:", icText.substring(0, 300));
-                  } else {
-                    console.log("✅ Reply InternalComment mirrored (mobile):", icText.substring(0, 200));
-                  }
-                }
-              } catch (e) {
-                console.error("Error mirroring mobile reply as InternalComment:", e);
+              } catch {
+                // ignore parse errors
               }
             }
+          } catch (e) {
+            console.error("Error creating reply InternalComment:", e);
           }
-        } catch {
-          // ignore
+        } else {
+          // Normal outbound text (no reply context) – send as regular outbound message
+          console.log("Sending outbound text to GHL (inbound endpoint):", { textMessage: textMessage?.substring(0, 50) });
+          const before = Date.now();
+          const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Version": "2021-04-15",
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify({
+              type: "SMS",
+              contactId: contact.id,
+              message: textMessage,
+              status: "delivered",
+              direction: "outbound",
+              ...(instance.ghl_user_id && { userId: instance.ghl_user_id }),
+            }),
+          });
+          const bodyText = await res.text();
+          console.log("GHL outbound-text response (no webhook):", { status: res.status, ms: Date.now() - before, body: bodyText.substring(0, 500) });
+          if (!res.ok) throw new Error("Failed to send outbound message to GHL");
+
+          try {
+            const parsed = JSON.parse(bodyText);
+            const ghlMessageId = String(parsed?.messageId || "");
+            if (ghlMessageId) {
+              await markIfNew(supabase, `ghl:${ghlMessageId}`);
+              await supabase.from("message_map").upsert({
+                ghl_message_id: ghlMessageId,
+                uazapi_message_id: uazapiMsgId || null,
+                location_id: subaccount.location_id,
+                contact_id: contact.id,
+                message_text: textMessage,
+                message_type: "text",
+                from_me: true,
+                original_timestamp: new Date().toISOString(),
+              }, { onConflict: "ghl_message_id" });
+              console.log("Message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+            }
+          } catch {
+            // ignore
+          }
         }
       }
 
