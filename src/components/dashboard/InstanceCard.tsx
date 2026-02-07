@@ -67,7 +67,8 @@ export function InstanceCard({ instance }: InstanceCardProps) {
     connectInstance,
     disconnectInstance,
     updateInstanceGHLUser,
-    reconfigureWebhook
+    reconfigureWebhook,
+    unlinkInstance
   } = useInstances();
   const { fetchLocationUsers } = useGHLUsers();
   
@@ -401,13 +402,13 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
                     onClick={() => {
-                      setDeleteFromUazapi(false);
-                      setDeleteDialogOpen(true);
+                      unlinkInstance.mutate(instance);
                     }}
+                    disabled={unlinkInstance.isPending}
                     className="text-amber-400"
                   >
                     <Unlink className="h-4 w-4 mr-2" />
-                    Desvincular
+                    {unlinkInstance.isPending ? "Desvinculando..." : "Desvincular"}
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={() => {

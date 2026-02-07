@@ -11,7 +11,7 @@ type InstanceStatus = Database["public"]["Enums"]["instance_status"];
 export interface Instance {
   id: string;
   user_id: string;
-  subaccount_id: string;
+  subaccount_id: string | null;
   instance_name: string;
   uazapi_instance_token: string;
   instance_status: InstanceStatus;
@@ -38,9 +38,9 @@ export function useInstances(subaccountId?: string) {
   // Check if this account is sharing from another user
   const isSharedAccount = !!settings?.shared_from_user_id;
 
-  // Get total instance count for limit checking
-  const { data: totalInstanceCount = 0 } = useQuery({
-    queryKey: ["instance-count", user?.id, settings?.shared_from_user_id],
+  // Get linked instance count (only instances linked to subaccounts count toward limit)
+  const { data: linkedInstanceCount = 0 } = useQuery({
+    queryKey: ["instance-count-linked", user?.id, settings?.shared_from_user_id],
     queryFn: async () => {
       if (!user) return 0;
       const effectiveUserId = await getEffectiveUserId(user.id);
@@ -48,7 +48,27 @@ export function useInstances(subaccountId?: string) {
       const { count, error } = await supabase
         .from("instances")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", effectiveUserId);
+        .eq("user_id", effectiveUserId)
+        .not("subaccount_id", "is", null);
+      
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: !!user,
+  });
+
+  // Get unlinked instance count (instances not associated with any subaccount)
+  const { data: unlinkedInstanceCount = 0 } = useQuery({
+    queryKey: ["instance-count-unlinked", user?.id, settings?.shared_from_user_id],
+    queryFn: async () => {
+      if (!user) return 0;
+      const effectiveUserId = await getEffectiveUserId(user.id);
+      
+      const { count, error } = await supabase
+        .from("instances")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", effectiveUserId)
+        .is("subaccount_id", null);
       
       if (error) throw error;
       return count ?? 0;
@@ -371,8 +391,8 @@ export function useInstances(subaccountId?: string) {
     }) => {
       if (!user) throw new Error("Não autenticado");
 
-      // Check instance limit
-      if (instanceLimit > 0 && totalInstanceCount >= instanceLimit) {
+      // Check instance limit (only linked instances count)
+      if (instanceLimit > 0 && linkedInstanceCount >= instanceLimit) {
         throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
       }
 
@@ -413,6 +433,8 @@ export function useInstances(subaccountId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
       toast.success("Instância importada com sucesso!");
     },
     onError: (error) => {
@@ -426,8 +448,8 @@ export function useInstances(subaccountId?: string) {
         throw new Error("Configurações UAZAPI não encontradas");
       }
 
-      // Check instance limit
-      if (instanceLimit > 0 && totalInstanceCount >= instanceLimit) {
+      // Check instance limit (only linked instances count)
+      if (instanceLimit > 0 && linkedInstanceCount >= instanceLimit) {
         throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
       }
 
@@ -478,6 +500,8 @@ export function useInstances(subaccountId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
       toast.success("Instância criada com sucesso!");
     },
     onError: (error) => {
@@ -525,12 +549,35 @@ export function useInstances(subaccountId?: string) {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
       toast.success(variables.deleteFromUazapi 
         ? "Instância excluída do sistema e da UAZAPI!" 
         : "Instância removida do sistema!");
     },
     onError: (error) => {
       toast.error("Erro ao excluir: " + error.message);
+    },
+  });
+
+  // Unlink instance from subaccount (keeps instance but removes subaccount association)
+  const unlinkInstance = useMutation({
+    mutationFn: async (instance: Instance) => {
+      const { error } = await supabase
+        .from("instances")
+        .update({ subaccount_id: null })
+        .eq("id", instance.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
+      toast.success("Instância desvinculada da subconta!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao desvincular: " + error.message);
     },
   });
 
@@ -845,6 +892,7 @@ export function useInstances(subaccountId?: string) {
     isLoading,
     createInstance,
     deleteInstance,
+    unlinkInstance,
     importInstance,
     getQRCode,
     connectInstance,
@@ -857,7 +905,9 @@ export function useInstances(subaccountId?: string) {
     fetchUazapiInstances,
     // Instance limit info
     instanceLimit,
-    totalInstanceCount,
-    canCreateInstance: instanceLimit === 0 || totalInstanceCount < instanceLimit,
+    linkedInstanceCount,
+    unlinkedInstanceCount,
+    totalInstanceCount: linkedInstanceCount + unlinkedInstanceCount,
+    canCreateInstance: instanceLimit === 0 || linkedInstanceCount < instanceLimit,
   };
 }
