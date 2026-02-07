@@ -413,14 +413,15 @@ function parseGroupCommand(text: string): { command: string; params: string[] } 
   const trimmed = text.trim();
   if (!trimmed.startsWith("#")) return null;
   
-  const firstSpace = trimmed.indexOf(" ");
-  if (firstSpace === -1) {
+  // Support both space and tab as separator between command and params
+  const firstWS = trimmed.search(/[\s\t]/);
+  if (firstWS === -1) {
     return { command: trimmed.toLowerCase(), params: [] };
   }
   
-  const command = trimmed.substring(0, firstSpace).toLowerCase();
-  const paramsStr = trimmed.substring(firstSpace + 1);
-  const params = paramsStr.split("|").map(p => p.trim());
+  const command = trimmed.substring(0, firstWS).toLowerCase();
+  const paramsStr = trimmed.substring(firstWS).trim();
+  const params = paramsStr.split("|").map(p => p.trim()).filter(p => p.length > 0);
   
   return { command, params };
 }
