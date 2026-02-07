@@ -35,8 +35,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Loader2, RefreshCw, HelpCircle, User, AlertTriangle, Unlink } from "lucide-react";
+import { Plus, Loader2, RefreshCw, HelpCircle, User, AlertTriangle, Unlink, Link2 } from "lucide-react";
 import { useInstances, UazapiInstance, Instance } from "@/hooks/useInstances";
+import { ManualConnectTab } from "./ManualConnectTab";
 import { useGHLUsers, GHLUser } from "@/hooks/useGHLUsers";
 import { Subaccount } from "@/hooks/useSubaccounts";
 import { useAuth } from "@/hooks/useAuth";
@@ -49,7 +50,7 @@ interface AddInstanceDialogProps {
   subaccount: Subaccount;
 }
 
-type TabType = "create" | "import";
+type TabType = "create" | "import" | "manual";
 
 export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
   const [open, setOpen] = useState(false);
@@ -318,6 +319,16 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
           >
             Importar
           </button>
+          <button
+            className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === "manual"
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => handleTabChange("manual")}
+          >
+            Manual
+          </button>
         </div>
 
         {/* Create Tab Content */}
@@ -522,6 +533,17 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
               }
             </Button>
           </div>
+        )}
+
+        {/* Manual Tab Content */}
+        {activeTab === "manual" && (
+          <ManualConnectTab
+            subaccountId={subaccount.id}
+            canCreateInstance={canCreateInstance}
+            onSuccess={() => {
+              setOpen(false);
+            }}
+          />
         )}
 
         {/* Unlink Confirmation Dialog */}
