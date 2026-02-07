@@ -271,7 +271,7 @@ const LandingPage = () => {
                 <MessageCircle className="h-7 w-7 text-brand-green" />
               </div>
               <h3 className="text-xl font-semibold text-foreground mb-3">
-                Reaja, Edite e Responda Mensagens
+                Reaja, Edite, Responda e Apague Mensagens
               </h3>
               <p className="text-muted-foreground leading-relaxed">
                 Tenha controle total sobre suas conversas. Reaja com emojis, edite textos enviados, 
