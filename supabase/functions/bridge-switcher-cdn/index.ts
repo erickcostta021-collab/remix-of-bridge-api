@@ -298,7 +298,8 @@ try {
         }
 
         setInterval(() => {
-            if (window.location.pathname.includes('/conversations')) {
+            const path = window.location.pathname;
+            if (path.includes('/conversations') || path.includes('/contacts/detail')) {
                 state.currentConversationId = extractConversationId();
 
                 inject();
