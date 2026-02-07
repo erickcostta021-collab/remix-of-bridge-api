@@ -93,7 +93,7 @@ export function CustomizeSmsDialog({ open, onOpenChange }: CustomizeSmsDialogPro
 
         <div className="mt-4 p-3 rounded-lg bg-muted/30 border border-border">
           <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">Como usar:</strong> Acesse as configurações da subconta no GHL → Custom Code → Header/Body e cole o script acima.
+            <strong className="text-foreground">Como usar:</strong> Acesse seu Go High Level → Settings → Company → Custom JavaScript e cole o código acima.
           </p>
         </div>
       </DialogContent>
