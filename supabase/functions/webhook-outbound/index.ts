@@ -932,6 +932,138 @@ async function processGroupCommand(
         console.log("Sending confirmation message to group:", groupJid);
         await sendTextMessage(baseUrl, instanceToken, groupJid, "✅");
         
+        // === CREATE GROUP CONTACT + CONVERSATION IN GHL ===
+        // The ✅ sent via API has wasSentByApi=true and no track_id,
+        // so webhook-inbound will discard it. We must create the GHL
+        // contact and conversation directly here.
+        if (ghlContext?.settings?.ghl_client_id && ghlContext?.subaccount?.ghl_access_token) {
+          try {
+            const ghlToken = await getValidToken(ghlContext.supabase, ghlContext.subaccount, ghlContext.settings);
+            if (ghlToken) {
+              // Extract group phone (first 11 digits of JID) - same logic as webhook-inbound
+              const rawJid = groupJid.split("@")[0];
+              const rawDigits = rawJid.replace(/\D/g, "");
+              const groupPhone = rawDigits.slice(0, 11);
+              const groupEmail = groupJid.includes("@g.us") ? groupJid : `${groupJid}@g.us`;
+              const contactName = `👥 ${name}`;
+              const ghlLocationId = ghlContext.subaccount.location_id;
+              
+              console.log("[GHL] Creating group contact:", { contactName, groupPhone, groupEmail, locationId: ghlLocationId });
+              
+              // Search for existing contact
+              const searchRes = await fetch(
+                `https://services.leadconnectorhq.com/contacts/?locationId=${ghlLocationId}&query=${groupPhone}`,
+                {
+                  headers: {
+                    "Authorization": `Bearer ${ghlToken}`,
+                    "Version": "2021-07-28",
+                    "Accept": "application/json",
+                  },
+                }
+              );
+              
+              let ghlContactId = "";
+              if (searchRes.ok) {
+                const searchData = await searchRes.json();
+                if (searchData.contacts?.length > 0) {
+                  ghlContactId = searchData.contacts[0].id;
+                  console.log("[GHL] Found existing group contact:", ghlContactId);
+                  // Update email if needed
+                  if (!searchData.contacts[0].email) {
+                    await fetch(`https://services.leadconnectorhq.com/contacts/${ghlContactId}`, {
+                      method: "PUT",
+                      headers: {
+                        "Authorization": `Bearer ${ghlToken}`,
+                        "Version": "2021-07-28",
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({ email: groupEmail }),
+                    });
+                  }
+                }
+              }
+              
+              // Create contact if not found
+              if (!ghlContactId) {
+                const createRes = await fetch("https://services.leadconnectorhq.com/contacts/", {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${ghlToken}`,
+                    "Version": "2021-07-28",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                  },
+                  body: JSON.stringify({
+                    firstName: contactName,
+                    phone: `+${groupPhone}`,
+                    email: groupEmail,
+                    locationId: ghlLocationId,
+                    source: "WhatsApp Integration",
+                  }),
+                });
+                
+                if (createRes.ok) {
+                  const createData = await createRes.json();
+                  ghlContactId = createData.contact?.id || "";
+                  console.log("[GHL] Created group contact:", ghlContactId);
+                } else {
+                  const errText = await createRes.text();
+                  console.error("[GHL] Failed to create group contact:", errText.substring(0, 300));
+                  // Try to extract contactId from duplicate error
+                  try {
+                    const parsed = JSON.parse(errText);
+                    if (parsed?.meta?.contactId) {
+                      ghlContactId = parsed.meta.contactId;
+                      console.log("[GHL] Reusing duplicate contact:", ghlContactId);
+                    }
+                  } catch { /* ignore */ }
+                }
+              }
+              
+              // Send ✅ as inbound message to create the conversation
+              if (ghlContactId) {
+                const msgRes = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${ghlToken}`,
+                    "Version": "2021-04-15",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                  },
+                  body: JSON.stringify({
+                    type: "SMS",
+                    contactId: ghlContactId,
+                    message: "✅",
+                  }),
+                });
+                
+                const msgText = await msgRes.text();
+                if (msgRes.ok) {
+                  console.log("[GHL] ✅ Group conversation created with ✅ message:", msgText.substring(0, 200));
+                } else {
+                  console.error("[GHL] Failed to send ✅ to GHL:", msgText.substring(0, 300));
+                }
+                
+                // Save phone mapping for future routing
+                await ghlContext.supabase
+                  .from("ghl_contact_phone_mapping")
+                  .upsert({
+                    contact_id: ghlContactId,
+                    location_id: ghlLocationId,
+                    original_phone: groupEmail, // Store full JID for group routing
+                  }, { onConflict: "contact_id,location_id" })
+                  .then(({ error }: any) => {
+                    if (error) console.error("[GHL] Failed to save phone mapping:", error);
+                    else console.log("[GHL] Phone mapping saved for group contact");
+                  });
+              }
+            }
+          } catch (e) {
+            console.error("[GHL] Error creating group conversation in GHL:", e);
+            // Non-critical - group was still created on WhatsApp
+          }
+        }
+        
         return { isCommand: true, success: true, command, message: `Grupo "${name}" criado com sucesso!` };
       }
       
