@@ -115,8 +115,18 @@ serve(async (req) => {
       const qty = Math.min(Math.max(quantity || 1, 1), 10); // 1-10 instances
       lineItems = [
         {
-          price: PRICE_IDS.flexible,
-          quantity: qty,
+          price_data: {
+            currency: "brl",
+            product_data: {
+              name: qty === 1
+                ? "Plano Flexível - 1 Instância"
+                : `Plano Flexível - ${qty} Instâncias`,
+              description: `${qty} ${qty === 1 ? "Instância" : "Instâncias"} WhatsApp Bridge API`,
+            },
+            unit_amount: 3500 * qty,
+            recurring: { interval: "month" as const },
+          },
+          quantity: 1,
         },
       ];
       logStep("Flexible plan selected", { quantity: qty });
