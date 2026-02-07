@@ -821,7 +821,7 @@ serve(async (req: Request) => {
     // Get instance details
     const { data: instance, error: instanceError } = await supabase
       .from("instances")
-      .select("uazapi_instance_token, instance_name, user_id")
+      .select("uazapi_instance_token, instance_name, user_id, uazapi_base_url")
       .eq("id", instanceId)
       .limit(1);
 
@@ -834,21 +834,27 @@ serve(async (req: Request) => {
 
     const instanceData = instance[0];
 
-    // Get user settings for UAZAPI base URL
-    const { data: settings, error: settingsError } = await supabase
-      .from("user_settings")
-      .select("uazapi_base_url")
-      .eq("user_id", instanceData.user_id)
-      .limit(1);
+    // Per-instance base URL takes priority over global settings
+    let baseUrl = instanceData.uazapi_base_url?.replace(/\/+$/, "");
 
-    if (settingsError || !settings || settings.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "User settings not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!baseUrl) {
+      // Get user settings for UAZAPI base URL
+      const { data: settings, error: settingsError } = await supabase
+        .from("user_settings")
+        .select("uazapi_base_url")
+        .eq("user_id", instanceData.user_id)
+        .limit(1);
+
+      if (settingsError || !settings || settings.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "User settings not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      baseUrl = settings[0].uazapi_base_url?.replace(/\/+$/, "");
     }
 
-    const baseUrl = settings[0].uazapi_base_url?.replace(/\/+$/, "");
     if (!baseUrl) {
       return new Response(
         JSON.stringify({ error: "UAZAPI base URL not configured" }),

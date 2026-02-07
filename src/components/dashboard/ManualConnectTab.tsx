@@ -29,7 +29,7 @@ export function ManualConnectTab({
   onSuccess,
 }: ManualConnectTabProps) {
   const { user } = useAuth();
-  const { settings, updateSettings } = useSettings();
+  const { settings } = useSettings();
   const queryClient = useQueryClient();
 
   const [serverUrl, setServerUrl] = useState(settings?.uazapi_base_url || "");
@@ -123,12 +123,7 @@ export function ManualConnectTab({
         return;
       }
 
-      // Ensure user_settings.uazapi_base_url is in sync with the entered URL
-      // so that InstanceCard connect/QR flows use the correct server
-      if (!settings?.uazapi_base_url || settings.uazapi_base_url.replace(/\/$/, "") !== trimmedUrl) {
-        await updateSettings.mutateAsync({ uazapi_base_url: trimmedUrl });
-      }
-
+      // Manual instances store their own base URL — do NOT sync to user_settings
       const { error } = await supabase.from("instances").insert({
         user_id: user.id,
         subaccount_id: subaccountId,
@@ -137,6 +132,7 @@ export function ManualConnectTab({
         instance_status: "disconnected",
         webhook_url: settings?.global_webhook_url || null,
         ignore_groups: false,
+        uazapi_base_url: trimmedUrl, // Per-instance base URL
       });
 
       if (error) throw error;

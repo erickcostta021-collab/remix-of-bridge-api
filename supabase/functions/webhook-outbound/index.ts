@@ -1700,7 +1700,7 @@ serve(async (req: Request) => {
     // Buscar todas as instâncias da subconta
     const { data: instances, error: instErr } = await supabase
       .from("instances")
-      .select("id, instance_name, uazapi_instance_token")
+      .select("id, instance_name, uazapi_instance_token, uazapi_base_url")
       .eq("subaccount_id", subaccount.id)
       .order("created_at", { ascending: true });
 
@@ -1721,7 +1721,10 @@ serve(async (req: Request) => {
       .eq("user_id", subaccount.user_id)
       .single();
 
-    if (settingsErr || !settings?.uazapi_base_url || !instance.uazapi_instance_token) {
+    // Per-instance base URL takes priority over global settings
+    const resolvedBaseUrl = instance.uazapi_base_url || settings?.uazapi_base_url;
+
+    if (settingsErr || !resolvedBaseUrl || !instance.uazapi_instance_token) {
       console.error("UAZAPI not configured:", { settingsErr });
       return; // Already responded
     }
@@ -1921,7 +1924,8 @@ serve(async (req: Request) => {
       return; // Already responded
     }
 
-    const base = settings.uazapi_base_url.replace(/\/$/, "");
+    // Re-resolve base URL for the chosen instance (might differ after preference lookup)
+    const base = (instance.uazapi_base_url || settings.uazapi_base_url)?.replace(/\/$/, "") || "";
     const instanceToken = instance.uazapi_instance_token;
     const results: Array<{ type: string; sent: boolean; status: number }> = [];
 

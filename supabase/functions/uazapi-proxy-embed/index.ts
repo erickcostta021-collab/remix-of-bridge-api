@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     const { data: inst, error: instErr } = await admin
       .from("instances")
       .select(
-        `id, uazapi_instance_token,
+        `id, uazapi_instance_token, uazapi_base_url,
          ghl_subaccounts!inner(id, user_id, embed_token)`
       )
       .eq("id", instanceId)
@@ -100,20 +100,26 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: settings, error: settingsErr } = await admin
-      .from("user_settings")
-      .select("uazapi_base_url")
-      .eq("user_id", userId)
-      .maybeSingle();
+    // Use per-instance base URL if available, otherwise fall back to user settings
+    let uazapiBaseUrl = (inst as any).uazapi_base_url ? String((inst as any).uazapi_base_url) : "";
 
-    if (settingsErr || !settings?.uazapi_base_url) {
-      return new Response(JSON.stringify({ error: "UAZAPI não configurada" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!uazapiBaseUrl) {
+      const { data: settings, error: settingsErr } = await admin
+        .from("user_settings")
+        .select("uazapi_base_url")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (settingsErr || !settings?.uazapi_base_url) {
+        return new Response(JSON.stringify({ error: "UAZAPI não configurada" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      uazapiBaseUrl = String(settings.uazapi_base_url);
     }
 
-    const uazapiBaseUrl = String(settings.uazapi_base_url);
     const instanceToken = String((inst as any).uazapi_instance_token);
 
     const commonHeaders = {

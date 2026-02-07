@@ -20,6 +20,7 @@ export interface Instance {
   ghl_user_id: string | null;
   phone: string | null; // Cached in DB
   profile_pic_url: string | null; // Cached in DB
+  uazapi_base_url: string | null; // Per-instance base URL (manual instances)
 }
 
 export interface UazapiInstance {
@@ -157,14 +158,20 @@ export function useInstances(subaccountId?: string) {
     }));
   };
 
+  // Resolve the UAZAPI base URL for a given instance.
+  // Per-instance URL takes priority over global settings.
+  const getBaseUrlForInstance = (instance: Instance | { uazapi_base_url?: string | null }): string => {
+    const instanceUrl = instance.uazapi_base_url;
+    if (instanceUrl) return instanceUrl.replace(/\/$/, "");
+    if (settings?.uazapi_base_url) return settings.uazapi_base_url.replace(/\/$/, "");
+    throw new Error("URL base da UAZAPI não configurada");
+  };
+
   // Get status of a specific instance (returns status, phone and profile pic)
-  const getInstanceStatus = async (instanceToken: string): Promise<{ status: string; phone?: string; profilePicUrl?: string }> => {
-    if (!settings?.uazapi_base_url) {
-      throw new Error("URL base da UAZAPI não configurada");
-    }
+  const getInstanceStatus = async (instance: Instance): Promise<{ status: string; phone?: string; profilePicUrl?: string }> => {
+    const base = getBaseUrlForInstance(instance);
 
     try {
-      const base = settings.uazapi_base_url.replace(/\/$/, "");
       const candidatePaths = ["/instance/status", "/api/instance/status", "/v2/instance/status", "/api/v2/instance/status"];
 
       let response: Response | null = null;
@@ -175,7 +182,7 @@ export function useInstances(subaccountId?: string) {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            token: instanceToken,
+            token: instance.uazapi_instance_token,
           },
         });
         if (r.status === 404) continue;
@@ -240,7 +247,7 @@ export function useInstances(subaccountId?: string) {
   // Sync status from UAZAPI and save to DB cache
   const syncInstanceStatus = useMutation({
     mutationFn: async (instance: Instance): Promise<{ status: InstanceStatus; phone?: string; profilePicUrl?: string }> => {
-      const result = await getInstanceStatus(instance.uazapi_instance_token);
+      const result = await getInstanceStatus(instance);
       
       let mappedStatus: InstanceStatus = "disconnected";
       if (result.status === "connected" || result.status === "open" || result.status === "authenticated") {
@@ -278,12 +285,12 @@ export function useInstances(subaccountId?: string) {
 
       const results = await Promise.allSettled(
         instances.map(async (instance) => {
-          const result = await getInstanceStatus(instance.uazapi_instance_token);
+          const result = await getInstanceStatus(instance);
           
           // Check if instance doesn't exist on UAZAPI server
           // When token is invalid/not found, UAZAPI typically returns disconnected with no phone
           // We also check if the instance responds at all
-          const instanceExists = await checkInstanceExists(instance.uazapi_instance_token);
+          const instanceExists = await checkInstanceExists(instance);
           
           if (!instanceExists) {
             notFoundInstances.push(instance.id);
@@ -345,18 +352,16 @@ export function useInstances(subaccountId?: string) {
   });
 
   // Check if instance exists on UAZAPI server
-  const checkInstanceExists = async (instanceToken: string): Promise<boolean> => {
-    if (!settings?.uazapi_base_url) return false;
-
+  const checkInstanceExists = async (instance: Instance): Promise<boolean> => {
     try {
-      const base = settings.uazapi_base_url.replace(/\/$/, "");
+      const base = getBaseUrlForInstance(instance);
       
       // Try to get instance info - if it doesn't exist, we'll get an error
       const response = await fetch(`${base}/instance/status`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          token: instanceToken,
+          token: instance.uazapi_instance_token,
         },
       });
 
@@ -467,6 +472,7 @@ export function useInstances(subaccountId?: string) {
           ghl_user_id: data.ghl_user_id,
           phone: data.phone,
           profile_pic_url: data.profile_pic_url,
+          uazapi_base_url: data.uazapi_base_url,
         };
         // Fire and forget — status will update in background
         syncInstanceStatus.mutate(instanceForSync);
@@ -547,27 +553,31 @@ export function useInstances(subaccountId?: string) {
   const deleteInstance = useMutation({
     mutationFn: async ({ instance, deleteFromUazapi = false }: { instance: Instance; deleteFromUazapi?: boolean }) => {
       if (deleteFromUazapi) {
-        if (!settings?.uazapi_admin_token || !settings?.uazapi_base_url) {
+        // For deletion, use instance's own base URL or fall back to admin settings
+        const deleteBase = instance.uazapi_base_url?.replace(/\/$/, "") || settings?.uazapi_base_url?.replace(/\/$/, "");
+        const adminToken = settings?.uazapi_admin_token;
+        
+        if (!adminToken || !deleteBase) {
           throw new Error("Configurações UAZAPI não encontradas");
         }
 
         // Delete from UAZAPI
-        const response = await fetch(`${settings.uazapi_base_url}/instance/delete`, {
+        const response = await fetch(`${deleteBase}/instance/delete`, {
           method: "DELETE",
           headers: {
             "Content-Type": "application/json",
-            "admintoken": settings.uazapi_admin_token,
+            "admintoken": adminToken,
             "token": instance.uazapi_instance_token,
           },
         });
 
         // Try alternative method if first fails
         if (!response.ok) {
-          await fetch(`${settings.uazapi_base_url}/admin/delete`, {
+          await fetch(`${deleteBase}/admin/delete`, {
             method: "DELETE",
             headers: {
               "Content-Type": "application/json",
-              "admintoken": settings.uazapi_admin_token,
+              "admintoken": adminToken,
             },
             body: JSON.stringify({ token: instance.uazapi_instance_token }),
           });
@@ -617,11 +627,7 @@ export function useInstances(subaccountId?: string) {
   });
 
   const getQRCode = async (instance: Instance): Promise<string> => {
-    if (!settings?.uazapi_base_url) {
-      throw new Error("URL base da UAZAPI não configurada");
-    }
-
-    const base = settings.uazapi_base_url.replace(/\/$/, "");
+    const base = getBaseUrlForInstance(instance);
     
     // Some UAZAPI servers return QR code from /instance/connect directly
     // Others have a separate /instance/qrcode endpoint
@@ -678,11 +684,7 @@ export function useInstances(subaccountId?: string) {
   };
 
   const connectInstance = async (instance: Instance): Promise<string | null> => {
-    if (!settings?.uazapi_base_url) {
-      throw new Error("URL base da UAZAPI não configurada");
-    }
-
-    const base = settings.uazapi_base_url.replace(/\/$/, "");
+    const base = getBaseUrlForInstance(instance);
 
     // Connect and get QR code in one call
     const response = await fetch(`${base}/instance/connect`, {
@@ -713,11 +715,7 @@ export function useInstances(subaccountId?: string) {
 
   const disconnectInstance = useMutation({
     mutationFn: async (instance: Instance) => {
-      if (!settings?.uazapi_base_url) {
-        throw new Error("URL base da UAZAPI não configurada");
-      }
-
-      const base = settings.uazapi_base_url.replace(/\/$/, "");
+      const base = getBaseUrlForInstance(instance);
       
       // Try multiple endpoints and methods as different UAZAPI versions use different endpoints
       const endpoints = [
@@ -791,12 +789,10 @@ export function useInstances(subaccountId?: string) {
       webhookUrl: string; 
       ignoreGroups: boolean 
     }) => {
-      if (!settings?.uazapi_base_url) {
-        throw new Error("URL base da UAZAPI não configurada");
-      }
+      const base = getBaseUrlForInstance(instance);
 
       // Update in UAZAPI
-      await fetch(`${settings.uazapi_base_url}/instance/webhook`, {
+      await fetch(`${base}/instance/webhook`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -828,15 +824,11 @@ export function useInstances(subaccountId?: string) {
   // Force reconfigure webhook on UAZAPI with the correct URL from database
   const reconfigureWebhook = useMutation({
     mutationFn: async (instance: Instance) => {
-      if (!settings?.uazapi_base_url) {
-        throw new Error("URL base da UAZAPI não configurada");
-      }
+      const base = getBaseUrlForInstance(instance);
 
       // Use the global webhook URL if instance doesn't have one
-      const webhookUrl = instance.webhook_url || settings.global_webhook_url || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-inbound`;
+      const webhookUrl = instance.webhook_url || settings?.global_webhook_url || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-inbound`;
       const ignoreGroups = instance.ignore_groups ?? false;
-
-      const base = settings.uazapi_base_url.replace(/\/$/, "");
       
       // Try multiple endpoint variations
       const endpoints = [
