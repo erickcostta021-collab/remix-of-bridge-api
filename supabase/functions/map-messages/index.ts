@@ -250,6 +250,15 @@ serve(async (req) => {
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
+
+        // Mark this edit as already handled (InternalComment will be sent below)
+        // so webhook-inbound doesn't send a duplicate InternalComment when it
+        // receives the UAZAPI echo for this edit.
+        if (mapping.uazapi_message_id) {
+          const editIcKey = `edit-ic:${mapping.uazapi_message_id}`;
+          console.log("🔒 Marking edit as handled to prevent duplicate IC:", editIcKey);
+          await supabase.from("ghl_processed_messages").insert({ message_id: editIcKey }).maybeSingle();
+        }
       }
 
       // Update message in database
