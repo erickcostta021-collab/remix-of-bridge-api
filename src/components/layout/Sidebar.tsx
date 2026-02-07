@@ -1,30 +1,37 @@
 
+import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/hooks/useSettings";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { GroupCommandsDialog } from "@/components/dashboard/GroupCommandsDialog";
 import {
   LayoutDashboard,
   Settings,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ExternalLink,
+  Wrench,
+  Users,
 } from "lucide-react";
+
+import { useSidebarState } from "@/hooks/useSidebarState";
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/settings", icon: Settings, label: "Configurações" },
 ];
 
-import { useSidebarState } from "@/hooks/useSidebarState";
-
 export function Sidebar() {
   const { collapsed, toggle } = useSidebarState();
   const { getOAuthUrl } = useSettings();
   const { hasActiveSubscription } = useSubscription();
   const location = useLocation();
+  const [utilitiesOpen, setUtilitiesOpen] = useState(false);
+  const [groupCommandsOpen, setGroupCommandsOpen] = useState(false);
 
   const oauthUrl = getOAuthUrl();
 
@@ -104,6 +111,64 @@ export function Sidebar() {
             );
           })}
 
+          {/* Utilidades Dropdown */}
+          <div className="pt-1">
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      if (collapsed) {
+                        setGroupCommandsOpen(true);
+                      } else {
+                        setUtilitiesOpen(!utilitiesOpen);
+                      }
+                    }}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 w-full text-left",
+                      "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    )}
+                  >
+                    <Wrench className="h-5 w-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+                    <span className={cn(
+                      "transition-all duration-300 whitespace-nowrap flex-1",
+                      collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
+                    )}>
+                      Utilidades
+                    </span>
+                    {!collapsed && (
+                      <ChevronDown className={cn(
+                        "h-4 w-4 text-sidebar-foreground/40 transition-transform duration-200",
+                        utilitiesOpen && "rotate-180"
+                      )} />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                {collapsed && (
+                  <TooltipContent side="right" className="font-medium">
+                    Utilidades
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+
+            {/* Dropdown items */}
+            {utilitiesOpen && !collapsed && (
+              <div className="mt-1 ml-3 pl-3 border-l border-white/[0.08] space-y-0.5 animate-fade-in">
+                <button
+                  onClick={() => setGroupCommandsOpen(true)}
+                  className={cn(
+                    "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
+                    "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                >
+                  <Users className="h-4 w-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">Gerenciar Grupos</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Install App Button */}
           {oauthUrl && (
             <TooltipProvider delayDuration={0}>
@@ -157,6 +222,9 @@ export function Sidebar() {
           </Button>
         </div>
       </aside>
+
+      {/* Group Commands Dialog */}
+      <GroupCommandsDialog open={groupCommandsOpen} onOpenChange={setGroupCommandsOpen} />
     </>
   );
 }
