@@ -221,22 +221,27 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
     });
   };
 
-  // Find which uazapi instances are already imported (across all subaccounts)
-  const importedTokenMap = new Map<string, Instance>();
+  // Find which uazapi instances are already linked (have a subaccount_id)
+  const linkedTokenMap = new Map<string, Instance>();
+  const unlinkedTokenMap = new Map<string, Instance>();
   allUserInstances.forEach((i) => {
-    importedTokenMap.set(i.uazapi_instance_token, i);
+    if (i.subaccount_id) {
+      linkedTokenMap.set(i.uazapi_instance_token, i);
+    } else {
+      unlinkedTokenMap.set(i.uazapi_instance_token, i);
+    }
   });
 
-  // Split into available (not imported) and already imported
+  // Split into: available (not in DB or unlinked) and already linked
   const availableInstances = uazapiInstances.filter(
-    (i) => !importedTokenMap.has(i.token)
+    (i) => !linkedTokenMap.has(i.token)
   );
-  const alreadyImportedInstances = uazapiInstances.filter(
-    (i) => importedTokenMap.has(i.token)
+  const alreadyLinkedInstances = uazapiInstances.filter(
+    (i) => linkedTokenMap.has(i.token)
   );
 
   const handleUnlinkClick = (uazapiInstance: UazapiInstance) => {
-    const dbInstance = importedTokenMap.get(uazapiInstance.token);
+    const dbInstance = linkedTokenMap.get(uazapiInstance.token);
     if (dbInstance) {
       setInstanceToUnlink(dbInstance);
       setUnlinkConfirmOpen(true);
@@ -451,37 +456,47 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {/* Available instances (not yet imported) */}
-                  {availableInstances.map((instance) => (
-                    <div
-                      key={instance.token}
-                      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                        selectedInstances.has(instance.token)
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-muted-foreground bg-secondary/50"
-                      }`}
-                      onClick={() => toggleInstanceSelection(instance.token)}
-                    >
-                      <Checkbox
-                        checked={selectedInstances.has(instance.token)}
-                        onCheckedChange={() =>
-                          toggleInstanceSelection(instance.token)
-                        }
-                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground truncate">
-                          {instance.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground font-mono truncate">
-                          {instance.token}
-                        </p>
+                  {/* Available instances (not yet imported or unlinked) */}
+                  {availableInstances.map((instance) => {
+                    const isUnlinked = unlinkedTokenMap.has(instance.token);
+                    return (
+                      <div
+                        key={instance.token}
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                          selectedInstances.has(instance.token)
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-muted-foreground bg-secondary/50"
+                        }`}
+                        onClick={() => toggleInstanceSelection(instance.token)}
+                      >
+                        <Checkbox
+                          checked={selectedInstances.has(instance.token)}
+                          onCheckedChange={() =>
+                            toggleInstanceSelection(instance.token)
+                          }
+                          className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-foreground truncate">
+                              {instance.name}
+                            </p>
+                            {isUnlinked && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+                                desvinculada
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground font-mono truncate">
+                            {instance.token}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
-                  {/* Already imported instances with unlink button */}
-                  {alreadyImportedInstances.map((instance) => (
+                  {/* Already linked instances with unlink button */}
+                  {alreadyLinkedInstances.map((instance) => (
                     <div
                       key={instance.token}
                       className="flex items-center gap-3 p-3 rounded-lg border border-border bg-secondary/30 opacity-70"
