@@ -148,7 +148,7 @@ const LandingPage = () => {
           </div>
 
           {/* Architecture Diagram */}
-          <div className="relative flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-0 mb-16">
+          <div className="relative flex flex-col lg:flex-row items-start justify-center gap-6 lg:gap-0 mb-16">
             {/* WhatsApp Side */}
             <div className="flex flex-col items-center text-center lg:w-1/5 relative z-10">
               <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border mb-4">
@@ -159,9 +159,9 @@ const LandingPage = () => {
             </div>
 
             {/* Full-width animated lines (WhatsApp → GHL) passing behind UAZAPI */}
-            <div className="hidden lg:block lg:w-[52%] relative">
-              {/* The two continuous lines spanning the full width */}
-              <div className="flex flex-col justify-center gap-4 w-full">
+            <div className="hidden lg:block lg:w-[52%] relative" style={{ minHeight: '140px' }}>
+              {/* Lines positioned to align with icon centers (icon is 80px tall, center at 40px) */}
+              <div className="absolute left-0 right-0 flex flex-col gap-4 w-full" style={{ top: '32px' }}>
                 {/* Line 1 - Signal going right */}
                 <div className="relative h-0.5 w-full bg-border/50 rounded-full overflow-hidden">
                   <div 
@@ -185,7 +185,7 @@ const LandingPage = () => {
               </div>
 
               {/* UAZAPI floating on top of the lines */}
-              <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+              <div className="relative flex items-start justify-center z-20 pointer-events-none">
                 <div className="flex flex-col items-center text-center pointer-events-auto">
                   <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-brand-blue mb-4">
                     <span className="text-lg font-bold text-brand-blue">UAZAPI</span>
