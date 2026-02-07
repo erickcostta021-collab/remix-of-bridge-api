@@ -131,14 +131,16 @@ export function DashboardHeader() {
               <KeyRound className="h-4 w-4 mr-2" />
               Alterar Senha
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={handleManagePayment}
-              disabled={loadingPortal}
-              className="cursor-pointer"
-            >
-              <Wallet className="h-4 w-4 mr-2" />
-              {loadingPortal ? "Abrindo..." : "Gerenciar Pagamento"}
-            </DropdownMenuItem>
+            {hasActiveSubscription && (
+              <DropdownMenuItem
+                onClick={handleManagePayment}
+                disabled={loadingPortal}
+                className="cursor-pointer"
+              >
+                <Wallet className="h-4 w-4 mr-2" />
+                {loadingPortal ? "Abrindo..." : "Gerenciar Pagamento"}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={handleSignOut}
