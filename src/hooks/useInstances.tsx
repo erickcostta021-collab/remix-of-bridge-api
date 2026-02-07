@@ -396,9 +396,21 @@ export function useInstances(subaccountId?: string) {
     }) => {
       if (!user) throw new Error("Não autenticado");
 
-      // Check instance limit (only linked instances count)
-      if (instanceLimit > 0 && linkedInstanceCount >= instanceLimit) {
-        throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
+      // Fresh count from DB to avoid stale cache when importing multiple instances
+      if (instanceLimit > 0) {
+        const effectiveUserId = await getEffectiveUserId(user.id);
+        const { count, error: countError } = await supabase
+          .from("instances")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", effectiveUserId)
+          .not("subaccount_id", "is", null);
+        
+        if (countError) throw countError;
+        const currentLinkedCount = count ?? 0;
+        
+        if (currentLinkedCount >= instanceLimit) {
+          throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
+        }
       }
 
       // Check if already exists in DB
@@ -489,9 +501,21 @@ export function useInstances(subaccountId?: string) {
         throw new Error("Configurações UAZAPI não encontradas");
       }
 
-      // Check instance limit (only linked instances count)
-      if (instanceLimit > 0 && linkedInstanceCount >= instanceLimit) {
-        throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
+      // Fresh count from DB to avoid stale cache
+      if (instanceLimit > 0) {
+        const effectiveUserId = await getEffectiveUserId(user.id);
+        const { count, error: countError } = await supabase
+          .from("instances")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", effectiveUserId)
+          .not("subaccount_id", "is", null);
+        
+        if (countError) throw countError;
+        const currentLinkedCount = count ?? 0;
+        
+        if (currentLinkedCount >= instanceLimit) {
+          throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
+        }
       }
 
       const base = settings.uazapi_base_url.replace(/\/$/, "");
