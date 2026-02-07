@@ -446,12 +446,31 @@ export function useInstances(subaccountId?: string) {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
       queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
       queryClient.invalidateQueries({ queryKey: ["all-user-instances"] });
       toast.success("Instância vinculada com sucesso!");
+
+      // Auto-sync status from UAZAPI after import
+      if (data) {
+        const instanceForSync: Instance = {
+          id: data.id,
+          user_id: data.user_id,
+          subaccount_id: data.subaccount_id,
+          instance_name: data.instance_name,
+          uazapi_instance_token: data.uazapi_instance_token,
+          instance_status: data.instance_status as InstanceStatus,
+          webhook_url: data.webhook_url,
+          ignore_groups: data.ignore_groups,
+          ghl_user_id: data.ghl_user_id,
+          phone: data.phone,
+          profile_pic_url: data.profile_pic_url,
+        };
+        // Fire and forget — status will update in background
+        syncInstanceStatus.mutate(instanceForSync);
+      }
     },
     onError: (error) => {
       toast.error("Erro ao importar: " + error.message);
