@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Zap, Check } from "lucide-react";
 import logo from "@/assets/logo.png";
+import { useAuth } from "@/hooks/useAuth";
 
 const PLANS = {
   flexible: {
@@ -42,12 +43,22 @@ const Checkout = () => {
   const [searchParams] = useSearchParams();
   const planParam = searchParams.get("plan") || "flexible";
   const quantityParam = parseInt(searchParams.get("quantity") || "1", 10);
+  const { user, loading: authLoading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [quantity, setQuantity] = useState(
     planParam === "flexible" ? Math.min(Math.max(quantityParam, 1), 10) : 1
   );
+
+  const isLoggedIn = !!user;
+
+  // Auto-fill email when user is logged in
+  useEffect(() => {
+    if (user?.email) {
+      setEmail(user.email);
+    }
+  }, [user]);
 
   const plan = PLANS[planParam as keyof typeof PLANS] || PLANS.flexible;
   const isFlexible = planParam === "flexible";
@@ -153,7 +164,10 @@ const Checkout = () => {
               Finalizar Assinatura
             </h1>
             <p className="text-muted-foreground">
-              Insira seu email para continuar com o checkout
+              {isLoggedIn 
+                ? "Confirme seu plano e continue com o checkout"
+                : "Insira seu email para continuar com o checkout"
+              }
             </p>
           </div>
 
@@ -234,8 +248,14 @@ const Checkout = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  disabled={loading}
+                  disabled={loading || isLoggedIn}
+                  className={isLoggedIn ? "bg-secondary/50 text-muted-foreground" : ""}
                 />
+                {isLoggedIn && (
+                  <p className="text-xs text-muted-foreground">
+                    Usando o e-mail da sua conta logada
+                  </p>
+                )}
               </div>
 
               <Button
