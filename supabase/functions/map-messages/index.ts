@@ -97,19 +97,78 @@ async function getValidToken(supabase: any, subaccount: any, settings: any): Pro
   return subaccount.ghl_access_token;
 }
 
-// Get instance and settings for a location
-async function getInstanceForLocation(supabase: any, locationId: string) {
-  const { data: instance } = await supabase
+// Get instance and settings for a location, preferring the contact's preferred instance
+async function getInstanceForLocation(supabase: any, locationId: string, contactId?: string | null) {
+  // Fetch ALL connected instances for this location
+  const { data: instances } = await supabase
     .from("instances")
     .select("*, ghl_subaccounts!inner(location_id, user_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at)")
     .eq("ghl_subaccounts.location_id", locationId)
-    .eq("instance_status", "connected")
-    .limit(1)
-    .maybeSingle();
+    .eq("instance_status", "connected");
 
-  if (!instance) {
+  if (!instances || instances.length === 0) {
     console.log("⚠️ No connected instance found for location:", locationId);
     return null;
+  }
+
+  let instance = instances[0]; // default to first
+
+  // If multiple instances and we have a contactId, use contact preference
+  if (instances.length > 1 && contactId) {
+    // Look up the contact's phone to match against preferences
+    const { data: phoneMapping } = await supabase
+      .from("ghl_contact_phone_mapping")
+      .select("original_phone")
+      .eq("contact_id", contactId)
+      .maybeSingle();
+
+    const leadPhone = phoneMapping?.original_phone?.replace(/\D/g, "")?.slice(-10) || null;
+
+    if (leadPhone) {
+      // Find preference by phone (most reliable, matches webhook-outbound logic)
+      const { data: pref } = await supabase
+        .from("contact_instance_preferences")
+        .select("instance_id")
+        .eq("location_id", locationId)
+        .ilike("lead_phone", `%${leadPhone}`)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (pref?.instance_id) {
+        const matched = instances.find((i: any) => i.id === pref.instance_id);
+        if (matched) {
+          instance = matched;
+          console.log("📌 Using preferred instance by phone:", { instanceId: instance.id, instanceName: instance.instance_name, leadPhone });
+        }
+      }
+    }
+
+    // Fallback: try by contact_id preference
+    if (instance === instances[0] && instance.id !== instances[0]?.id) {
+      // already matched above
+    } else if (instance === instances[0]) {
+      const { data: pref } = await supabase
+        .from("contact_instance_preferences")
+        .select("instance_id")
+        .eq("location_id", locationId)
+        .eq("contact_id", contactId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (pref?.instance_id) {
+        const matched = instances.find((i: any) => i.id === pref.instance_id);
+        if (matched) {
+          instance = matched;
+          console.log("📌 Using preferred instance by contactId:", { instanceId: instance.id, instanceName: instance.instance_name });
+        }
+      }
+    }
+
+    if (instance === instances[0]) {
+      console.log("⚠️ Multiple instances found but no preference match, using first:", { instanceId: instance.id, instanceName: instance.instance_name });
+    }
   }
 
   const { data: settings } = await supabase
@@ -132,7 +191,7 @@ async function getInstanceForLocation(supabase: any, locationId: string) {
     settings,
     baseUrl: resolvedBaseUrl,
     token: instance.uazapi_instance_token,
-    ghlUserId: instance.ghl_user_id, // GHL user assigned to this instance
+    ghlUserId: instance.ghl_user_id,
   };
 }
 
@@ -234,7 +293,7 @@ serve(async (req) => {
       const originalText = mapping.message_text || '(texto original)';
 
       // Get config for this location
-      const config = await getInstanceForLocation(supabase, mapping.location_id);
+      const config = await getInstanceForLocation(supabase, mapping.location_id, mapping.contact_id);
 
       // If we have UAZAPI ID, send edit to WhatsApp
       if (mapping.uazapi_message_id && config) {
@@ -384,7 +443,7 @@ serve(async (req) => {
 
       // Send reaction to UAZAPI if we have the ID
       if (mapping.uazapi_message_id) {
-        const config = await getInstanceForLocation(supabase, mapping.location_id);
+        const config = await getInstanceForLocation(supabase, mapping.location_id, mapping.contact_id);
 
         if (config) {
           // Need to get the contact's phone number to build the WhatsApp JID
@@ -495,7 +554,7 @@ serve(async (req) => {
 
       // Send delete to UAZAPI if we have the ID and it's from_me
       if (mapping.uazapi_message_id && from_me) {
-        config = await getInstanceForLocation(supabase, mapping.location_id);
+        config = await getInstanceForLocation(supabase, mapping.location_id, mapping.contact_id);
 
         if (config) {
           // Try multiple endpoint formats for delete
@@ -537,7 +596,7 @@ serve(async (req) => {
       
       // Get config if we don't have it yet
       if (!config) {
-        config = await getInstanceForLocation(supabase, mapping.location_id);
+        config = await getInstanceForLocation(supabase, mapping.location_id, mapping.contact_id);
       }
       
       if (config?.subaccount && config?.settings?.ghl_client_id && mapping.contact_id) {
@@ -637,7 +696,7 @@ serve(async (req) => {
       }
 
       // Get instance configuration for this location
-      const config = await getInstanceForLocation(supabase, location_id);
+      const config = await getInstanceForLocation(supabase, location_id, mapping?.contact_id);
 
       if (!config) {
         return new Response(
