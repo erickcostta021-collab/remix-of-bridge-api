@@ -387,14 +387,6 @@ export function InstanceCard({ instance }: InstanceCardProps) {
                     <Settings2 className="h-4 w-4 mr-2" />
                     Configurar Webhook
                   </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    onClick={() => reconfigureWebhook.mutate(instance)}
-                    disabled={reconfigureWebhook.isPending}
-                    className="text-blue-400"
-                  >
-                    <RotateCcw className={`h-4 w-4 mr-2 ${reconfigureWebhook.isPending ? "animate-spin" : ""}`} />
-                    {reconfigureWebhook.isPending ? "Reconfigurando..." : "Reconfigurar Webhook"}
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setAssignUserDialogOpen(true)}>
                     <UserPlus className="h-4 w-4 mr-2" />
                     Atribuir Usuário GHL
