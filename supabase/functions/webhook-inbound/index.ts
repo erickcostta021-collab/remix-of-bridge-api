@@ -678,6 +678,239 @@ serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // ==============================================================
+    // HANDLE FILE DOWNLOADED EVENTS
+    // UAZAPI sends media in two steps:
+    //   1. A "messages" event (may lack content.URL for the media)
+    //   2. A "messages_update" event with type "FileDownloadedMessage"
+    //      that contains the actual public file URL
+    // This handler processes step 2 so media renders correctly in GHL.
+    // ==============================================================
+    const isFileDownloaded =
+      rootType.toLowerCase() === "filedownloadedmessage" ||
+      updateState.toLowerCase() === "filedownloaded";
+
+    if (isFileDownloaded) {
+      const eventInfo = body.event || {};
+      const fileUrl = eventInfo.FileURL || eventInfo.fileURL || eventInfo.fileUrl || "";
+      const messageIds = eventInfo.MessageIDs || eventInfo.messageIDs || eventInfo.messageIds || [];
+      const fdMessageId = messageIds[0] || "";
+      const fdChatId = eventInfo.Chat || eventInfo.chatid || (body.chat?.wa_chatid) || "";
+      const fdIsFromMe = eventInfo.IsFromMe === true;
+      const fdIsGroup = eventInfo.IsGroup === true || fdChatId.endsWith("@g.us");
+      const fdMimeType = eventInfo.MimeType || eventInfo.mimetype || "";
+      const fdInstanceToken = body.token || body.instanceToken || "";
+
+      console.log("📁 Processing FileDownloaded event:", {
+        fileUrl: fileUrl?.substring(0, 80),
+        messageId: fdMessageId,
+        chatId: fdChatId,
+        isFromMe: fdIsFromMe,
+        isGroup: fdIsGroup,
+        mimeType: fdMimeType,
+      });
+
+      if (!fileUrl || !fdChatId || !fdInstanceToken) {
+        console.log("FileDownloaded missing required data, skipping");
+        return new Response(
+          JSON.stringify({ received: true, ignored: true, reason: "file_downloaded_missing_data" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const fdSupabase = createClient(supabaseUrl, supabaseKey);
+
+      // Dedup using messageId
+      if (fdMessageId) {
+        const dedupKey = `uazapi:${fdInstanceToken}:${fdMessageId}`;
+        const isNew = await markIfNew(fdSupabase, dedupKey);
+        if (!isNew) {
+          console.log("FileDownloaded duplicate ignored:", fdMessageId);
+          return new Response(
+            JSON.stringify({ received: true, ignored: true, reason: "duplicate_file_downloaded" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      // Find instance by token
+      const { data: fdInstance, error: fdInstanceError } = await fdSupabase
+        .from("instances")
+        .select("*, ghl_subaccounts!inner(*)")
+        .eq("uazapi_instance_token", fdInstanceToken)
+        .single();
+
+      if (fdInstanceError || !fdInstance) {
+        console.log("FileDownloaded: instance not found for token:", fdInstanceToken?.substring(0, 8));
+        return new Response(
+          JSON.stringify({ received: true, ignored: true, reason: "instance_not_found" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Check if groups should be ignored
+      if (fdIsGroup && fdInstance.ignore_groups) {
+        console.log("FileDownloaded: ignoring group media");
+        return new Response(
+          JSON.stringify({ received: true, ignored: true, reason: "group_ignored" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const fdSubaccount = fdInstance.ghl_subaccounts as any;
+
+      // Get user settings for OAuth credentials
+      const { data: fdSettings } = await fdSupabase
+        .from("user_settings")
+        .select("*")
+        .eq("user_id", fdSubaccount.user_id)
+        .single();
+
+      if (!fdSettings?.ghl_client_id || !fdSubaccount.ghl_access_token) {
+        console.log("FileDownloaded: missing GHL credentials");
+        return new Response(
+          JSON.stringify({ received: true, ignored: true, reason: "missing_credentials" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Get valid OAuth token (refresh if needed)
+      const fdToken = await getValidToken(fdSupabase, fdSubaccount, fdSettings);
+
+      // Extract phone number from chat ID
+      const fdRawJid = fdChatId.split("@")[0];
+      const fdRawDigits = fdRawJid.replace(/\D/g, "");
+      const fdPhoneNumber = fdIsGroup ? fdRawDigits.slice(0, 11) : fdRawJid;
+
+      // Get chat data for naming
+      const fdChatData = body.chat || {};
+      const fdGroupName = fdIsGroup
+        ? (fdChatData.wa_name || fdChatData.name || "Grupo")
+        : "";
+      const fdContactName = fdIsGroup
+        ? `👥 ${fdGroupName}`
+        : (fdChatData.wa_contactName || fdChatData.name || "WhatsApp Contact");
+
+      // Group email (JID for routing)
+      const fdGroupEmail = fdIsGroup ? fdChatId : undefined;
+
+      // Find or create contact in GHL
+      const fdContact = await findOrCreateContact(
+        fdPhoneNumber,
+        fdContactName,
+        fdSubaccount.location_id,
+        fdToken,
+        fdGroupEmail
+      );
+
+      // Try to get caption/transcription from UAZAPI download response
+      let fdCaption = "";
+      const fdBaseUrl = fdSettings.uazapi_base_url?.replace(/\/$/, "") || body.BaseUrl?.replace(/\/$/, "") || "";
+      if (fdBaseUrl && fdMessageId) {
+        try {
+          const dlRes = await fetch(`${fdBaseUrl}/message/download`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "token": fdInstanceToken },
+            body: JSON.stringify({ id: fdMessageId }),
+          });
+          if (dlRes.ok) {
+            const dlData = await dlRes.json();
+            fdCaption = dlData.transcription || dlData.caption || dlData.text || "";
+          }
+        } catch (e) {
+          console.error("FileDownloaded: failed to get caption:", e);
+        }
+      }
+
+      // Format caption for groups with member prefix
+      const fdSenderPn = (eventInfo.sender_pn || "").replace(/@.*$/, "").replace(/\D/g, "");
+      let fdFormattedCaption = fdCaption;
+      if (fdIsGroup && fdSenderPn && !fdIsFromMe) {
+        const memberPrefix = `(${fdSenderPn})-👤:\n`;
+        fdFormattedCaption = memberPrefix + (fdCaption || "");
+      }
+
+      // Send media to GHL
+      if (fdIsFromMe) {
+        // Outbound media - use inbound endpoint with direction=outbound to avoid webhook loops
+        const fdRes = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${fdToken}`,
+            "Version": "2021-04-15",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify({
+            type: "SMS",
+            contactId: fdContact.id,
+            message: fdFormattedCaption || "",
+            attachments: [fileUrl],
+            status: "delivered",
+            direction: "outbound",
+            ...(fdInstance.ghl_user_id && { userId: fdInstance.ghl_user_id }),
+          }),
+        });
+        const fdBodyText = await fdRes.text();
+        console.log("FileDownloaded GHL outbound response:", { status: fdRes.status, body: fdBodyText.substring(0, 300) });
+
+        // Save mapping
+        try {
+          const parsed = JSON.parse(fdBodyText);
+          const ghlMsgId = parsed?.messageId || "";
+          if (ghlMsgId) {
+            await markIfNew(fdSupabase, `ghl:${ghlMsgId}`);
+            await fdSupabase.from("message_map").upsert({
+              ghl_message_id: ghlMsgId,
+              uazapi_message_id: fdMessageId || null,
+              location_id: fdSubaccount.location_id,
+              contact_id: fdContact.id,
+              message_text: fdCaption || "",
+              message_type: "media",
+              from_me: true,
+              original_timestamp: new Date().toISOString(),
+            }, { onConflict: "ghl_message_id" });
+            console.log("FileDownloaded mapping saved:", { ghl: ghlMsgId, uazapi: fdMessageId });
+          }
+        } catch { /* ignore */ }
+      } else {
+        // Inbound media from lead
+        const ghlMsgId = await sendMediaToGHL(fdContact.id, [fileUrl], fdToken, fdFormattedCaption || undefined);
+
+        if (ghlMsgId && fdMessageId) {
+          await fdSupabase.from("message_map").upsert({
+            ghl_message_id: ghlMsgId,
+            uazapi_message_id: fdMessageId,
+            location_id: fdSubaccount.location_id,
+            contact_id: fdContact.id,
+            message_text: fdCaption || "",
+            message_type: "media",
+            from_me: false,
+            original_timestamp: new Date().toISOString(),
+          }, { onConflict: "ghl_message_id" });
+          console.log("FileDownloaded inbound mapping saved:", { ghl: ghlMsgId, uazapi: fdMessageId });
+        }
+      }
+
+      // Update contact photo and assign user (same as main flow)
+      const fdProfilePhoto = fdChatData.imagePreview || fdChatData.image || "";
+      if (fdProfilePhoto && fdContact.id) {
+        await updateContactPhoto(fdContact.id, fdProfilePhoto, fdToken);
+      }
+      if (fdInstance.ghl_user_id && fdContact.id) {
+        await assignContactToUser(fdContact.id, fdInstance.ghl_user_id, fdToken);
+      }
+
+      console.log(`✅ FileDownloaded media processed: ${fdChatId} -> ${fdContact.id} (${fdIsFromMe ? "outbound" : "inbound"})`);
+
+      return new Response(
+        JSON.stringify({ success: true, type: "file_downloaded", contactId: fdContact.id }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     // Extract message data early for special event handling
     const messageDataForEvents = body.message || body.data || {};
