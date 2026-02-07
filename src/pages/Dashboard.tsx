@@ -12,7 +12,7 @@ import { useInstances } from "@/hooks/useInstances";
 import { useSettings } from "@/hooks/useSettings";
 import { useSubscription } from "@/hooks/useSubscription";
 import { PlansDialog } from "@/components/dashboard/PlansDialog";
-import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone, Link2, Eye, Lock, CreditCard } from "lucide-react";
+import { RefreshCw, Search, ArrowLeft, Loader2, AlertCircle, Plus, Smartphone, Link2, Eye, Lock, CreditCard, Clock } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -24,7 +24,7 @@ export default function Dashboard() {
   const { subaccounts, isLoading, syncSubaccounts, isSharedAccount } = useSubaccounts();
   const { instances, syncAllInstancesStatus, linkedInstanceCount, unlinkedInstanceCount, instanceLimit } = useInstances(selectedSubaccount?.id);
   const { settings } = useSettings();
-  const { hasActiveSubscription } = useSubscription();
+  const { hasActiveSubscription, isInGracePeriod, gracePeriodEndsAt } = useSubscription();
 
   const filteredSubaccounts = subaccounts.filter((s) =>
     s.account_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -132,8 +132,22 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Grace Period Warning */}
+          {isInGracePeriod && !isSharedAccount && (
+            <Alert className="border-orange-500 bg-orange-500/10">
+              <Clock className="h-4 w-4 text-orange-500" />
+              <AlertDescription className="text-orange-500">
+                <strong>Pagamento pendente!</strong> Seu pagamento não foi identificado. Você tem até{" "}
+                <strong>
+                  {gracePeriodEndsAt?.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                </strong>{" "}
+                para regularizar. Após essa data, todas as instâncias serão desvinculadas das subcontas e você perderá as configurações feitas no dashboard.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* No Subscription Alert */}
-          {!hasActiveSubscription && !isSharedAccount && (
+          {!hasActiveSubscription && !isSharedAccount && !isInGracePeriod && (
             <Alert className="border-amber-500 bg-amber-500/10">
               <CreditCard className="h-4 w-4 text-amber-500" />
               <AlertDescription className="text-amber-500">
@@ -226,6 +240,20 @@ export default function Dashboard() {
             </Button>
           )}
         </div>
+
+        {/* Grace Period Warning */}
+        {isInGracePeriod && !isSharedAccount && (
+          <Alert className="border-orange-500 bg-orange-500/10">
+            <Clock className="h-4 w-4 text-orange-500" />
+            <AlertDescription className="text-orange-500">
+              <strong>Pagamento pendente!</strong> Seu pagamento não foi identificado. Você tem até{" "}
+              <strong>
+                {gracePeriodEndsAt?.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+              </strong>{" "}
+              para regularizar. Após essa data, todas as instâncias serão desvinculadas e você perderá as configurações.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Shared Account Alert */}
         {isSharedAccount && (

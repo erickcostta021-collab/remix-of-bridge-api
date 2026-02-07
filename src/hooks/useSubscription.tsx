@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 
+const GRACE_PERIOD_DAYS = 3;
+
 export function useSubscription() {
   const { user } = useAuth();
 
@@ -12,7 +14,7 @@ export function useSubscription() {
       
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("instance_limit, is_paused")
+        .select("instance_limit, is_paused, paused_at")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -21,13 +23,32 @@ export function useSubscription() {
         return { hasActiveSubscription: false, instanceLimit: 0 };
       }
 
-      // User has active subscription if instance_limit > 0 and not paused
-      const hasActiveSubscription = (profile?.instance_limit ?? 0) > 0 && !profile?.is_paused;
+      const isPaused = profile?.is_paused ?? false;
+      const pausedAt = profile?.paused_at ? new Date(profile.paused_at) : null;
+      
+      // Check grace period
+      let isInGracePeriod = false;
+      let gracePeriodEndsAt: Date | null = null;
+      
+      if (!isPaused && pausedAt) {
+        const endsAt = new Date(pausedAt);
+        endsAt.setDate(endsAt.getDate() + GRACE_PERIOD_DAYS);
+        
+        if (new Date() < endsAt) {
+          isInGracePeriod = true;
+          gracePeriodEndsAt = endsAt;
+        }
+      }
+
+      // User has active subscription if instance_limit > 0 and not fully paused
+      const hasActiveSubscription = (profile?.instance_limit ?? 0) > 0 && !isPaused;
       
       return {
         hasActiveSubscription,
         instanceLimit: profile?.instance_limit ?? 0,
-        isPaused: profile?.is_paused ?? false,
+        isPaused,
+        isInGracePeriod,
+        gracePeriodEndsAt,
       };
     },
     enabled: !!user,
@@ -38,6 +59,8 @@ export function useSubscription() {
     hasActiveSubscription: data?.hasActiveSubscription ?? false,
     instanceLimit: data?.instanceLimit ?? 0,
     isPaused: data?.isPaused ?? false,
+    isInGracePeriod: data?.isInGracePeriod ?? false,
+    gracePeriodEndsAt: data?.gracePeriodEndsAt ?? null,
     isLoading,
     refetch,
   };

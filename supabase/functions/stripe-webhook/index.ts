@@ -132,12 +132,13 @@ serve(async (req) => {
       );
 
       if (user) {
-        // Update existing user's instance limit
+        // Update existing user's instance limit and clear any grace period
         const { error: updateError } = await supabaseAdmin
           .from("profiles")
           .update({ 
             instance_limit: instanceLimit,
-            is_paused: false // Reactivate if was paused
+            is_paused: false,
+            paused_at: null, // Clear grace period on successful subscription
           })
           .eq("user_id", user.id);
 
@@ -192,7 +193,7 @@ serve(async (req) => {
       }
     }
 
-    // Handle payment failures (pause account until payment succeeds)
+    // Handle payment failures - start 3-day grace period instead of immediate pause
     // Support multiple event name variations
     if (
       event.type === "invoice.payment_failed" ||
@@ -201,7 +202,7 @@ serve(async (req) => {
     ) {
       const invoice = event.data.object as Stripe.Invoice;
       
-      // Only pause if this is a subscription payment (not initial)
+      // Only start grace period if this is a subscription payment (not initial)
       if (invoice.billing_reason === "subscription_cycle" || invoice.billing_reason === "subscription_update") {
         const customer = await stripe.customers.retrieve(invoice.customer as string);
         if (customer.deleted) {
@@ -219,19 +220,30 @@ serve(async (req) => {
           );
 
           if (user) {
-            // Pause account due to failed payment
-            const { error: updateError } = await supabaseAdmin
+            // Check if already in grace period (don't overwrite paused_at)
+            const { data: profile } = await supabaseAdmin
               .from("profiles")
-              .update({ 
-                is_paused: true,
-                paused_at: new Date().toISOString()
-              })
-              .eq("user_id", user.id);
+              .select("paused_at, is_paused")
+              .eq("user_id", user.id)
+              .maybeSingle();
 
-            if (updateError) {
-              logStep("Error pausing user after payment failure", { error: updateError.message });
+            if (!profile?.paused_at) {
+              // Start 3-day grace period: set paused_at but keep is_paused = false
+              const { error: updateError } = await supabaseAdmin
+                .from("profiles")
+                .update({ 
+                  is_paused: false,
+                  paused_at: new Date().toISOString()
+                })
+                .eq("user_id", user.id);
+
+              if (updateError) {
+                logStep("Error setting grace period", { error: updateError.message });
+              } else {
+                logStep("Payment failed, grace period started (3 days)", { userId: user.id, email: customerEmail });
+              }
             } else {
-              logStep("Payment failed, account paused", { userId: user.id, email: customerEmail });
+              logStep("Payment failed again, grace period already active", { userId: user.id, paused_at: profile.paused_at });
             }
           }
         }
