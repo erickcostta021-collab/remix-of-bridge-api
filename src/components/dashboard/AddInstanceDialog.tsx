@@ -25,10 +25,24 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Loader2, RefreshCw, HelpCircle, User, AlertTriangle } from "lucide-react";
-import { useInstances, UazapiInstance } from "@/hooks/useInstances";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, Loader2, RefreshCw, HelpCircle, User, AlertTriangle, Unlink } from "lucide-react";
+import { useInstances, UazapiInstance, Instance } from "@/hooks/useInstances";
 import { useGHLUsers, GHLUser } from "@/hooks/useGHLUsers";
 import { Subaccount } from "@/hooks/useSubaccounts";
+import { useAuth } from "@/hooks/useAuth";
+import { useSettings, getEffectiveUserId } from "@/hooks/useSettings";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface AddInstanceDialogProps {
@@ -55,17 +69,41 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
   const [ghlUsers, setGhlUsers] = useState<GHLUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   
+  // Unlink confirmation state
+  const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false);
+  const [instanceToUnlink, setInstanceToUnlink] = useState<Instance | null>(null);
+
   const { 
     createInstance, 
     importInstance, 
     instances, 
     fetchUazapiInstances,
+    deleteInstance,
     instanceLimit,
     linkedInstanceCount,
     unlinkedInstanceCount,
     canCreateInstance,
   } = useInstances(subaccount.id);
   const { fetchLocationUsers } = useGHLUsers();
+  const { user } = useAuth();
+  const { settings } = useSettings();
+
+  // Fetch ALL user instances (across all subaccounts) to detect already-imported ones
+  const { data: allUserInstances = [] } = useQuery({
+    queryKey: ["all-user-instances", user?.id, settings?.shared_from_user_id],
+    queryFn: async () => {
+      if (!user) return [];
+      const effectiveUserId = await getEffectiveUserId(user.id);
+      const { data, error } = await supabase
+        .from("instances")
+        .select("*")
+        .eq("user_id", effectiveUserId)
+        .order("instance_name");
+      if (error) throw error;
+      return data as Instance[];
+    },
+    enabled: !!user && open,
+  });
 
   // Load GHL users when dialog opens
   useEffect(() => {
@@ -182,11 +220,47 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
     });
   };
 
-  // Filter out already imported instances
-  const importedTokens = new Set(instances.map((i) => i.uazapi_instance_token));
+  // Find which uazapi instances are already imported (across all subaccounts)
+  const importedTokenMap = new Map<string, Instance>();
+  allUserInstances.forEach((i) => {
+    importedTokenMap.set(i.uazapi_instance_token, i);
+  });
+
+  // Split into available (not imported) and already imported
   const availableInstances = uazapiInstances.filter(
-    (i) => !importedTokens.has(i.token)
+    (i) => !importedTokenMap.has(i.token)
   );
+  const alreadyImportedInstances = uazapiInstances.filter(
+    (i) => importedTokenMap.has(i.token)
+  );
+
+  const handleUnlinkClick = (uazapiInstance: UazapiInstance) => {
+    const dbInstance = importedTokenMap.get(uazapiInstance.token);
+    if (dbInstance) {
+      setInstanceToUnlink(dbInstance);
+      setUnlinkConfirmOpen(true);
+    }
+  };
+
+  const queryClient = useQueryClient(); // for invalidating all-user-instances after unlink
+
+  const confirmUnlink = () => {
+    if (!instanceToUnlink) return;
+    deleteInstance.mutate(
+      { instance: instanceToUnlink, deleteFromUazapi: false },
+      {
+        onSuccess: () => {
+          setUnlinkConfirmOpen(false);
+          setInstanceToUnlink(null);
+          queryClient.invalidateQueries({ queryKey: ["all-user-instances"] });
+        },
+        onError: () => {
+          setUnlinkConfirmOpen(false);
+          setInstanceToUnlink(null);
+        },
+      }
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
@@ -360,14 +434,13 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-              ) : availableInstances.length === 0 ? (
+              ) : uazapiInstances.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  {uazapiInstances.length === 0
-                    ? "Nenhuma instância encontrada no servidor"
-                    : "Todas as instâncias já foram importadas"}
+                  Nenhuma instância encontrada no servidor
                 </div>
               ) : (
                 <div className="space-y-2">
+                  {/* Available instances (not yet imported) */}
                   {availableInstances.map((instance) => (
                     <div
                       key={instance.token}
@@ -395,6 +468,41 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
                       </div>
                     </div>
                   ))}
+
+                  {/* Already imported instances with unlink button */}
+                  {alreadyImportedInstances.map((instance) => (
+                    <div
+                      key={instance.token}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-border bg-secondary/30 opacity-70"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground truncate">
+                          {instance.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground font-mono truncate">
+                          {instance.token}
+                        </p>
+                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 bg-orange-500/15 hover:bg-orange-500/25 text-orange-500 hover:text-orange-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUnlinkClick(instance);
+                            }}
+                          >
+                            <Unlink className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Desvincular instância</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  ))}
                 </div>
               )}
             </ScrollArea>
@@ -415,6 +523,29 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
             </Button>
           </div>
         )}
+
+        {/* Unlink Confirmation Dialog */}
+        <AlertDialog open={unlinkConfirmOpen} onOpenChange={setUnlinkConfirmOpen}>
+          <AlertDialogContent className="bg-card border-border">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Desvincular instância?</AlertDialogTitle>
+              <AlertDialogDescription>
+                A instância <span className="font-semibold text-foreground">{instanceToUnlink?.instance_name}</span> será removida do sistema. Ela continuará disponível no servidor para uma nova importação.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+                onClick={confirmUnlink}
+                disabled={deleteInstance.isPending}
+              >
+                {deleteInstance.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Desvincular
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
