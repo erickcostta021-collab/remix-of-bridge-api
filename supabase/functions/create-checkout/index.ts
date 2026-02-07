@@ -34,41 +34,59 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const { plan, quantity, email } = await req.json();
-    logStep("Request received", { plan, quantity, email });
+    const { plan, quantity, email: bodyEmail } = await req.json();
+    logStep("Request received", { plan, quantity, email: bodyEmail });
 
-    if (!plan || !email) {
+    // Try to get authenticated user
+    let userEmail = bodyEmail;
+    let isAuthenticated = false;
+    
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+      
+      if (!userError && userData?.user?.email) {
+        userEmail = userData.user.email;
+        isAuthenticated = true;
+        logStep("Authenticated user detected", { email: userEmail });
+      }
+    }
+
+    if (!plan || !userEmail) {
       throw new Error("Plan and email are required");
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(userEmail)) {
       throw new Error("Formato de email inválido");
     }
 
-    // Check if user already exists in auth.users
-    const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-    
-    if (listError) {
-      logStep("Error checking existing users", { error: listError.message });
-    } else {
-      const userExists = existingUsers.users.some(
-        (user) => user.email?.toLowerCase() === email.toLowerCase()
-      );
+    // Only check for existing users if NOT authenticated (new signup flow)
+    if (!isAuthenticated) {
+      const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
       
-      if (userExists) {
-        logStep("Email already registered", { email });
-        return new Response(
-          JSON.stringify({ 
-            error: "Este email já está cadastrado. Por favor, faça login ou use outro email.",
-            code: "EMAIL_EXISTS"
-          }),
-          { 
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 200,
-          }
+      if (listError) {
+        logStep("Error checking existing users", { error: listError.message });
+      } else {
+        const userExists = existingUsers.users.some(
+          (user) => user.email?.toLowerCase() === userEmail.toLowerCase()
         );
+        
+        if (userExists) {
+          logStep("Email already registered", { email: userEmail });
+          return new Response(
+            JSON.stringify({ 
+              error: "Este email já está cadastrado. Por favor, faça login ou use outro email.",
+              code: "EMAIL_EXISTS"
+            }),
+            { 
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              status: 200,
+            }
+          );
+        }
       }
     }
 
@@ -82,7 +100,7 @@ serve(async (req) => {
     });
 
     // Check if customer already exists
-    const customers = await stripe.customers.list({ email: email, limit: 1 });
+    const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
     let customerId;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
@@ -117,7 +135,7 @@ serve(async (req) => {
     // Create checkout session with 5-day trial
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      customer_email: customerId ? undefined : email,
+      customer_email: customerId ? undefined : userEmail,
       line_items: lineItems,
       mode: "subscription",
       success_url: `${origin}/login?checkout=success`,
