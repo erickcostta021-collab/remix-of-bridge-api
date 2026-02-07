@@ -78,7 +78,7 @@ export function InstanceCard({ instance }: InstanceCardProps) {
   const [webhookDialogOpen, setWebhookDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteFromUazapi, setDeleteFromUazapi] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState(instance.webhook_url || "");
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [ignoreGroups, setIgnoreGroups] = useState(instance.ignore_groups || false);
   const [syncing, setSyncing] = useState(false);
   const [connectedPhone, setConnectedPhone] = useState<string | null>(instance.phone || null);
