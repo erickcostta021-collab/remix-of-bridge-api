@@ -28,16 +28,16 @@ export function ManualConnectTab({
   canCreateInstance,
   onSuccess,
 }: ManualConnectTabProps) {
-  const [serverUrl, setServerUrl] = useState("");
+  const { user } = useAuth();
+  const { settings, updateSettings } = useSettings();
+  const queryClient = useQueryClient();
+
+  const [serverUrl, setServerUrl] = useState(settings?.uazapi_base_url || "");
   const [instanceToken, setInstanceToken] = useState("");
   const [instanceName, setInstanceName] = useState("");
   const [validationState, setValidationState] = useState<ValidationState>("idle");
   const [validationMessage, setValidationMessage] = useState("");
   const [connecting, setConnecting] = useState(false);
-
-  const { user } = useAuth();
-  const { settings } = useSettings();
-  const queryClient = useQueryClient();
 
   const trimmedUrl = serverUrl.trim().replace(/\/$/, "");
   const trimmedToken = instanceToken.trim();
@@ -121,6 +121,12 @@ export function ManualConnectTab({
         toast.error("Esta instância já está vinculada ao sistema");
         setConnecting(false);
         return;
+      }
+
+      // Ensure user_settings.uazapi_base_url is in sync with the entered URL
+      // so that InstanceCard connect/QR flows use the correct server
+      if (!settings?.uazapi_base_url || settings.uazapi_base_url.replace(/\/$/, "") !== trimmedUrl) {
+        await updateSettings.mutateAsync({ uazapi_base_url: trimmedUrl });
       }
 
       const { error } = await supabase.from("instances").insert({
