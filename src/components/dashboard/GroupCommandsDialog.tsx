@@ -101,6 +101,13 @@ const commands = [
     format: "",
     context: "Dentro do grupo",
   },
+  {
+    command: "#pix",
+    description: "Envia botão de pagamento PIX ao contato",
+    format: "tipo|chave|nome",
+    context: "Contato",
+    notes: "Tipos: EVP, CPF, CNPJ, PHONE, EMAIL",
+  },
 ];
 
 export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogProps) {
@@ -163,7 +170,7 @@ export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogP
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <Badge
-                      variant={cmd.context === "Global" ? "default" : "secondary"}
+                      variant={cmd.context === "Global" ? "default" : cmd.context === "Contato" ? "outline" : "secondary"}
                       className="text-xs"
                     >
                       {cmd.context}

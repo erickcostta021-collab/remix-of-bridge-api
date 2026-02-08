@@ -824,6 +824,7 @@ async function processGroupCommand(
   instanceName?: string,
   currentGroupJid?: string, // JID do grupo se a mensagem veio de dentro de um grupo
   ghlContext?: GhlContext, // Context for GHL operations
+  targetPhone?: string, // Phone number of the contact (for non-group commands like #pix)
 ): Promise<GroupCommandResult> {
   const parsed = parseGroupCommand(messageText);
   if (!parsed) return { isCommand: false };
@@ -834,7 +835,8 @@ async function processGroupCommand(
   const validCommands = [
     "#criargrupo", "#removerdogrupo", "#addnogrupo", "#promoveradmin",
     "#revogaradmin", "#attfotogrupo", "#attnomegrupo", "#attdescricao",
-    "#somenteadminmsg", "#msgliberada", "#somenteadminedit", "#editliberado", "#linkgrupo", "#sairgrupo"
+    "#somenteadminmsg", "#msgliberada", "#somenteadminedit", "#editliberado", "#linkgrupo", "#sairgrupo",
+    "#pix"
   ];
   
   if (!validCommands.includes(command)) {
@@ -1645,6 +1647,57 @@ async function processGroupCommand(
         return { isCommand: true, success: true, command, message: `Link do grupo enviado para ${phoneParam}` };
       }
       
+      case "#pix": {
+        // Formato: #pix pixType|pixKey|pixName
+        // Enviado no chat de um contato - envia botão PIX via UAZAPI
+        if (params.length < 3) {
+          return { isCommand: true, success: false, command, message: "Formato: #pix tipo|chave|nome\nTipos: EVP, CPF, CNPJ, PHONE, EMAIL" };
+        }
+        
+        const pixType = params[0].toUpperCase().trim();
+        const pixKey = params[1].trim();
+        const pixName = params[2].trim();
+        
+        const validPixTypes = ["EVP", "CPF", "CNPJ", "PHONE", "EMAIL"];
+        if (!validPixTypes.includes(pixType)) {
+          return { isCommand: true, success: false, command, message: `Tipo PIX inválido: "${pixType}". Use: ${validPixTypes.join(", ")}` };
+        }
+        
+        if (!targetPhone) {
+          return { isCommand: true, success: false, command, message: "Erro: número do contato não encontrado" };
+        }
+        
+        const pixPhone = targetPhone.replace(/\D/g, "");
+        console.log("Sending PIX button:", { pixType, pixKey, pixName, phone: pixPhone });
+        
+        try {
+          const pixRes = await fetch(`${baseUrl}/send/pix-button`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "token": instanceToken,
+            },
+            body: JSON.stringify({
+              number: pixPhone,
+              pixType,
+              pixKey,
+              pixName,
+            }),
+          });
+          
+          const pixText = await pixRes.text();
+          console.log("PIX button response:", { status: pixRes.status, body: pixText.substring(0, 300) });
+          
+          if (pixRes.ok) {
+            return { isCommand: true, success: true, command, message: `Botão PIX enviado para ${pixPhone} (${pixName})` };
+          } else {
+            return { isCommand: true, success: false, command, message: `Falha ao enviar botão PIX (${pixRes.status}): ${pixText.substring(0, 100)}` };
+          }
+        } catch (e) {
+          return { isCommand: true, success: false, command, message: `Erro ao enviar PIX: ${e instanceof Error ? e.message : "Falha"}` };
+        }
+      }
+      
       case "#sairgrupo": {
         // Formato: #sairgrupo (enviado dentro do grupo)
         // UAZAPI: POST /group/leave with { groupjid }
@@ -2105,6 +2158,7 @@ serve(async (req: Request) => {
         (instance as any)?.instance_name,
         groupJidForCommand, // Passa o JID do grupo se a mensagem veio de um grupo
         { supabase, subaccount, settings, contactId }, // Context for GHL operations
+        targetPhone, // Phone for non-group commands like #pix
       );
       
       if (commandResult.isCommand) {
