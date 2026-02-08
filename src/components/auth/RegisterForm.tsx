@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Loader2, ArrowLeft, CheckCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useNavigate } from "react-router-dom";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/bridge-api-logo.jpg";
 import { z } from "zod";
 
 const registerSchema = z.object({
@@ -141,7 +141,9 @@ export function RegisterForm() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="flex flex-col items-center gap-3 mb-4">
-            <img src={logo} alt="Bridge API" className="h-16 w-16 rounded-full" />
+            <div className="w-28 h-28 rounded-2xl overflow-hidden shadow-lg">
+              <img src={logo} alt="Bridge API" className="w-full h-full object-cover" />
+            </div>
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
           </div>
           <CardTitle className="text-2xl font-bold text-foreground">
