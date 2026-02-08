@@ -9,104 +9,25 @@ import { Badge } from "@/components/ui/badge";
 import { Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
-interface GroupCommandsDialogProps {
+interface SendButtonsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const commands = [
+const buttonCommands = [
   {
-    command: "#criargrupo",
-    description: "Cria um novo grupo no WhatsApp",
-    format: "nome|+55...|descrição|urldafoto",
-    context: "Global",
-    notes: "Descrição e foto são opcionais",
-  },
-  {
-    command: "#addnogrupo",
-    description: "Adiciona participante ao grupo",
-    format: "+55...",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#removerdogrupo",
-    description: "Remove participante do grupo",
-    format: "+55...",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#promoveradmin",
-    description: "Promove participante a admin",
-    format: "+55...",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#revogaradmin",
-    description: "Revoga admin de um participante",
-    format: "+55...",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#attfotogrupo",
-    description: "Atualiza a foto do grupo",
-    format: "url_da_foto",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#attnomegrupo",
-    description: "Atualiza o nome do grupo",
-    format: "novo nome",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#attdescricao",
-    description: "Atualiza a descrição do grupo",
-    format: "nova descrição",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#somenteadminmsg",
-    description: "Apenas admins enviam mensagens",
-    format: "",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#msgliberada",
-    description: "Todos podem enviar mensagens",
-    format: "",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#somenteadminedit",
-    description: "Apenas admins editam dados do grupo",
-    format: "",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#editliberado",
-    description: "Todos podem editar dados do grupo",
-    format: "",
-    context: "Dentro do grupo",
-  },
-  {
-    command: "#linkgrupo",
-    description: "Obtém o link de convite do grupo",
-    format: "",
-    context: "Dentro do grupo",
-    notes: "Formato global: #linkgrupo ID|TELEFONE",
-  },
-  {
-    command: "#sairgrupo",
-    description: "Sai do grupo (remove a instância)",
-    format: "",
-    context: "Dentro do grupo",
+    command: "#pix",
+    description: "Envia botão de pagamento PIX ao contato",
+    format: "tipo|chave|nome",
+    context: "Contato",
+    notes: "Tipos: EVP, CPF, CNPJ, PHONE, EMAIL",
   },
 ];
 
-export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogProps) {
+export function SendButtonsDialog({ open, onOpenChange }: SendButtonsDialogProps) {
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
 
-  const handleCopy = (cmd: typeof commands[0]) => {
+  const handleCopy = (cmd: typeof buttonCommands[0]) => {
     const fullCommand = cmd.format
       ? `${cmd.command} ${cmd.format}`
       : cmd.command;
@@ -120,9 +41,9 @@ export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl">Comandos de Grupo do WhatsApp</DialogTitle>
+          <DialogTitle className="text-xl">Enviar Botões</DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            Envie esses comandos pelo chat do GoHighLevel para gerenciar grupos do WhatsApp.
+            Comandos para enviar botões interativos pelo chat do GoHighLevel.
           </p>
         </DialogHeader>
 
@@ -138,7 +59,7 @@ export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogP
               </tr>
             </thead>
             <tbody>
-              {commands.map((cmd, i) => (
+              {buttonCommands.map((cmd, i) => (
                 <tr
                   key={cmd.command}
                   className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}
@@ -162,10 +83,7 @@ export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogP
                     )}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
-                    <Badge
-                      variant={cmd.context === "Global" ? "default" : "secondary"}
-                      className="text-xs"
-                    >
+                    <Badge variant="outline" className="text-xs">
                       {cmd.context}
                     </Badge>
                   </td>
@@ -190,8 +108,7 @@ export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogP
 
         <div className="mt-4 p-3 rounded-lg bg-muted/30 border border-border">
           <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">Dica:</strong> Comandos com contexto "Dentro do grupo" devem ser enviados de dentro da conversa do grupo no CRM.
-            O comando <code className="text-primary">#criargrupo</code> pode ser enviado de qualquer conversa.
+            <strong className="text-foreground">Dica:</strong> Esses comandos devem ser enviados no chat de um contato individual no CRM, não dentro de grupos.
           </p>
         </div>
       </DialogContent>
