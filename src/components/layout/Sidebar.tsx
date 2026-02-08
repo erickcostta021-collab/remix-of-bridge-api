@@ -18,9 +18,11 @@ import {
   Users,
   MessageSquare,
   Palette,
+  MousePointerClick,
 } from "lucide-react";
 import { CustomizeSmsDialog } from "@/components/dashboard/CustomizeSmsDialog";
 import { WhatsAppThemeDialog } from "@/components/dashboard/WhatsAppThemeDialog";
+import { SendButtonsDialog } from "@/components/dashboard/SendButtonsDialog";
 
 import { useSidebarState } from "@/hooks/useSidebarState";
 
@@ -38,6 +40,7 @@ export function Sidebar() {
   const [groupCommandsOpen, setGroupCommandsOpen] = useState(false);
   const [customizeSmsOpen, setCustomizeSmsOpen] = useState(false);
   const [whatsappThemeOpen, setWhatsappThemeOpen] = useState(false);
+  const [sendButtonsOpen, setSendButtonsOpen] = useState(false);
 
   const oauthUrl = getOAuthUrl();
 
@@ -191,6 +194,16 @@ export function Sidebar() {
                   <Palette className="h-4 w-4 flex-shrink-0" />
                   <span className="whitespace-nowrap">Tema WhatsApp</span>
                 </button>
+                <button
+                  onClick={() => setSendButtonsOpen(true)}
+                  className={cn(
+                    "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
+                    "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                >
+                  <MousePointerClick className="h-4 w-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">Enviar Botões</span>
+                </button>
               </div>
             )}
           </div>
@@ -257,6 +270,9 @@ export function Sidebar() {
 
       {/* WhatsApp Theme Dialog */}
       <WhatsAppThemeDialog open={whatsappThemeOpen} onOpenChange={setWhatsappThemeOpen} />
+
+      {/* Send Buttons Dialog */}
+      <SendButtonsDialog open={sendButtonsOpen} onOpenChange={setSendButtonsOpen} />
     </>
   );
 }
