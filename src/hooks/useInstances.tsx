@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { useSettings, getEffectiveUserId } from "./useSettings";
@@ -6,257 +6,70 @@ import { useProfile } from "./useProfile";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
+// Re-export types from instanceApi for backward compatibility
+export type { Instance, UazapiInstance } from "./instances/instanceApi";
+
+import {
+  type Instance,
+  type UazapiInstance,
+  fetchAllUazapiInstances,
+  fetchInstanceStatus,
+  checkInstanceExistsOnApi,
+  connectInstanceOnApi,
+  getQRCodeFromApi,
+  disconnectInstanceOnApi,
+  createInstanceOnApi,
+  deleteInstanceFromApi,
+  updateWebhookOnApi,
+  reconfigureWebhookOnApi,
+  mapToInstanceStatus,
+  getBaseUrlForInstance,
+} from "./instances/instanceApi";
+
+import {
+  useInstanceList,
+  useLinkedInstanceCount,
+  useUnlinkedInstanceCount,
+} from "./instances/useInstanceQueries";
+
 type InstanceStatus = Database["public"]["Enums"]["instance_status"];
 
-export interface Instance {
-  id: string;
-  user_id: string;
-  subaccount_id: string | null;
-  instance_name: string;
-  uazapi_instance_token: string;
-  instance_status: InstanceStatus;
-  webhook_url: string | null;
-  ignore_groups: boolean | null;
-  ghl_user_id: string | null;
-  phone: string | null; // Cached in DB
-  profile_pic_url: string | null; // Cached in DB
-  uazapi_base_url: string | null; // Per-instance base URL (manual instances)
+/** Invalidate all instance-related queries */
+function invalidateInstanceQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ["instances"] });
+  queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
+  queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
+  queryClient.invalidateQueries({ queryKey: ["all-user-instances"] });
 }
 
-export interface UazapiInstance {
-  token: string;
-  name: string;
-  status: string;
-  phone?: string;
-  webhook_url?: string;
-}
 export function useInstances(subaccountId?: string) {
   const { user } = useAuth();
   const { settings } = useSettings();
-  const { profile, instanceLimit } = useProfile();
+  const { instanceLimit } = useProfile();
   const queryClient = useQueryClient();
 
-  // Check if this account is sharing from another user
   const isSharedAccount = !!settings?.shared_from_user_id;
+  const globalBaseUrl = settings?.uazapi_base_url ?? null;
 
-  // Get linked instance count (only instances linked to subaccounts count toward limit)
-  const { data: linkedInstanceCount = 0 } = useQuery({
-    queryKey: ["instance-count-linked", user?.id, settings?.shared_from_user_id],
-    queryFn: async () => {
-      if (!user) return 0;
-      const effectiveUserId = await getEffectiveUserId(user.id);
-      
-      const { count, error } = await supabase
-        .from("instances")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", effectiveUserId)
-        .not("subaccount_id", "is", null);
-      
-      if (error) throw error;
-      return count ?? 0;
-    },
-    enabled: !!user,
-  });
+  // ── Queries ──────────────────────────────────────────────────────────
+  const { data: linkedInstanceCount = 0 } = useLinkedInstanceCount(settings?.shared_from_user_id);
+  const { data: unlinkedInstanceCount = 0 } = useUnlinkedInstanceCount(settings?.shared_from_user_id);
+  const { data: instances, isLoading } = useInstanceList(subaccountId, settings?.shared_from_user_id);
 
-  // Get unlinked instance count (instances not associated with any subaccount)
-  const { data: unlinkedInstanceCount = 0 } = useQuery({
-    queryKey: ["instance-count-unlinked", user?.id, settings?.shared_from_user_id],
-    queryFn: async () => {
-      if (!user) return 0;
-      const effectiveUserId = await getEffectiveUserId(user.id);
-      
-      const { count, error } = await supabase
-        .from("instances")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", effectiveUserId)
-        .is("subaccount_id", null);
-      
-      if (error) throw error;
-      return count ?? 0;
-    },
-    enabled: !!user,
-  });
-
-  const { data: instances, isLoading } = useQuery({
-    queryKey: ["instances", user?.id, subaccountId, settings?.shared_from_user_id],
-    queryFn: async () => {
-      if (!user) return [];
-      
-      // Get effective user ID (original owner if shared)
-      const effectiveUserId = await getEffectiveUserId(user.id);
-      
-      let query = supabase
-        .from("instances")
-        .select("*")
-        .eq("user_id", effectiveUserId);
-
-      if (subaccountId) {
-        query = query.eq("subaccount_id", subaccountId);
-      }
-
-      const { data, error } = await query.order("instance_name");
-      if (error) throw error;
-      return data as Instance[];
-    },
-    enabled: !!user,
-  });
-
-  // Fetch all instances from UAZAPI
+  // ── Helper: fetch UAZAPI instances list ──────────────────────────────
   const fetchUazapiInstances = async (): Promise<UazapiInstance[]> => {
     if (!settings?.uazapi_admin_token || !settings?.uazapi_base_url) {
       throw new Error("Configurações UAZAPI não encontradas");
     }
-
-    const base = settings.uazapi_base_url.replace(/\/$/, "");
-    // Per UAZAPI docs: GET /instance/all for listing all instances
-    const candidatePaths = [
-      "/instance/all",
-      "/api/instance/all",
-    ];
-
-    let response: Response | null = null;
-    for (const path of candidatePaths) {
-      const url = `${base}${path}`;
-      // eslint-disable-next-line no-await-in-loop
-      const r = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          admintoken: settings.uazapi_admin_token,
-        },
-      });
-
-      // If endpoint doesn't exist on this server, try the next candidate.
-      if (r.status === 404) continue;
-
-      response = r;
-      break;
-    }
-
-    if (!response) {
-      throw new Error(
-        "Não encontrei um endpoint válido para listar instâncias (tente conferir se a API está usando o prefixo /api)."
-      );
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Erro ${response.status} ao buscar instâncias`);
-    }
-
-    const data = await response.json();
-    
-    // Handle different response formats
-    const instancesArray = Array.isArray(data) ? data : (data.instances || data.data || []);
-    
-    return instancesArray.map((inst: any) => ({
-      token: inst.token || inst.instanceToken || inst.instance_token || "",
-      name: inst.name || inst.instanceName || inst.instance_name || "Sem nome",
-      status: inst.status || inst.state || "disconnected",
-      phone: inst.phone || inst.number || "",
-      webhook_url: inst.webhook_url || inst.webhookUrl || "",
-    }));
+    return fetchAllUazapiInstances(settings.uazapi_base_url, settings.uazapi_admin_token);
   };
 
-  // Resolve the UAZAPI base URL for a given instance.
-  // Per-instance URL takes priority over global settings.
-  const getBaseUrlForInstance = (instance: Instance | { uazapi_base_url?: string | null }): string => {
-    const instanceUrl = instance.uazapi_base_url;
-    if (instanceUrl) return instanceUrl.replace(/\/$/, "");
-    if (settings?.uazapi_base_url) return settings.uazapi_base_url.replace(/\/$/, "");
-    throw new Error("URL base da UAZAPI não configurada");
-  };
-
-  // Get status of a specific instance (returns status, phone and profile pic)
-  const getInstanceStatus = async (instance: Instance): Promise<{ status: string; phone?: string; profilePicUrl?: string }> => {
-    const base = getBaseUrlForInstance(instance);
-
-    try {
-      const candidatePaths = ["/instance/status", "/api/instance/status", "/v2/instance/status", "/api/v2/instance/status"];
-
-      let response: Response | null = null;
-      for (const path of candidatePaths) {
-        const url = `${base}${path}`;
-        // eslint-disable-next-line no-await-in-loop
-        const r = await fetch(url, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            token: instance.uazapi_instance_token,
-          },
-        });
-        if (r.status === 404) continue;
-        response = r;
-        break;
-      }
-
-      if (!response) return { status: "disconnected" };
-
-      if (!response.ok) {
-        return { status: "disconnected" };
-      }
-
-      const data = await response.json();
-      console.log("[UAZAPI] Status response:", JSON.stringify(data));
-      
-      // Extract phone FIRST from various possible locations
-      const phone = data.instance?.owner 
-        || data.status?.jid?.split("@")?.[0]
-        || data.phone 
-        || data.number 
-        || data.jid?.split("@")?.[0] 
-        || "";
-      
-      // Extract profile picture URL
-      const profilePicUrl = data.instance?.profilePicUrl
-        || data.profilePicUrl
-        || data.profilePic
-        || data.picture
-        || data.imgUrl
-        || "";
-      
-      // Determine status (more reliable):
-      // Some servers incorrectly set `status.connected=true` while the session is not logged in.
-      // Prefer explicit session indicators like `loggedIn`/`jid`, then fallback to instance.status.
-      let status = "disconnected";
-
-      const loggedIn = data.status?.loggedIn === true || data.instance?.loggedIn === true;
-      const jid = data.status?.jid || data.instance?.jid || data.jid;
-      const instanceStatusRaw = data.instance?.status || data.status || data.state || "disconnected";
-
-      const isSessionConnected = loggedIn || !!jid;
-      const isInstanceStatusConnected =
-        typeof instanceStatusRaw === "string" &&
-        ["connected", "open", "authenticated"].includes(instanceStatusRaw.toLowerCase());
-
-      if (isSessionConnected || isInstanceStatusConnected) {
-        // Only consider truly connected if we have a valid phone/owner/jid.
-        status = phone ? "connected" : "connecting";
-      } else if (typeof instanceStatusRaw === "string") {
-        status = instanceStatusRaw;
-      }
-      
-      console.log("[UAZAPI] Parsed status:", status, "phone:", phone, "loggedIn:", loggedIn, "jid:", jid);
-      
-      return { status, phone, profilePicUrl };
-    } catch {
-      return { status: "disconnected", profilePicUrl: "" };
-    }
-  };
-
-  // Sync status from UAZAPI and save to DB cache
+  // ── Status Mutations ────────────────────────────────────────────────
   const syncInstanceStatus = useMutation({
     mutationFn: async (instance: Instance): Promise<{ status: InstanceStatus; phone?: string; profilePicUrl?: string }> => {
-      const result = await getInstanceStatus(instance);
-      
-      let mappedStatus: InstanceStatus = "disconnected";
-      if (result.status === "connected" || result.status === "open" || result.status === "authenticated") {
-        mappedStatus = "connected";
-      } else if (result.status === "connecting" || result.status === "qr" || result.status === "waiting") {
-        mappedStatus = "connecting";
-      }
+      const result = await fetchInstanceStatus(instance, globalBaseUrl);
+      const mappedStatus = mapToInstanceStatus(result.status);
 
-      // Update status AND cache phone/profile_pic_url in DB
       const updateData: Record<string, unknown> = { instance_status: mappedStatus };
       if (result.phone) updateData.phone = result.phone;
       if (result.profilePicUrl) updateData.profile_pic_url = result.profilePicUrl;
@@ -274,7 +87,6 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
-  // Sync ALL instances status from UAZAPI
   const syncAllInstancesStatus = useMutation({
     mutationFn: async (): Promise<{ successful: number; failed: number; notFound: string[]; total: number }> => {
       if (!instances || instances.length === 0) {
@@ -285,46 +97,32 @@ export function useInstances(subaccountId?: string) {
 
       const results = await Promise.allSettled(
         instances.map(async (instance) => {
-          const result = await getInstanceStatus(instance);
-          
-          // Check if instance doesn't exist on UAZAPI server
-          // When token is invalid/not found, UAZAPI typically returns disconnected with no phone
-          // We also check if the instance responds at all
-          const instanceExists = await checkInstanceExists(instance);
-          
+          const result = await fetchInstanceStatus(instance, globalBaseUrl);
+          const instanceExists = await checkInstanceExistsOnApi(instance, globalBaseUrl);
+
           if (!instanceExists) {
             notFoundInstances.push(instance.id);
             return { id: instance.id, status: "not_found" as const };
           }
-          
-          let mappedStatus: InstanceStatus = "disconnected";
-          if (result.status === "connected" || result.status === "open" || result.status === "authenticated") {
-            mappedStatus = "connected";
-          } else if (result.status === "connecting" || result.status === "qr" || result.status === "waiting") {
-            mappedStatus = "connecting";
-          }
 
+          const mappedStatus = mapToInstanceStatus(result.status);
           const updateData: Record<string, unknown> = { instance_status: mappedStatus };
           if (result.phone) updateData.phone = result.phone;
           if (result.profilePicUrl) updateData.profile_pic_url = result.profilePicUrl;
 
-          await supabase
-            .from("instances")
-            .update(updateData)
-            .eq("id", instance.id);
-
+          await supabase.from("instances").update(updateData).eq("id", instance.id);
           return { id: instance.id, status: mappedStatus };
-        })
+        }),
       );
 
-      const successful = results.filter(r => r.status === "fulfilled" && (r.value as any).status !== "not_found").length;
-      const failed = results.filter(r => r.status === "rejected").length;
+      const successful = results.filter((r) => r.status === "fulfilled" && (r.value as any).status !== "not_found").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
 
       return { successful, failed, notFound: notFoundInstances, total: instances.length };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["instances"] });
-      
+
       if (data.notFound.length > 0) {
         toast.warning(`${data.notFound.length} instância(s) não encontrada(s) no servidor UAZAPI`, {
           description: "Clique em 'Limpar' para removê-las",
@@ -351,52 +149,18 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
-  // Check if instance exists on UAZAPI server
-  const checkInstanceExists = async (instance: Instance): Promise<boolean> => {
-    try {
-      const base = getBaseUrlForInstance(instance);
-      
-      // Try to get instance info - if it doesn't exist, we'll get an error
-      const response = await fetch(`${base}/instance/status`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          token: instance.uazapi_instance_token,
-        },
-      });
-
-      // 401/403/404 means instance doesn't exist or token is invalid
-      if (response.status === 401 || response.status === 403 || response.status === 404) {
-        return false;
-      }
-
-      const data = await response.json();
-      
-      // Check for error responses that indicate instance doesn't exist
-      if (data.error === true || data.message?.toLowerCase().includes("not found") || 
-          data.message?.toLowerCase().includes("invalid") || data.message?.toLowerCase().includes("não encontrad")) {
-        return false;
-      }
-
-      return true;
-    } catch {
-      // Network error or other issue - assume exists to be safe
-      return true;
-    }
-  };
-
-  // Import existing instance from UAZAPI (or re-link an unlinked one)
+  // ── CRUD Mutations ──────────────────────────────────────────────────
   const importInstance = useMutation({
-    mutationFn: async ({ 
-      uazapiInstance, 
-      subaccountId 
-    }: { 
-      uazapiInstance: UazapiInstance; 
+    mutationFn: async ({
+      uazapiInstance,
+      subaccountId,
+    }: {
+      uazapiInstance: UazapiInstance;
       subaccountId: string;
     }) => {
       if (!user) throw new Error("Não autenticado");
 
-      // Fresh count from DB to avoid stale cache when importing multiple instances
+      // Fresh count from DB to avoid stale cache
       if (instanceLimit > 0) {
         const effectiveUserId = await getEffectiveUserId(user.id);
         const { count, error: countError } = await supabase
@@ -404,28 +168,25 @@ export function useInstances(subaccountId?: string) {
           .select("*", { count: "exact", head: true })
           .eq("user_id", effectiveUserId)
           .not("subaccount_id", "is", null);
-        
+
         if (countError) throw countError;
-        const currentLinkedCount = count ?? 0;
-        
-        if (currentLinkedCount >= instanceLimit) {
+        if ((count ?? 0) >= instanceLimit) {
           throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
         }
       }
 
-      // Check if already exists in DB
+      // Check if already exists
       const { data: existing } = await supabase
         .from("instances")
         .select("id, subaccount_id")
         .eq("uazapi_instance_token", uazapiInstance.token)
         .maybeSingle();
 
-      // If exists and already linked to a subaccount, block
       if (existing && existing.subaccount_id) {
         throw new Error("Esta instância já está vinculada a uma subconta");
       }
 
-      // If exists but unlinked (subaccount_id = null), re-link it
+      // Re-link if unlinked
       if (existing && !existing.subaccount_id) {
         const { data, error } = await supabase
           .from("instances")
@@ -433,19 +194,12 @@ export function useInstances(subaccountId?: string) {
           .eq("id", existing.id)
           .select()
           .single();
-
         if (error) throw error;
         return data;
       }
 
-      // Otherwise, create new record
-      let mappedStatus: InstanceStatus = "disconnected";
-      if (uazapiInstance.status === "connected" || uazapiInstance.status === "open") {
-        mappedStatus = "connected";
-      } else if (uazapiInstance.status === "connecting" || uazapiInstance.status === "qr") {
-        mappedStatus = "connecting";
-      }
-
+      // Create new
+      const mappedStatus = mapToInstanceStatus(uazapiInstance.status);
       const { data, error } = await supabase
         .from("instances")
         .insert({
@@ -459,18 +213,14 @@ export function useInstances(subaccountId?: string) {
         })
         .select()
         .single();
-
       if (error) throw error;
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["instances"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
-      queryClient.invalidateQueries({ queryKey: ["all-user-instances"] });
+      invalidateInstanceQueries(queryClient);
       toast.success("Instância vinculada com sucesso!");
 
-      // Auto-sync status from UAZAPI after import
+      // Auto-sync status after import
       if (data) {
         const instanceForSync: Instance = {
           id: data.id,
@@ -486,7 +236,6 @@ export function useInstances(subaccountId?: string) {
           profile_pic_url: data.profile_pic_url,
           uazapi_base_url: data.uazapi_base_url,
         };
-        // Fire and forget — status will update in background
         syncInstanceStatus.mutate(instanceForSync);
       }
     },
@@ -501,7 +250,7 @@ export function useInstances(subaccountId?: string) {
         throw new Error("Configurações UAZAPI não encontradas");
       }
 
-      // Fresh count from DB to avoid stale cache
+      // Fresh count from DB
       if (instanceLimit > 0) {
         const effectiveUserId = await getEffectiveUserId(user.id);
         const { count, error: countError } = await supabase
@@ -509,43 +258,14 @@ export function useInstances(subaccountId?: string) {
           .select("*", { count: "exact", head: true })
           .eq("user_id", effectiveUserId)
           .not("subaccount_id", "is", null);
-        
         if (countError) throw countError;
-        const currentLinkedCount = count ?? 0;
-        
-        if (currentLinkedCount >= instanceLimit) {
+        if ((count ?? 0) >= instanceLimit) {
           throw new Error(`Limite de instâncias atingido (${instanceLimit}). Faça upgrade do seu plano para adicionar mais instâncias.`);
         }
       }
 
-      const base = settings.uazapi_base_url.replace(/\/$/, "");
-      
-      // Per UAZAPI docs: POST /instance/init to create instance
-      const response = await fetch(`${base}/instance/init`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "admintoken": settings.uazapi_admin_token,
-        },
-        body: JSON.stringify({
-          name,
-          systemName: "lovable-ghl-bridge",
-        }),
-      });
+      const instanceToken = await createInstanceOnApi(settings.uazapi_base_url, settings.uazapi_admin_token, name);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.error || "Erro ao criar instância na UAZAPI");
-      }
-
-      const uazapiData = await response.json();
-      const instanceToken = uazapiData.token || uazapiData.instance_token || uazapiData.instanceToken;
-
-      if (!instanceToken) {
-        throw new Error("Token da instância não retornado pela API");
-      }
-
-      // Save to database
       const { data, error } = await supabase
         .from("instances")
         .insert({
@@ -559,14 +279,11 @@ export function useInstances(subaccountId?: string) {
         })
         .select()
         .single();
-
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["instances"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
+      invalidateInstanceQueries(queryClient);
       toast.success("Instância criada com sucesso!");
     },
     onError: (error) => {
@@ -577,72 +294,34 @@ export function useInstances(subaccountId?: string) {
   const deleteInstance = useMutation({
     mutationFn: async ({ instance, deleteFromUazapi = false }: { instance: Instance; deleteFromUazapi?: boolean }) => {
       if (deleteFromUazapi) {
-        // For deletion, use instance's own base URL or fall back to admin settings
-        const deleteBase = instance.uazapi_base_url?.replace(/\/$/, "") || settings?.uazapi_base_url?.replace(/\/$/, "");
-        const adminToken = settings?.uazapi_admin_token;
-        
-        if (!adminToken || !deleteBase) {
-          throw new Error("Configurações UAZAPI não encontradas");
-        }
-
-        // Delete from UAZAPI
-        const response = await fetch(`${deleteBase}/instance/delete`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            "admintoken": adminToken,
-            "token": instance.uazapi_instance_token,
-          },
-        });
-
-        // Try alternative method if first fails
-        if (!response.ok) {
-          await fetch(`${deleteBase}/admin/delete`, {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
-              "admintoken": adminToken,
-            },
-            body: JSON.stringify({ token: instance.uazapi_instance_token }),
-          });
-        }
+        await deleteInstanceFromApi(instance, settings?.uazapi_admin_token || "", globalBaseUrl);
       }
-
-      // Delete from database
-      const { error } = await supabase
-        .from("instances")
-        .delete()
-        .eq("id", instance.id);
-
+      const { error } = await supabase.from("instances").delete().eq("id", instance.id);
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["instances"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
-      toast.success(variables.deleteFromUazapi 
-        ? "Instância excluída do sistema e da UAZAPI!" 
-        : "Instância removida do sistema!");
+      invalidateInstanceQueries(queryClient);
+      toast.success(
+        variables.deleteFromUazapi
+          ? "Instância excluída do sistema e da UAZAPI!"
+          : "Instância removida do sistema!",
+      );
     },
     onError: (error) => {
       toast.error("Erro ao excluir: " + error.message);
     },
   });
 
-  // Unlink instance from subaccount (keeps instance but removes subaccount association)
   const unlinkInstance = useMutation({
     mutationFn: async (instance: Instance) => {
       const { error } = await supabase
         .from("instances")
         .update({ subaccount_id: null })
         .eq("id", instance.id);
-
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["instances"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
-      queryClient.invalidateQueries({ queryKey: ["instance-count-unlinked"] });
+      invalidateInstanceQueries(queryClient);
       toast.success("Instância desvinculada da subconta!");
     },
     onError: (error) => {
@@ -650,152 +329,29 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
+  // ── Connect / Disconnect ────────────────────────────────────────────
   const getQRCode = async (instance: Instance): Promise<string> => {
-    const base = getBaseUrlForInstance(instance);
-    
-    // Some UAZAPI servers return QR code from /instance/connect directly
-    // Others have a separate /instance/qrcode endpoint
-    // Try connect first as it usually generates fresh QR
-    const connectResponse = await fetch(`${base}/instance/connect`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        token: instance.uazapi_instance_token,
-      },
-    });
-
-    if (connectResponse.ok) {
-      const connectData = await connectResponse.json();
-      // Check if QR code is in the connect response
-      const qrFromConnect = connectData.qrcode || connectData.instance?.qrcode || connectData.qr || connectData.base64;
-      if (qrFromConnect) {
-        // Update status to connecting
-        await supabase
-          .from("instances")
-          .update({ instance_status: "connecting" })
-          .eq("id", instance.id);
-        queryClient.invalidateQueries({ queryKey: ["instances"] });
-        return qrFromConnect;
-      }
-    }
-
-    // Fallback: try dedicated qrcode endpoint(s)
-    const qrEndpoints = ["/instance/qrcode", "/qrcode", "/instance/qr"];
-    
-    for (const endpoint of qrEndpoints) {
-      try {
-        const response = await fetch(`${base}${endpoint}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            token: instance.uazapi_instance_token,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const qr = data.qrcode || data.base64 || data.qr || data.code || data.instance?.qrcode;
-          if (qr) {
-            return qr;
-          }
-        }
-      } catch {
-        // Continue to next endpoint
-      }
-    }
-
-    throw new Error("QR Code não disponível - a instância pode já estar conectada ou o servidor não suporta este endpoint");
+    const qr = await getQRCodeFromApi(instance, globalBaseUrl);
+    // Update status to connecting
+    await supabase.from("instances").update({ instance_status: "connecting" }).eq("id", instance.id);
+    queryClient.invalidateQueries({ queryKey: ["instances"] });
+    return qr;
   };
 
   const connectInstance = async (instance: Instance): Promise<string | null> => {
-    const base = getBaseUrlForInstance(instance);
-
-    // Connect and get QR code in one call
-    const response = await fetch(`${base}/instance/connect`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        token: instance.uazapi_instance_token,
-      },
-    });
-
-    let qrCode: string | null = null;
-
-    if (response.ok) {
-      const data = await response.json();
-      qrCode = data.qrcode || data.instance?.qrcode || data.qr || data.base64 || null;
-    }
-
-    // Update status to connecting
-    await supabase
-      .from("instances")
-      .update({ instance_status: "connecting" })
-      .eq("id", instance.id);
-
+    const qrCode = await connectInstanceOnApi(instance, globalBaseUrl);
+    await supabase.from("instances").update({ instance_status: "connecting" }).eq("id", instance.id);
     queryClient.invalidateQueries({ queryKey: ["instances"] });
-    
     return qrCode;
   };
 
   const disconnectInstance = useMutation({
     mutationFn: async (instance: Instance) => {
-      const base = getBaseUrlForInstance(instance);
-      
-      // Try multiple endpoints and methods as different UAZAPI versions use different endpoints
-      const endpoints = [
-        { path: "/instance/disconnect", method: "POST" },
-        { path: "/instance/disconnect", method: "DELETE" },
-        { path: "/instance/disconnect", method: "GET" },
-        { path: "/instance/logout", method: "POST" },
-        { path: "/instance/logout", method: "DELETE" },
-        { path: "/instance/logout", method: "GET" },
-      ];
-
-      let success = false;
-      let lastError = "";
-
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(`${base}${endpoint.path}`, {
-            method: endpoint.method,
-            headers: {
-              "Content-Type": "application/json",
-              "token": instance.uazapi_instance_token,
-            },
-          });
-
-          if (response.ok || response.status === 200) {
-            success = true;
-            break;
-          }
-
-          // If we get 404/405, try next endpoint
-          if (response.status === 404 || response.status === 405) {
-            continue;
-          }
-
-          const errorData = await response.json().catch(() => ({}));
-          lastError = errorData.message || `Erro ${response.status}`;
-        } catch (err) {
-          // Network error, try next
-          continue;
-        }
-      }
-
-      if (!success) {
-        throw new Error(lastError || "Nenhum endpoint de desconexão funcionou neste servidor UAZAPI");
-      }
-
-      // Clear status, phone and profile pic when disconnecting
+      await disconnectInstanceOnApi(instance, globalBaseUrl);
       const { error } = await supabase
         .from("instances")
-        .update({ 
-          instance_status: "disconnected",
-          phone: null,
-          profile_pic_url: null
-        })
+        .update({ instance_status: "disconnected", phone: null, profile_pic_url: null })
         .eq("id", instance.id);
-
       if (error) throw error;
     },
     onSuccess: () => {
@@ -807,33 +363,14 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
+  // ── Webhook / Config Mutations ──────────────────────────────────────
   const updateInstanceWebhook = useMutation({
-    mutationFn: async ({ instance, webhookUrl, ignoreGroups }: { 
-      instance: Instance; 
-      webhookUrl: string; 
-      ignoreGroups: boolean 
-    }) => {
-      const base = getBaseUrlForInstance(instance);
-
-      // Update in UAZAPI
-      await fetch(`${base}/instance/webhook`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "token": instance.uazapi_instance_token,
-        },
-        body: JSON.stringify({
-          webhook_url: webhookUrl,
-          ignore_groups: ignoreGroups,
-        }),
-      });
-
-      // Update in database
+    mutationFn: async ({ instance, webhookUrl, ignoreGroups }: { instance: Instance; webhookUrl: string; ignoreGroups: boolean }) => {
+      await updateWebhookOnApi(instance, webhookUrl, ignoreGroups, globalBaseUrl);
       const { error } = await supabase
         .from("instances")
         .update({ webhook_url: webhookUrl, ignore_groups: ignoreGroups })
         .eq("id", instance.id);
-
       if (error) throw error;
     },
     onSuccess: () => {
@@ -845,67 +382,18 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
-  // Force reconfigure webhook on UAZAPI with the correct URL from database
   const reconfigureWebhook = useMutation({
     mutationFn: async (instance: Instance) => {
-      const base = getBaseUrlForInstance(instance);
-
-      // Use the global webhook URL if instance doesn't have one
       const webhookUrl = instance.webhook_url || settings?.global_webhook_url || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-inbound`;
       const ignoreGroups = instance.ignore_groups ?? false;
-      
-      // Try multiple endpoint variations
-      const endpoints = [
-        { path: "/instance/webhook", method: "POST" },
-        { path: "/api/instance/webhook", method: "POST" },
-        { path: "/webhook/set", method: "POST" },
-      ];
 
-      let success = false;
-      let lastError = "";
+      await reconfigureWebhookOnApi(instance, webhookUrl, ignoreGroups, globalBaseUrl);
 
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(`${base}${endpoint.path}`, {
-            method: endpoint.method,
-            headers: {
-              "Content-Type": "application/json",
-              "token": instance.uazapi_instance_token,
-            },
-            body: JSON.stringify({
-              webhook_url: webhookUrl,
-              ignore_groups: ignoreGroups,
-            }),
-          });
-
-          if (response.ok || response.status === 200) {
-            success = true;
-            break;
-          }
-
-          if (response.status === 404 || response.status === 405) {
-            continue;
-          }
-
-          const errorData = await response.json().catch(() => ({}));
-          lastError = errorData.message || `Erro ${response.status}`;
-        } catch (err) {
-          continue;
-        }
-      }
-
-      if (!success) {
-        throw new Error(lastError || "Nenhum endpoint de webhook funcionou neste servidor UAZAPI");
-      }
-
-      // Also update in database to ensure sync
       const { error } = await supabase
         .from("instances")
         .update({ webhook_url: webhookUrl, ignore_groups: ignoreGroups })
         .eq("id", instance.id);
-
       if (error) throw error;
-      
       return { webhookUrl };
     },
     onSuccess: (data) => {
@@ -918,15 +406,11 @@ export function useInstances(subaccountId?: string) {
   });
 
   const updateInstanceGHLUser = useMutation({
-    mutationFn: async ({ instanceId, ghlUserId }: { 
-      instanceId: string; 
-      ghlUserId: string | null;
-    }) => {
+    mutationFn: async ({ instanceId, ghlUserId }: { instanceId: string; ghlUserId: string | null }) => {
       const { error } = await supabase
         .from("instances")
         .update({ ghl_user_id: ghlUserId })
         .eq("id", instanceId);
-
       if (error) throw error;
     },
     onSuccess: () => {
@@ -938,6 +422,7 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
+  // ── Return (same interface as before) ───────────────────────────────
   return {
     instances: instances || [],
     isLoading,
@@ -954,7 +439,6 @@ export function useInstances(subaccountId?: string) {
     updateInstanceGHLUser,
     reconfigureWebhook,
     fetchUazapiInstances,
-    // Instance limit info
     instanceLimit,
     linkedInstanceCount,
     unlinkedInstanceCount,

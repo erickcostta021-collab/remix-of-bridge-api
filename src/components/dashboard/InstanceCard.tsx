@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,7 +58,7 @@ interface InstanceCardProps {
   instance: Instance;
 }
 
-export function InstanceCard({ instance }: InstanceCardProps) {
+export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCardProps) {
   const { 
     deleteInstance, 
     getQRCode, 
@@ -599,4 +599,4 @@ export function InstanceCard({ instance }: InstanceCardProps) {
       />
     </>
   );
-}
+});
