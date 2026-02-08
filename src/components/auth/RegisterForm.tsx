@@ -141,7 +141,7 @@ export function RegisterForm() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="flex flex-col items-center gap-3 mb-4">
-            <div className="w-28 h-28 rounded-2xl overflow-hidden shadow-lg">
+            <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-lg">
               <img src={logo} alt="Bridge API" className="w-full h-full object-cover" />
             </div>
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
