@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 const BRIDGE_SWITCHER_SCRIPT = `
-// 🚀 BRIDGE LOADER: v6.14.1 - Outbound switch notification (fix conversationId)
-console.log('🚀 BRIDGE LOADER: v6.14.1 Iniciado');
+// 🚀 BRIDGE LOADER: v6.15.0 - Real-time inbound switch sync
+console.log('🚀 BRIDGE LOADER: v6.15.0 Iniciado');
 
 try {
     (function() {
@@ -15,10 +15,12 @@ try {
         const CONFIG = {
             api_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/get-instances',
             save_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/bridge-switcher',
+            supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
+            supabase_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzdXB2cHJ1ZHl4eWl5eHdxeHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MzMwNDAsImV4cCI6MjA4NDUwOTA0MH0._Ge7hb5CHCE6mchtjGLbWXx5Q9i_D7P0dn7OlMYlvyM',
             theme: { primary: '#22c55e', border: '#d1d5db', text: '#374151' }
         };
 
-        let state = { instances: [], lastPhoneFound: null, currentLocationId: null, currentInstanceName: null, currentConversationId: null };
+        let state = { instances: [], lastPhoneFound: null, currentLocationId: null, currentInstanceName: null, currentConversationId: null, realtimeChannel: null };
 
         function extractConversationId() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -208,6 +210,102 @@ try {
             } catch (e) { console.error(LOG_PREFIX, e); }
         }
 
+        // === SUPABASE REALTIME FOR INSTANCE SWITCH ===
+        function setupRealtimeListener() {
+            if (state.realtimeChannel) {
+                console.log(LOG_PREFIX, '📡 Realtime channel already active');
+                return;
+            }
+            
+            try {
+                // Create a simple WebSocket connection to Supabase Realtime
+                const wsUrl = CONFIG.supabase_url.replace('https://', 'wss://') + '/realtime/v1/websocket?apikey=' + CONFIG.supabase_key + '&vsn=1.0.0';
+                const ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    console.log(LOG_PREFIX, '📡 Realtime WebSocket connected');
+                    
+                    // Join the ghl_updates channel
+                    const joinMsg = {
+                        topic: 'realtime:ghl_updates',
+                        event: 'phx_join',
+                        payload: { config: { broadcast: { self: false } } },
+                        ref: '1'
+                    };
+                    ws.send(JSON.stringify(joinMsg));
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        // Handle instance_switch broadcast
+                        if (data.event === 'broadcast' && data.payload?.event === 'instance_switch') {
+                            const payload = data.payload?.payload;
+                            if (!payload) return;
+                            
+                            console.log(LOG_PREFIX, '📡 Received instance_switch broadcast:', payload);
+                            
+                            // Check if this switch applies to current contact
+                            const currentPhone = extractPhone();
+                            if (!currentPhone) return;
+                            
+                            const currentLoc = window.location.pathname.match(/location\\/([^\\/]+)/)?.[1];
+                            if (currentLoc !== payload.location_id) return;
+                            
+                            // Match by last 8 digits (BR phone number normalization)
+                            const currentLast8 = currentPhone.slice(-8);
+                            const payloadLast8 = (payload.lead_phone || '').slice(-8);
+                            
+                            if (currentLast8 !== payloadLast8) {
+                                console.log(LOG_PREFIX, '📡 Phone mismatch, ignoring switch', { current: currentLast8, payload: payloadLast8 });
+                                return;
+                            }
+                            
+                            console.log(LOG_PREFIX, '📡 Instance switch applies to current contact!');
+                            
+                            // Update dropdown
+                            const select = document.getElementById('bridge-instance-selector');
+                            if (select && payload.new_instance_id) {
+                                select.value = payload.new_instance_id;
+                                state.currentInstanceName = payload.new_instance_name;
+                                renderOptions(false);
+                                console.log(LOG_PREFIX, '📡 Dropdown updated to:', payload.new_instance_name);
+                            }
+                            
+                            // Show notification
+                            if (payload.previous_instance_name && payload.new_instance_name) {
+                                injectChatNotification(payload.previous_instance_name, payload.new_instance_name);
+                                showNotification(payload.new_instance_name);
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore parse errors for heartbeat messages
+                    }
+                };
+                
+                ws.onerror = function(error) {
+                    console.error(LOG_PREFIX, '📡 Realtime WebSocket error:', error);
+                };
+                
+                ws.onclose = function() {
+                    console.log(LOG_PREFIX, '📡 Realtime WebSocket closed, will reconnect on next inject');
+                    state.realtimeChannel = null;
+                };
+                
+                // Send heartbeat every 30s to keep connection alive
+                setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: Date.now().toString() }));
+                    }
+                }, 30000);
+                
+                state.realtimeChannel = ws;
+            } catch (e) {
+                console.error(LOG_PREFIX, '📡 Failed to setup realtime:', e);
+            }
+        }
+
         function inject() {
             if (document.getElementById('bridge-api-container')) return;
             const actionBar = document.querySelector('.msg-composer-actions') || 
@@ -295,6 +393,9 @@ try {
 
             const p = extractPhone();
             if (p) loadInstances(p);
+            
+            // Setup realtime listener for inbound instance switches
+            setupRealtimeListener();
         }
 
         setInterval(() => {

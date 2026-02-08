@@ -1762,10 +1762,36 @@ serve(async (req) => {
         
         const { data: existingByPhone } = await supabase
           .from("contact_instance_preferences")
-          .select("id, contact_id, lead_phone")
+          .select("id, contact_id, lead_phone, instance_id")
           .eq("location_id", subaccount.location_id)
           .like("lead_phone", `%${last8Digits}`)
           .limit(1);
+        
+        // === DETECT INSTANCE CHANGE FOR NOTIFICATION ===
+        let previousInstanceId: string | null = null;
+        let previousInstanceName: string | null = null;
+        let instanceChanged = false;
+        
+        if (existingByPhone && existingByPhone.length > 0) {
+          previousInstanceId = existingByPhone[0].instance_id;
+          instanceChanged = previousInstanceId !== instance.id;
+          
+          if (instanceChanged) {
+            // Fetch the previous instance name for the notification
+            const { data: prevInst } = await supabase
+              .from("instances")
+              .select("instance_name")
+              .eq("id", previousInstanceId)
+              .limit(1);
+            previousInstanceName = prevInst?.[0]?.instance_name || null;
+            console.log("[Inbound] 🔄 INSTANCE CHANGE DETECTED!", {
+              previousInstanceId,
+              previousInstanceName,
+              newInstanceId: instance.id,
+              newInstanceName: instance.instance_name,
+            });
+          }
+        }
         
         if (existingByPhone && existingByPhone.length > 0) {
           // ENCONTRADO POR TELEFONE - Atualizar o registro existente
@@ -1887,6 +1913,80 @@ serve(async (req) => {
             console.error("[Inbound] ❌ Erro ao limpar duplicados:", deleteError.message);
           } else {
             console.log("[Inbound] 🧹 Duplicados removidos:", toDelete.length);
+          }
+        }
+        
+        // === INSTANCE CHANGE NOTIFICATION (InternalComment + Broadcast) ===
+        if (instanceChanged && previousInstanceName && instance.instance_name) {
+          console.log("[Inbound] 🔔 Creating instance change notification...");
+          
+          // 1) Create InternalComment in GHL conversation
+          const commentContent = `🔄 Instância alterada: ${previousInstanceName} → ${instance.instance_name}`;
+          
+          try {
+            // Search for conversation by contact
+            const conversationSearchRes = await fetch(
+              `https://services.leadconnectorhq.com/conversations/search?locationId=${subaccount.location_id}&contactId=${contactIdToUse}`,
+              {
+                headers: {
+                  "Authorization": `Bearer ${token}`,
+                  "Version": "2021-04-15",
+                  "Accept": "application/json",
+                },
+              }
+            );
+            
+            if (conversationSearchRes.ok) {
+              const conversationData = await conversationSearchRes.json();
+              const conversationId = conversationData?.conversations?.[0]?.id;
+              
+              if (conversationId) {
+                const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Version": "2021-04-15",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                  },
+                  body: JSON.stringify({
+                    type: "InternalComment",
+                    conversationId: conversationId,
+                    contactId: contactIdToUse,
+                    message: commentContent,
+                  }),
+                });
+                
+                if (icRes.ok) {
+                  console.log("[Inbound] ✅ Instance change InternalComment created");
+                } else {
+                  const icError = await icRes.text();
+                  console.error("[Inbound] ❌ Failed to create InternalComment:", icError.substring(0, 200));
+                }
+              } else {
+                console.log("[Inbound] ⚠️ No conversation found for InternalComment");
+              }
+            }
+          } catch (icErr) {
+            console.error("[Inbound] ❌ Error creating InternalComment:", icErr);
+          }
+          
+          // 2) Broadcast to frontend for real-time dropdown update
+          try {
+            await supabase.channel("ghl_updates").send({
+              type: "broadcast",
+              event: "instance_switch",
+              payload: {
+                location_id: subaccount.location_id,
+                lead_phone: rawPhone,
+                new_instance_id: instance.id,
+                new_instance_name: instance.instance_name,
+                previous_instance_name: previousInstanceName,
+              },
+            });
+            console.log("[Inbound] ✅ Instance switch broadcasted to frontend");
+          } catch (broadcastErr) {
+            console.error("[Inbound] ❌ Error broadcasting instance switch:", broadcastErr);
           }
         }
         
