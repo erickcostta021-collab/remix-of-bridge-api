@@ -264,7 +264,7 @@ const Checkout = () => {
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     Processando...
                   </>
-                ) : isFlexible && quantity === 1 ? (
+                ) : isFlexible && quantity <= 5 ? (
                   "Testar Grátis"
                 ) : (
                   <>

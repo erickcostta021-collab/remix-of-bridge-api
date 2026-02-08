@@ -164,7 +164,7 @@ export function PlansDialog({ children }: PlansDialogProps) {
                   )}
                 >
                   <Zap className="h-4 w-4 mr-2" />
-                  {isFlexible && flexibleQuantity === 1
+                  {isFlexible && flexibleQuantity <= 5
                     ? "Testar Grátis"
                     : "Assinar Plano"}
                 </Button>

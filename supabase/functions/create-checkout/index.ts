@@ -142,9 +142,10 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://bridge-api.lovable.app";
     
-    // Trial only for flexible plan with exactly 1 instance
-    const isTrialEligible = plan === "flexible" && (quantity || 1) === 1;
-    logStep("Trial eligibility", { isTrialEligible, plan, quantity });
+    // Trial for flexible plan with up to 5 instances
+    const qty = quantity || 1;
+    const isTrialEligible = plan === "flexible" && qty >= 1 && qty <= 5;
+    logStep("Trial eligibility", { isTrialEligible, plan, quantity: qty });
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
