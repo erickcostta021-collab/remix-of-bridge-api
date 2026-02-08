@@ -1663,9 +1663,35 @@ async function processGroupCommand(
         console.log("Leave group response:", { status: leaveRes.status, body: leaveText.substring(0, 300) });
         
         if (leaveRes.ok) {
-          // Send outbound message to GHL confirming the exit
-          if (ghlContext) {
-            await sendGhlOutboundMessage(ghlContext, "⚠️ Você não faz mais parte deste grupo ⚠️");
+          // Send InternalComment to GHL confirming the exit (not outbound)
+          if (ghlContext?.contactId && ghlContext?.settings?.ghl_client_id) {
+            try {
+              const token = await getValidToken(ghlContext.supabase, ghlContext.subaccount, ghlContext.settings);
+              if (token) {
+                const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    Version: "2021-04-15",
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                  },
+                  body: JSON.stringify({
+                    type: "InternalComment",
+                    contactId: ghlContext.contactId,
+                    message: "⚠️ Você não faz mais parte deste grupo ⚠️",
+                  }),
+                });
+                if (icRes.ok) {
+                  console.log("[GHL] ✅ Leave group InternalComment sent");
+                } else {
+                  const icErr = await icRes.text();
+                  console.error("[GHL] ❌ Failed to send leave InternalComment:", icErr.substring(0, 200));
+                }
+              }
+            } catch (e) {
+              console.error("[GHL] Error sending leave InternalComment:", e);
+            }
           }
           return { isCommand: true, success: true, command, message: `Saí do grupo com sucesso` };
         } else {
