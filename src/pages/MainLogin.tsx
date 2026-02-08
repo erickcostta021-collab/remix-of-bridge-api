@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/bridge-api-logo.jpg";
 
 const MainLogin = () => {
   const { user, loading: authLoading, signIn } = useAuth();
@@ -175,8 +175,8 @@ const MainLogin = () => {
       <div className="w-full max-w-md relative animate-in fade-in slide-in-from-bottom-4 duration-700">
         {/* Logo & Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-card border border-border shadow-lg mb-6 transition-transform hover:scale-105 duration-300">
-            <img src={logo} alt="Bridge API" className="h-12 w-12 rounded-lg" />
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl overflow-hidden shadow-lg mb-6 transition-transform hover:scale-105 duration-300">
+            <img src={logo} alt="Bridge API" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
             Bem-vindo de volta
