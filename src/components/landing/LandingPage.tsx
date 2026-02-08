@@ -574,7 +574,7 @@ const LandingPage = () => {
       <footer className="py-8 px-6 border-t border-border relative z-10">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="Bridge API" className="h-8 w-8" />
+            <img src={logo} alt="Bridge API" className="h-8 w-8 rounded-full" />
             <span className="text-muted-foreground">Bridge API © {new Date().getFullYear()} - Todos os direitos reservados.</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
