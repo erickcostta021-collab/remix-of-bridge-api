@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ interface SubaccountCardProps {
   onClick: () => void;
 }
 
-export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
+export const SubaccountCard = memo(function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
   const { instances } = useInstances(subaccount.id);
   const navigate = useNavigate();
 
@@ -88,4 +89,4 @@ export function SubaccountCard({ subaccount, onClick }: SubaccountCardProps) {
       </CardContent>
     </Card>
   );
-}
+});

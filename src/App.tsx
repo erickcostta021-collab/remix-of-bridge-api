@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,32 +7,45 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { usePausedCheck } from "@/hooks/usePausedCheck";
 import { Loader2 } from "lucide-react";
-import Index from "./pages/Index";
-import MainLogin from "./pages/MainLogin";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ResetPassword from "./pages/ResetPassword";
-import Checkout from "./pages/Checkout";
-import Dashboard from "./pages/Dashboard";
-import Settings from "./pages/Settings";
-import SubaccountSettings from "./pages/SubaccountSettings";
-import EmbedInstances from "./pages/EmbedInstances";
-import OAuthCallback from "./pages/OAuthCallback";
-import OAuthSuccess from "./pages/OAuthSuccess";
-import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Lazy-loaded pages for code splitting
+const Index = lazy(() => import("./pages/Index"));
+const MainLogin = lazy(() => import("./pages/MainLogin"));
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Settings = lazy(() => import("./pages/Settings"));
+const SubaccountSettings = lazy(() => import("./pages/SubaccountSettings"));
+const EmbedInstances = lazy(() => import("./pages/EmbedInstances"));
+const OAuthCallback = lazy(() => import("./pages/OAuthCallback"));
+const OAuthSuccess = lazy(() => import("./pages/OAuthSuccess"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60, // 1 minute — avoid refetching on every navigation
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const { isPaused, checking } = usePausedCheck();
 
   if (loading || checking) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!user || isPaused) {
@@ -47,45 +61,47 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<MainLogin />} />
-          <Route path="/convidadospormim" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/subaccount/:id/settings"
-            element={
-              <ProtectedRoute>
-                <SubaccountSettings />
-              </ProtectedRoute>
-            }
-          />
-          {/* Public embed route - no auth required */}
-          <Route path="/embed/:embedToken" element={<EmbedInstances />} />
-          {/* OAuth routes - public for GHL */}
-          <Route path="/oauth/callback" element={<OAuthCallback />} />
-          <Route path="/oauth/success/:locationId" element={<OAuthSuccess />} />
-          <Route path="/oauth/success" element={<OAuthSuccess />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<MainLogin />} />
+            <Route path="/convidadospormim" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/subaccount/:id/settings"
+              element={
+                <ProtectedRoute>
+                  <SubaccountSettings />
+                </ProtectedRoute>
+              }
+            />
+            {/* Public embed route - no auth required */}
+            <Route path="/embed/:embedToken" element={<EmbedInstances />} />
+            {/* OAuth routes - public for GHL */}
+            <Route path="/oauth/callback" element={<OAuthCallback />} />
+            <Route path="/oauth/success/:locationId" element={<OAuthSuccess />} />
+            <Route path="/oauth/success" element={<OAuthSuccess />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
