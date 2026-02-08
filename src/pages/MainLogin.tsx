@@ -175,7 +175,7 @@ const MainLogin = () => {
       <div className="w-full max-w-md relative animate-in fade-in slide-in-from-bottom-4 duration-700">
         {/* Logo & Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl overflow-hidden shadow-lg mb-6 transition-transform hover:scale-105 duration-300">
+          <div className="inline-flex items-center justify-center w-28 h-28 rounded-2xl overflow-hidden shadow-lg mb-6 transition-transform hover:scale-105 duration-300">
             <img src={logo} alt="Bridge API" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
