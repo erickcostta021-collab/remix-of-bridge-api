@@ -1699,216 +1699,161 @@ async function processGroupCommand(
       }
 
       case "#botoes": {
-        // Formato: #botoes titulo|descrição|rodapé|botão1,botão2,botão3
-        // Enviado no chat de um contato - envia mensagem com botões de resposta rápida
-        if (params.length < 3) {
-          return { isCommand: true, success: false, command, message: "Formato: #botoes titulo|descrição|rodapé|botão1,botão2,botão3 (até 3 botões)" };
+        // UAZAPI /send/menu with type: "button"
+        // Formato: #botoes texto|botão1,botão2,botão3  (rodapé opcional: texto|rodapé|botão1,botão2,botão3)
+        // choices: ["texto|id", "texto"] — each becomes a reply button
+        if (params.length < 2) {
+          return { isCommand: true, success: false, command, message: "Formato: #botoes texto|botão1,botão2,botão3" };
         }
-        
-        const btnTitle = params[0].trim();
-        const btnDescription = params[1].trim();
-        const btnFooter = params.length >= 4 ? params[2].trim() : "";
-        // If 4 params: title|desc|footer|btn1,btn2,btn3  — buttons are comma-separated in last param
-        // If 3 params: title|desc|btn1,btn2,btn3  — no footer, buttons are in 3rd param
-        const btnRaw = params.length >= 4 ? params[3] : params[2];
-        const btnButtonsParsed = btnRaw.split(",").map(b => b.trim()).filter(b => b.length > 0).slice(0, 3);
         
         if (!targetPhone) {
           return { isCommand: true, success: false, command, message: "Erro: número do contato não encontrado" };
         }
         
         const btnPhone = targetPhone.replace(/\D/g, "");
-        console.log("Sending buttons menu:", { title: btnTitle, description: btnDescription, footer: btnFooter, buttons: btnButtonsParsed, phone: btnPhone });
+        let btnText: string;
+        let btnFooter = "";
+        let btnChoicesRaw: string;
         
-        // Try multiple payload formats since UAZAPI may expect different structures
-        const btnPayloadAttempts = [
-          // Attempt 1: body + footer + buttons with id/text
-          {
-            number: btnPhone,
-            type: "buttons",
-            title: btnTitle,
-            body: btnDescription,
-            footer: btnFooter,
-            buttons: btnButtonsParsed.map((b, i) => ({ id: String(i + 1), text: b })),
-          },
-          // Attempt 2: description + footer + buttons with buttonId/buttonText
-          {
-            number: btnPhone,
-            type: "buttons",
-            title: btnTitle,
-            description: btnDescription,
-            footer: btnFooter,
-            buttons: btnButtonsParsed.map((b, i) => ({ buttonId: String(i + 1), buttonText: b })),
-          },
-          // Attempt 3: message + footer + buttons with displayText
-          {
-            number: btnPhone,
-            type: "buttons",
-            title: btnTitle,
-            message: btnDescription,
-            footer: btnFooter,
-            buttons: btnButtonsParsed.map((b, i) => ({ buttonId: String(i + 1), buttonText: b, displayText: b })),
-          },
-          // Attempt 4: body + footer + buttons as WhatsApp native format
-          {
-            number: btnPhone,
-            type: "buttons",
-            title: btnTitle,
-            body: btnDescription,
-            footer: btnFooter,
-            buttons: btnButtonsParsed.map((b, i) => ({ type: "reply", reply: { id: String(i + 1), title: b } })),
-          },
-          // Attempt 5: text field + buttons
-          {
-            number: btnPhone,
-            type: "buttons",
-            title: btnTitle,
-            text: btnDescription,
-            footer: btnFooter,
-            buttons: btnButtonsParsed.map((b, i) => ({ id: String(i + 1), text: b })),
-          },
-        ];
-        
-        let btnSuccess = false;
-        let btnLastStatus = 0;
-        let btnLastBody = "";
-        
-        for (let ai = 0; ai < btnPayloadAttempts.length; ai++) {
-          try {
-            const payload = btnPayloadAttempts[ai];
-            console.log(`Buttons attempt ${ai + 1}:`, JSON.stringify(payload).substring(0, 300));
-            
-            const btnRes = await fetch(`${baseUrl}/send/menu`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "token": instanceToken,
-              },
-              body: JSON.stringify(payload),
-            });
-            
-            btnLastStatus = btnRes.status;
-            btnLastBody = await btnRes.text();
-            console.log(`Buttons attempt ${ai + 1} response:`, { status: btnLastStatus, body: btnLastBody.substring(0, 300) });
-            
-            if (btnRes.ok) {
-              btnSuccess = true;
-              break;
-            }
-          } catch (e) {
-            console.log(`Buttons attempt ${ai + 1} error:`, e instanceof Error ? e.message : "unknown");
-          }
+        if (params.length >= 3) {
+          // texto|rodapé|botão1,botão2,botão3
+          btnText = params[0].trim();
+          btnFooter = params[1].trim();
+          btnChoicesRaw = params[2];
+        } else {
+          // texto|botão1,botão2,botão3
+          btnText = params[0].trim();
+          btnChoicesRaw = params[1];
         }
         
-        if (btnSuccess) {
-          return { isCommand: true, success: true, command, message: `Botões enviados para ${btnPhone}` };
-        } else {
-          return { isCommand: true, success: false, command, message: `Falha ao enviar botões (${btnLastStatus}): ${btnLastBody.substring(0, 100)}` };
+        // Build choices array: "texto|id" format per UAZAPI docs
+        const btnChoices = btnChoicesRaw.split(",").map(b => b.trim()).filter(b => b.length > 0).slice(0, 3);
+        
+        const btnPayload: Record<string, unknown> = {
+          number: btnPhone,
+          type: "button",
+          text: btnText,
+          choices: btnChoices,
+          readchat: true,
+        };
+        if (btnFooter) btnPayload.footerText = btnFooter;
+        
+        console.log("Sending buttons (UAZAPI):", JSON.stringify(btnPayload));
+        
+        try {
+          const btnRes = await fetch(`${baseUrl}/send/menu`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", token: instanceToken },
+            body: JSON.stringify(btnPayload),
+          });
+          const btnBody = await btnRes.text();
+          console.log("Buttons response:", { status: btnRes.status, body: btnBody.substring(0, 300) });
+          
+          if (btnRes.ok) {
+            return { isCommand: true, success: true, command, message: `Botões enviados para ${btnPhone}` };
+          }
+          return { isCommand: true, success: false, command, message: `Falha ao enviar botões (${btnRes.status}): ${btnBody.substring(0, 100)}` };
+        } catch (e) {
+          return { isCommand: true, success: false, command, message: `Erro ao enviar botões: ${e instanceof Error ? e.message : "Falha"}` };
         }
       }
 
       case "#lista": {
-        // Formato: #lista titulo|descrição|textoBotão|secao1:item1,item2|secao2:item3,item4
-        // Enviado no chat de um contato - envia lista interativa
-        if (params.length < 4) {
-          return { isCommand: true, success: false, command, message: "Formato: #lista titulo|descrição|textoBotão|seção:item1,item2|seção2:item3,item4" };
+        // UAZAPI /send/menu with type: "list"
+        // Formato: #lista texto|textoBotão|[Seção1],item1,item2|[Seção2],itemA,itemB
+        // choices: ["[Seção]", "texto|id|descrição"]
+        if (params.length < 3) {
+          return { isCommand: true, success: false, command, message: "Formato: #lista texto|textoBotão|[Seção],item1,item2" };
         }
-        
-        const listTitle = params[0].trim();
-        const listDescription = params[1].trim();
-        const listButtonText = params[2].trim();
-        const sectionParams = params.slice(3);
-        
-        // Parse sections: each param is "sectionTitle:item1,item2,item3"
-        const sections = sectionParams.map(sp => {
-          const colonIdx = sp.indexOf(":");
-          if (colonIdx === -1) {
-            return { title: "", rows: [{ title: sp.trim() }] };
-          }
-          const sectionTitle = sp.substring(0, colonIdx).trim();
-          const items = sp.substring(colonIdx + 1).split(",").map(item => ({
-            title: item.trim(),
-          }));
-          return { title: sectionTitle, rows: items };
-        });
         
         if (!targetPhone) {
           return { isCommand: true, success: false, command, message: "Erro: número do contato não encontrado" };
         }
         
         const listPhone = targetPhone.replace(/\D/g, "");
-        console.log("Sending list menu:", { title: listTitle, description: listDescription, buttonText: listButtonText, sections, phone: listPhone });
+        const listText = params[0].trim();
+        const listButton = params[1].trim();
+        // Remaining params form the choices array
+        // Each param can be a section header "[Title]" or items separated by commas
+        const listChoices: string[] = [];
+        for (let li = 2; li < params.length; li++) {
+          const part = params[li].trim();
+          // If contains commas, split into individual items
+          const subItems = part.split(",").map(s => s.trim()).filter(s => s.length > 0);
+          for (const si of subItems) {
+            listChoices.push(si);
+          }
+        }
+        
+        const listPayload: Record<string, unknown> = {
+          number: listPhone,
+          type: "list",
+          text: listText,
+          listButton,
+          choices: listChoices,
+          readchat: true,
+        };
+        
+        console.log("Sending list (UAZAPI):", JSON.stringify(listPayload));
         
         try {
           const listRes = await fetch(`${baseUrl}/send/menu`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "token": instanceToken,
-            },
-            body: JSON.stringify({
-              number: listPhone,
-              type: "list",
-              title: listTitle,
-              description: listDescription,
-              buttonText: listButtonText,
-              sections,
-            }),
+            headers: { "Content-Type": "application/json", token: instanceToken },
+            body: JSON.stringify(listPayload),
           });
-          
-          const listText = await listRes.text();
-          console.log("List menu response:", { status: listRes.status, body: listText.substring(0, 300) });
+          const listBody = await listRes.text();
+          console.log("List response:", { status: listRes.status, body: listBody.substring(0, 300) });
           
           if (listRes.ok) {
             return { isCommand: true, success: true, command, message: `Lista enviada para ${listPhone}` };
-          } else {
-            return { isCommand: true, success: false, command, message: `Falha ao enviar lista (${listRes.status}): ${listText.substring(0, 100)}` };
           }
+          return { isCommand: true, success: false, command, message: `Falha ao enviar lista (${listRes.status}): ${listBody.substring(0, 100)}` };
         } catch (e) {
           return { isCommand: true, success: false, command, message: `Erro ao enviar lista: ${e instanceof Error ? e.message : "Falha"}` };
         }
       }
 
       case "#enquete": {
-        // Formato: #enquete pergunta|opcao1|opcao2|opcao3...
-        // Enviado no chat de um contato - envia enquete/poll
+        // UAZAPI /send/menu with type: "poll"
+        // Formato: #enquete pergunta|opção1|opção2|opção3...
+        // choices: ["opção1", "opção2", ...]
         if (params.length < 3) {
           return { isCommand: true, success: false, command, message: "Formato: #enquete pergunta|opção1|opção2|opção3... (mín. 2 opções)" };
         }
-        
-        const pollTitle = params[0].trim();
-        const pollOptions = params.slice(1).map(o => o.trim());
         
         if (!targetPhone) {
           return { isCommand: true, success: false, command, message: "Erro: número do contato não encontrado" };
         }
         
         const pollPhone = targetPhone.replace(/\D/g, "");
-        console.log("Sending poll:", { title: pollTitle, options: pollOptions, phone: pollPhone });
+        const pollText = params[0].trim();
+        const pollChoices = params.slice(1).map(o => o.trim());
+        
+        const pollPayload = {
+          number: pollPhone,
+          type: "poll",
+          text: pollText,
+          choices: pollChoices,
+          selectableCount: 1,
+          readchat: true,
+        };
+        
+        console.log("Sending poll (UAZAPI):", JSON.stringify(pollPayload));
         
         try {
           const pollRes = await fetch(`${baseUrl}/send/menu`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "token": instanceToken,
-            },
-            body: JSON.stringify({
-              number: pollPhone,
-              type: "poll",
-              title: pollTitle,
-              options: pollOptions,
-            }),
+            headers: { "Content-Type": "application/json", token: instanceToken },
+            body: JSON.stringify(pollPayload),
           });
-          
-          const pollText = await pollRes.text();
-          console.log("Poll response:", { status: pollRes.status, body: pollText.substring(0, 300) });
+          const pollBody = await pollRes.text();
+          console.log("Poll response:", { status: pollRes.status, body: pollBody.substring(0, 300) });
           
           if (pollRes.ok) {
             return { isCommand: true, success: true, command, message: `Enquete enviada para ${pollPhone}` };
-          } else {
-            return { isCommand: true, success: false, command, message: `Falha ao enviar enquete (${pollRes.status}): ${pollText.substring(0, 100)}` };
           }
+          return { isCommand: true, success: false, command, message: `Falha ao enviar enquete (${pollRes.status}): ${pollBody.substring(0, 100)}` };
         } catch (e) {
           return { isCommand: true, success: false, command, message: `Erro ao enviar enquete: ${e instanceof Error ? e.message : "Falha"}` };
         }

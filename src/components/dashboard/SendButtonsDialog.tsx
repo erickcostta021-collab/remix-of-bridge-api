@@ -25,16 +25,16 @@ const buttonCommands = [
   {
     command: "#botoes",
     description: "Envia mensagem com botões de resposta rápida",
-    format: "titulo|descrição|rodapé|botão1,botão2,botão3",
+    format: "texto|rodapé|botão1,botão2,botão3",
     context: "Contato",
-    notes: "Máx. 3 botões separados por vírgula. Rodapé opcional.",
+    notes: "Máx. 3 botões separados por vírgula. Rodapé opcional (pode omitir).",
   },
   {
     command: "#lista",
     description: "Envia lista interativa com seções e itens",
-    format: "titulo|descrição|textoBotão|seção:item1,item2",
+    format: "texto|textoBotão|[Seção],item1,item2",
     context: "Contato",
-    notes: "Múltiplas seções separadas por |. Itens por vírgula.",
+    notes: "Use [Título] para seções. Itens: texto|id|descrição.",
   },
   {
     command: "#enquete",
