@@ -287,50 +287,44 @@ serve(async (req) => {
     console.log("Step 3: Location name fetched - OK");
     console.log("Account Name:", accountName);
 
-    // Update existing record or insert new one
-    // First check if location already exists
-    const { data: existingSubaccount } = await supabase
+    // Update existing record for THIS user, or insert new one
+    // Check if this user already has a record for this location
+    const { data: ownSubaccount } = await supabase
       .from("ghl_subaccounts")
       .select("id")
       .eq("location_id", finalLocationId)
+      .eq("user_id", userId)
       .maybeSingle();
 
     let upsertError;
     
-    if (existingSubaccount) {
-      // Update existing record
+    const oauthFields = {
+      company_id: companyId || null,
+      account_name: accountName,
+      ghl_access_token: access_token,
+      ghl_refresh_token: refresh_token,
+      ghl_token_expires_at: expiresAt.toISOString(),
+      ghl_token_scopes: scope,
+      ghl_subaccount_token: access_token,
+      oauth_installed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (ownSubaccount) {
+      // Update this user's existing record
       const { error } = await supabase
         .from("ghl_subaccounts")
-        .update({
-          user_id: userId,
-          company_id: companyId || null,
-          account_name: accountName,
-          ghl_access_token: access_token,
-          ghl_refresh_token: refresh_token,
-          ghl_token_expires_at: expiresAt.toISOString(),
-          ghl_token_scopes: scope,
-          ghl_subaccount_token: access_token,
-          oauth_installed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existingSubaccount.id);
+        .update(oauthFields)
+        .eq("id", ownSubaccount.id);
       upsertError = error;
     } else {
-      // Insert new record
+      // Insert new record for this user (even if another user has the same location)
       const { error } = await supabase
         .from("ghl_subaccounts")
         .insert({
           user_id: userId,
           location_id: finalLocationId,
-          company_id: companyId || null,
-          account_name: accountName,
-          ghl_access_token: access_token,
-          ghl_refresh_token: refresh_token,
-          ghl_token_expires_at: expiresAt.toISOString(),
-          ghl_token_scopes: scope,
-          ghl_subaccount_token: access_token,
-          oauth_installed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          ...oauthFields,
         });
       upsertError = error;
     }
