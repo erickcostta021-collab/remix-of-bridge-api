@@ -46,6 +46,11 @@ export function DashboardHeader() {
     try {
       const { data, error } = await supabase.functions.invoke("customer-portal");
       if (error) throw error;
+      if (data?.error) {
+        // No Stripe customer found — user has no payment method registered
+        toast.error("Nenhuma forma de pagamento cadastrada. Assine um plano primeiro.");
+        return;
+      }
       if (data?.url) {
         window.open(data.url, "_blank");
       } else {
@@ -53,7 +58,7 @@ export function DashboardHeader() {
       }
     } catch (err: any) {
       console.error("Portal error:", err);
-      toast.error(err?.message || "Erro ao abrir gerenciamento de pagamento");
+      toast.error("Erro ao abrir gerenciamento de pagamento");
     } finally {
       setLoadingPortal(false);
     }
