@@ -435,14 +435,29 @@ const LandingPage = () => {
             <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 flex flex-col">
               <div className="mb-6">
                 <h3 className="text-xl font-semibold text-foreground mb-2">Flexível</h3>
-                <p className="text-muted-foreground text-sm">Escolha a quantidade ideal</p>
+                <p className="text-muted-foreground text-sm">Comece com até 5 conexões grátis por 5 dias</p>
               </div>
+
+              {instanceCount <= 5 && (
+                <div className="mb-4 flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2.5">
+                  <Gift className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  <span className="text-sm font-semibold text-green-500">
+                    🎉 Trial grátis por 5 dias
+                  </span>
+                </div>
+              )}
+
               <div className="mb-4">
                 <div className="flex items-baseline gap-1">
                   <span className="text-4xl font-bold text-foreground transition-opacity duration-300">{formatPrice(totalPrice)}</span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
                 <p className="text-sm text-brand-green font-medium mt-1">{formatPerUnit(35)}</p>
+                {instanceCount <= 5 && (
+                  <p className="text-xs text-green-500 font-medium mt-0.5">
+                    Cobrado apenas após o trial
+                  </p>
+                )}
               </div>
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
@@ -461,6 +476,11 @@ const LandingPage = () => {
                   <span>1</span>
                   <span>10</span>
                 </div>
+                {instanceCount <= 5 && (
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    Até 5 conexões: teste grátis. A partir de 6: cobrança imediata.
+                  </p>
+                )}
               </div>
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-center gap-2 text-muted-foreground">
