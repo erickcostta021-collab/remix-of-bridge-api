@@ -110,8 +110,8 @@ export function DashboardHeader() {
             size="sm"
             className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all duration-300"
           >
-            <CreditCard className="h-4 w-4 mr-2" />
-            Comprar Conexões
+            <CreditCard className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Comprar Conexões</span>
           </Button>
         </PlansDialog>
 

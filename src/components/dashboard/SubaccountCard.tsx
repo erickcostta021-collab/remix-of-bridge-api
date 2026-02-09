@@ -51,7 +51,7 @@ export const SubaccountCard = memo(function SubaccountCard({ subaccount, onClick
               variant="ghost"
               size="icon"
               onClick={handleSettingsClick}
-              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
             >
               <Settings className="h-4 w-4" />
             </Button>
