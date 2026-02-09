@@ -82,7 +82,7 @@ export function DashboardHeader() {
               <img
                 src={circleLogo}
                 alt="Bridge API"
-                className="w-full h-full object-cover scale-[1.55]"
+                className="w-full h-full object-cover scale-[1.7]"
               />
             </div>
             <div className="absolute -inset-1 rounded-full bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10 blur-sm" />

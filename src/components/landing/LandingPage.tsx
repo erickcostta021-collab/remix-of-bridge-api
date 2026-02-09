@@ -47,7 +47,7 @@ const LandingPage = () => {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full overflow-hidden shadow-md">
-              <img src={circleLogo} alt="Bridge API" className="w-full h-full object-cover scale-[1.55]" />
+              <img src={circleLogo} alt="Bridge API" className="w-full h-full object-cover scale-[1.7]" />
             </div>
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
           </div>
@@ -577,7 +577,7 @@ const LandingPage = () => {
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full overflow-hidden shadow-sm">
-              <img src={circleLogo} alt="Bridge API" className="w-full h-full object-cover scale-[1.55]" />
+              <img src={circleLogo} alt="Bridge API" className="w-full h-full object-cover scale-[1.7]" />
             </div>
             <span className="text-muted-foreground">Bridge API © {new Date().getFullYear()} - Todos os direitos reservados.</span>
           </div>
