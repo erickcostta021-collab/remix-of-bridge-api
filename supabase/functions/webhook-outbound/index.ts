@@ -1699,22 +1699,30 @@ async function processGroupCommand(
       }
 
       case "#botoes": {
-        // Formato: #botoes titulo|descricao|botao1|botao2|botao3
+        // Formato: #botoes titulo|descrição|rodapé|botão1,botão2,botão3
         // Enviado no chat de um contato - envia mensagem com botões de resposta rápida
         if (params.length < 3) {
-          return { isCommand: true, success: false, command, message: "Formato: #botoes titulo|descrição|botão1|botão2|botão3 (até 3 botões)" };
+          return { isCommand: true, success: false, command, message: "Formato: #botoes titulo|descrição|rodapé|botão1,botão2,botão3 (até 3 botões)" };
         }
         
         const btnTitle = params[0].trim();
         const btnDescription = params[1].trim();
-        const btnButtons = params.slice(2, 5).map(b => ({ displayText: b.trim() }));
+        const btnFooter = params.length >= 4 ? params[2].trim() : "";
+        // If 4 params: title|desc|footer|btn1,btn2,btn3  — buttons are comma-separated in last param
+        // If 3 params: title|desc|btn1,btn2,btn3  — no footer, buttons are in 3rd param
+        const btnRaw = params.length >= 4 ? params[3] : params[2];
+        const btnButtons = btnRaw.split(",").map((b, i) => ({
+          buttonId: String(i + 1),
+          buttonText: b.trim(),
+          displayText: b.trim(),
+        })).slice(0, 3);
         
         if (!targetPhone) {
           return { isCommand: true, success: false, command, message: "Erro: número do contato não encontrado" };
         }
         
         const btnPhone = targetPhone.replace(/\D/g, "");
-        console.log("Sending buttons menu:", { title: btnTitle, description: btnDescription, buttons: btnButtons, phone: btnPhone });
+        console.log("Sending buttons menu:", { title: btnTitle, description: btnDescription, footer: btnFooter, buttons: btnButtons, phone: btnPhone });
         
         try {
           const btnRes = await fetch(`${baseUrl}/send/menu`, {
@@ -1728,6 +1736,7 @@ async function processGroupCommand(
               type: "buttons",
               title: btnTitle,
               description: btnDescription,
+              footer: btnFooter,
               buttons: btnButtons,
             }),
           });
