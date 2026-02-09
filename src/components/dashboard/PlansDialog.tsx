@@ -102,14 +102,6 @@ export function PlansDialog({ children }: PlansDialogProps) {
                   {plan.description}
                 </p>
 
-                {isFlexible && flexibleQuantity <= 5 && (
-                  <div className="mb-3 flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2">
-                    <Zap className="h-4 w-4 text-green-500 flex-shrink-0" />
-                    <span className="text-xs font-semibold text-green-500">
-                      🎉 Trial grátis por 5 dias
-                    </span>
-                  </div>
-                )}
 
                 {isFlexible && (
                   <div className="mb-4">
