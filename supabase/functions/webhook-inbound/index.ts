@@ -2042,6 +2042,251 @@ serve(async (req) => {
       }
     }
 
+    // =====================================================================
+    // INTERACTIVE COMMANDS FROM MOBILE WHATSAPP
+    // When user sends #botoes, #pix, #lista, #enquete from their phone,
+    // intercept and process the command instead of syncing as regular message.
+    // =====================================================================
+    const interactiveCommands = ["#pix", "#botoes", "#lista", "#enquete"];
+    const trimmedText = (textMessage || "").trim();
+    const isInteractiveCommand = isFromMe && trimmedText.startsWith("#") && 
+      interactiveCommands.some(cmd => trimmedText.toLowerCase().startsWith(cmd));
+
+    if (isInteractiveCommand) {
+      const baseUrl = (instance.uazapi_base_url || settings.uazapi_base_url || "").replace(/\/$/, "");
+      
+      if (!baseUrl) {
+        console.log("Interactive command from mobile but no UAZAPI base URL configured");
+        return new Response(
+          JSON.stringify({ received: true, ignored: true, reason: "no_uazapi_base_url_for_command" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Parse command and params (split by | with first word as command)
+      const firstWS = trimmedText.search(/[\s\t]/);
+      let cmdName: string;
+      let cmdParams: string[];
+      if (firstWS === -1) {
+        cmdName = trimmedText.toLowerCase();
+        cmdParams = [];
+      } else {
+        cmdName = trimmedText.substring(0, firstWS).toLowerCase();
+        const paramsStr = trimmedText.substring(firstWS).trim();
+        cmdParams = paramsStr.split("|").map(p => p.trim()).filter(p => p.length > 0);
+      }
+
+      // The target phone is the lead (the chat we're in)
+      const cmdTargetPhone = from.split("@")[0].replace(/\D/g, "");
+      
+      console.log("📱 Interactive command from mobile WhatsApp:", { cmdName, params: cmdParams.length, targetPhone: cmdTargetPhone });
+
+      let cmdResult = { success: false, message: "" };
+
+      switch (cmdName) {
+        case "#pix": {
+          if (cmdParams.length < 3) {
+            cmdResult = { success: false, message: "Formato: #pix tipo|chave|nome\nTipos: EVP, CPF, CNPJ, PHONE, EMAIL" };
+            break;
+          }
+          const pixType = cmdParams[0].toUpperCase().trim();
+          const pixKey = cmdParams[1].trim();
+          const pixName = cmdParams[2].trim();
+          const validPixTypes = ["EVP", "CPF", "CNPJ", "PHONE", "EMAIL"];
+          if (!validPixTypes.includes(pixType)) {
+            cmdResult = { success: false, message: "Tipo PIX inválido: \"" + pixType + "\". Use: " + validPixTypes.join(", ") };
+            break;
+          }
+          try {
+            const pixRes = await fetch(baseUrl + "/send/pix-button", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "token": instanceToken },
+              body: JSON.stringify({ number: cmdTargetPhone, pixType, pixKey, pixName }),
+            });
+            const pixText = await pixRes.text();
+            console.log("PIX button response (mobile):", { status: pixRes.status, body: pixText.substring(0, 300) });
+            cmdResult = pixRes.ok
+              ? { success: true, message: "Botão PIX enviado para " + cmdTargetPhone + " (" + pixName + ")" }
+              : { success: false, message: "Falha ao enviar PIX (" + pixRes.status + "): " + pixText.substring(0, 100) };
+          } catch (e) {
+            cmdResult = { success: false, message: "Erro ao enviar PIX: " + (e instanceof Error ? e.message : "Falha") };
+          }
+          break;
+        }
+
+        case "#botoes": {
+          if (cmdParams.length < 2) {
+            cmdResult = { success: false, message: "Formato: #botoes texto|botão1,botão2,botão3" };
+            break;
+          }
+          let btnText: string;
+          let btnFooter = "";
+          let btnChoicesRaw: string;
+          if (cmdParams.length >= 3) {
+            btnText = cmdParams[0].trim();
+            btnFooter = cmdParams[1].trim();
+            btnChoicesRaw = cmdParams[2];
+          } else {
+            btnText = cmdParams[0].trim();
+            btnChoicesRaw = cmdParams[1];
+          }
+          const btnChoices = btnChoicesRaw.split(",").map(b => b.trim()).filter(b => b.length > 0).slice(0, 3);
+          const btnPayload: Record<string, unknown> = {
+            number: cmdTargetPhone,
+            type: "button",
+            text: btnText,
+            choices: btnChoices,
+            readchat: true,
+          };
+          if (btnFooter) btnPayload.footerText = btnFooter;
+          console.log("Sending buttons from mobile:", JSON.stringify(btnPayload));
+          try {
+            const btnRes = await fetch(baseUrl + "/send/menu", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", token: instanceToken },
+              body: JSON.stringify(btnPayload),
+            });
+            const btnBody = await btnRes.text();
+            console.log("Buttons response (mobile):", { status: btnRes.status, body: btnBody.substring(0, 300) });
+            cmdResult = btnRes.ok
+              ? { success: true, message: "Botões enviados para " + cmdTargetPhone }
+              : { success: false, message: "Falha ao enviar botões (" + btnRes.status + "): " + btnBody.substring(0, 100) };
+          } catch (e) {
+            cmdResult = { success: false, message: "Erro ao enviar botões: " + (e instanceof Error ? e.message : "Falha") };
+          }
+          break;
+        }
+
+        case "#lista": {
+          if (cmdParams.length < 3) {
+            cmdResult = { success: false, message: "Formato: #lista texto|textoBotão|[Seção],item1,item2" };
+            break;
+          }
+          const listText = cmdParams[0].trim();
+          const listButton = cmdParams[1].trim();
+          const listChoices: string[] = [];
+          for (let li = 2; li < cmdParams.length; li++) {
+            const part = cmdParams[li].trim();
+            const subItems = part.split(",").map(s => s.trim()).filter(s => s.length > 0);
+            for (const si of subItems) {
+              listChoices.push(si);
+            }
+          }
+          const listPayload: Record<string, unknown> = {
+            number: cmdTargetPhone,
+            type: "list",
+            text: listText,
+            listButton,
+            choices: listChoices,
+            readchat: true,
+          };
+          console.log("Sending list from mobile:", JSON.stringify(listPayload));
+          try {
+            const listRes = await fetch(baseUrl + "/send/menu", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", token: instanceToken },
+              body: JSON.stringify(listPayload),
+            });
+            const listBody = await listRes.text();
+            console.log("List response (mobile):", { status: listRes.status, body: listBody.substring(0, 300) });
+            cmdResult = listRes.ok
+              ? { success: true, message: "Lista enviada para " + cmdTargetPhone }
+              : { success: false, message: "Falha ao enviar lista (" + listRes.status + "): " + listBody.substring(0, 100) };
+          } catch (e) {
+            cmdResult = { success: false, message: "Erro ao enviar lista: " + (e instanceof Error ? e.message : "Falha") };
+          }
+          break;
+        }
+
+        case "#enquete": {
+          if (cmdParams.length < 3) {
+            cmdResult = { success: false, message: "Formato: #enquete pergunta|opção1|opção2|opção3... (mín. 2 opções)" };
+            break;
+          }
+          const pollText = cmdParams[0].trim();
+          const pollChoices = cmdParams.slice(1).map(o => o.trim());
+          const pollPayload = {
+            number: cmdTargetPhone,
+            type: "poll",
+            text: pollText,
+            choices: pollChoices,
+            selectableCount: 1,
+            readchat: true,
+          };
+          console.log("Sending poll from mobile:", JSON.stringify(pollPayload));
+          try {
+            const pollRes = await fetch(baseUrl + "/send/menu", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", token: instanceToken },
+              body: JSON.stringify(pollPayload),
+            });
+            const pollBody = await pollRes.text();
+            console.log("Poll response (mobile):", { status: pollRes.status, body: pollBody.substring(0, 300) });
+            cmdResult = pollRes.ok
+              ? { success: true, message: "Enquete enviada para " + cmdTargetPhone }
+              : { success: false, message: "Falha ao enviar enquete (" + pollRes.status + "): " + pollBody.substring(0, 100) };
+          } catch (e) {
+            cmdResult = { success: false, message: "Erro ao enviar enquete: " + (e instanceof Error ? e.message : "Falha") };
+          }
+          break;
+        }
+      }
+
+      // Log result as InternalComment in GHL so user sees feedback
+      const emoji = cmdResult.success ? "✅" : "❌";
+      const commentMsg = emoji + " " + cmdName + ": " + cmdResult.message;
+      
+      try {
+        const convSearchRes = await fetch(
+          "https://services.leadconnectorhq.com/conversations/search?locationId=" + subaccount.location_id + "&contactId=" + contact.id,
+          {
+            headers: {
+              "Authorization": "Bearer " + token,
+              "Version": "2021-04-15",
+              "Accept": "application/json",
+            },
+          }
+        );
+        if (convSearchRes.ok) {
+          const convData = await convSearchRes.json();
+          const convId = convData?.conversations?.[0]?.id;
+          if (convId) {
+            await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+              method: "POST",
+              headers: {
+                "Authorization": "Bearer " + token,
+                "Version": "2021-04-15",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+              },
+              body: JSON.stringify({
+                type: "InternalComment",
+                conversationId: convId,
+                contactId: contact.id,
+                message: commentMsg,
+                ...(instance.ghl_user_id && { userId: instance.ghl_user_id }),
+              }),
+            });
+            console.log("📱 Command feedback InternalComment sent:", commentMsg);
+          }
+        }
+      } catch (icErr) {
+        console.error("Failed to send command feedback InternalComment:", icErr);
+      }
+
+      console.log("📱 Interactive command processed from mobile:", { cmdName, success: cmdResult.success, message: cmdResult.message });
+
+      return new Response(
+        JSON.stringify({
+          success: cmdResult.success,
+          command: cmdName,
+          message: cmdResult.message,
+          source: "mobile_whatsapp",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Send message to GHL - differentiate between inbound (from lead) and outbound (from us/agent)
     // isAgentIaMessage: message sent by API with track_id="agente_ia" - render as outbound (attendant message)
     const shouldSyncAsOutbound = isFromMe || isAgentIaMessage;
