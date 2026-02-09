@@ -430,12 +430,18 @@ const LandingPage = () => {
             </div>
           </div>
 
+          <div className="text-center mb-6">
+            <p className="text-lg font-semibold text-brand-green">
+              Comece com até 5 conexões grátis por 5 dias
+            </p>
+          </div>
+
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Flexible Plan */}
             <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 flex flex-col">
               <div className="mb-6">
                 <h3 className="text-xl font-semibold text-foreground mb-2">Flexível</h3>
-                <p className="text-muted-foreground text-sm">Comece com até 5 conexões grátis por 5 dias</p>
+                <p className="text-muted-foreground text-sm">Escolha a quantidade ideal</p>
               </div>
 
 
