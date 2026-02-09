@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Loader2, Mail, KeyRound, CheckCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/bridge-api-logo.jpg";
 
 type AuthStep = "login" | "request-code" | "enter-code" | "create-account";
 
@@ -151,7 +151,9 @@ export function AuthForm() {
       <Card className="w-full max-w-md border-border bg-card">
         <CardHeader className="text-center">
           <div className="flex flex-col items-center gap-3 mb-4">
-            <img src={logo} alt="Bridge API" className="h-16 w-16 rounded-full" />
+            <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-lg">
+              <img src={logo} alt="Bridge API" className="w-full h-full object-cover" />
+            </div>
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
           </div>
           <CardTitle className="text-2xl font-bold text-foreground">
