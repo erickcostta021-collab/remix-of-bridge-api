@@ -78,11 +78,13 @@ export function DashboardHeader() {
 
         <div className="group flex items-center gap-3 cursor-default select-none">
           <div className="relative">
-            <img
-              src={circleLogo}
-              alt="Bridge API"
-              className="w-10 h-10 rounded-full shadow-md ring-2 ring-primary/20 transition-all duration-500 group-hover:scale-110 group-hover:ring-primary/40 group-hover:shadow-[0_0_16px_hsl(var(--primary)/0.25)] object-cover"
-            />
+            <div className="w-10 h-10 rounded-full overflow-hidden shadow-md ring-2 ring-primary/20 transition-all duration-500 group-hover:scale-110 group-hover:ring-primary/40 group-hover:shadow-[0_0_16px_hsl(var(--primary)/0.25)]">
+              <img
+                src={circleLogo}
+                alt="Bridge API"
+                className="w-full h-full object-cover scale-[1.35]"
+              />
+            </div>
             <div className="absolute -inset-1 rounded-full bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10 blur-sm" />
           </div>
           <div className="flex flex-col">
