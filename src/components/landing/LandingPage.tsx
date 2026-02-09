@@ -288,121 +288,120 @@ const LandingPage = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-2 gap-6">
             {/* Feature 1 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
-              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
-                <MessageCircle className="h-7 w-7 text-brand-green" />
+            <div className="group bg-card rounded-xl p-6 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="w-11 h-11 rounded-lg bg-secondary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                <MessageCircle className="h-5 w-5 text-brand-green" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 Reaja, Edite, Responda e Apague Mensagens
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 Tenha controle total sobre suas conversas. Reaja com emojis, edite textos enviados, 
                 responda a mensagens específicas e apague o que foi dito, tudo dentro do GoHighLevel.
               </p>
             </div>
 
             {/* Feature 2 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
-              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
-                <Mic className="h-7 w-7 text-brand-green" />
+            <div className="group bg-card rounded-xl p-6 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="w-11 h-11 rounded-lg bg-secondary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                <Mic className="h-5 w-5 text-brand-green" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 Envie e Receba Áudios e Mídias
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 Comunicação rica e completa. Envie e receba mensagens de áudio, fotos e vídeos 
                 diretamente da interface do GHL, como se estivesse no WhatsApp nativo.
               </p>
             </div>
 
             {/* Feature 3 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
-              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
-                <Smartphone className="h-7 w-7 text-brand-green" />
+            <div className="group bg-card rounded-xl p-6 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="w-11 h-11 rounded-lg bg-secondary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                <Smartphone className="h-5 w-5 text-brand-green" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 Múltiplos Números, Uma Só Subconta
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 Conecte diversas instâncias do WhatsApp à mesma subconta do GHL. O Switcher automático 
                 troca o número de envio conforme a conversa, garantindo que você sempre responda pelo número certo.
               </p>
             </div>
 
             {/* Feature 4 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
-              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
-                <Users className="h-7 w-7 text-brand-green" />
+            <div className="group bg-card rounded-xl p-6 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="w-11 h-11 rounded-lg bg-secondary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                <Users className="h-5 w-5 text-brand-green" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 Gestão de Grupos
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 Gerencie seus grupos de WhatsApp diretamente do GoHighLevel, facilitando 
                 campanhas e comunicações em massa com comandos simples.
               </p>
             </div>
 
             {/* Feature 5 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
-              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
-                <ImageUp className="h-7 w-7 text-brand-green" />
+            <div className="group bg-card rounded-xl p-6 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="w-11 h-11 rounded-lg bg-secondary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                <ImageUp className="h-5 w-5 text-brand-green" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 Fotos Atualizadas
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 As fotos de perfil dos seus contatos são atualizadas automaticamente no CRM, 
                 garantindo uma base de dados sempre com informações visuais em dia.
               </p>
             </div>
 
             {/* Feature 6 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
-              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
-                <Link2 className="h-7 w-7 text-brand-green" />
+            <div className="group bg-card rounded-xl p-6 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="w-11 h-11 rounded-lg bg-secondary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                <Link2 className="h-5 w-5 text-brand-green" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 Link White Label para Conexão
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 Gere um link personalizado para que seus clientes conectem o WhatsApp diretamente 
                 por dentro do GoHighLevel, sem sair do CRM. Experiência integrada e profissional.
               </p>
             </div>
 
             {/* Feature 7 */}
-            <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
-              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300">
-                <MousePointerClick className="h-7 w-7 text-brand-green" />
+            <div className="group bg-card rounded-xl p-6 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="w-11 h-11 rounded-lg bg-secondary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
+                <MousePointerClick className="h-5 w-5 text-brand-green" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 Enviar Botões Interativos
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 Envie botões de resposta rápida, listas interativas, enquetes e botões de pagamento PIX 
                 diretamente pelo chat do GoHighLevel com comandos simples.
               </p>
             </div>
 
             {/* Feature 8 - Ligação (Coming Soon) */}
-            <div className="group relative bg-card rounded-2xl p-8 border border-border overflow-hidden opacity-75">
-              {/* Lock overlay */}
+            <div className="group relative bg-card rounded-xl p-6 border border-border overflow-hidden opacity-75">
               <div className="absolute inset-0 bg-card/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center gap-2">
-                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                  <Lock className="h-6 w-6 text-muted-foreground" />
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  <Lock className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <span className="text-sm font-semibold text-muted-foreground tracking-wide uppercase">Em Breve</span>
+                <span className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">Em Breve</span>
               </div>
-              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6">
-                <Phone className="h-7 w-7 text-brand-green" />
+              <div className="w-11 h-11 rounded-lg bg-secondary flex items-center justify-center mb-4">
+                <Phone className="h-5 w-5 text-brand-green" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 Ligações por Voz
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 Realize e receba chamadas de voz diretamente pelo GoHighLevel, 
                 integrando telefonia ao seu fluxo de atendimento via WhatsApp.
               </p>
