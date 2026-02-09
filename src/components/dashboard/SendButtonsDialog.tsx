@@ -25,9 +25,9 @@ const buttonCommands = [
   {
     command: "#botoes",
     description: "Envia mensagem com botões de resposta rápida",
-    format: "titulo|descrição|botão1|botão2|botão3",
+    format: "titulo|descrição|rodapé|botão1,botão2,botão3",
     context: "Contato",
-    notes: "Máx. 3 botões. O contato escolhe uma opção.",
+    notes: "Máx. 3 botões separados por vírgula. Rodapé opcional.",
   },
   {
     command: "#lista",
