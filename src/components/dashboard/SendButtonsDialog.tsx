@@ -22,6 +22,27 @@ const buttonCommands = [
     context: "Contato",
     notes: "Tipos: EVP, CPF, CNPJ, PHONE, EMAIL",
   },
+  {
+    command: "#botoes",
+    description: "Envia mensagem com botões de resposta rápida",
+    format: "titulo|descrição|botão1|botão2|botão3",
+    context: "Contato",
+    notes: "Máx. 3 botões. O contato escolhe uma opção.",
+  },
+  {
+    command: "#lista",
+    description: "Envia lista interativa com seções e itens",
+    format: "titulo|descrição|textoBotão|seção:item1,item2",
+    context: "Contato",
+    notes: "Múltiplas seções separadas por |. Itens por vírgula.",
+  },
+  {
+    command: "#enquete",
+    description: "Envia enquete/votação ao contato",
+    format: "pergunta|opção1|opção2|opção3",
+    context: "Contato",
+    notes: "Mínimo 2 opções. Sem limite definido.",
+  },
 ];
 
 export function SendButtonsDialog({ open, onOpenChange }: SendButtonsDialogProps) {

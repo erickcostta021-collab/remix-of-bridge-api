@@ -836,7 +836,7 @@ async function processGroupCommand(
     "#criargrupo", "#removerdogrupo", "#addnogrupo", "#promoveradmin",
     "#revogaradmin", "#attfotogrupo", "#attnomegrupo", "#attdescricao",
     "#somenteadminmsg", "#msgliberada", "#somenteadminedit", "#editliberado", "#linkgrupo", "#sairgrupo",
-    "#pix"
+    "#pix", "#botoes", "#lista", "#enquete"
   ];
   
   if (!validCommands.includes(command)) {
@@ -1695,6 +1695,160 @@ async function processGroupCommand(
           }
         } catch (e) {
           return { isCommand: true, success: false, command, message: `Erro ao enviar PIX: ${e instanceof Error ? e.message : "Falha"}` };
+        }
+      }
+
+      case "#botoes": {
+        // Formato: #botoes titulo|descricao|botao1|botao2|botao3
+        // Enviado no chat de um contato - envia mensagem com botões de resposta rápida
+        if (params.length < 3) {
+          return { isCommand: true, success: false, command, message: "Formato: #botoes titulo|descrição|botão1|botão2|botão3 (até 3 botões)" };
+        }
+        
+        const btnTitle = params[0].trim();
+        const btnDescription = params[1].trim();
+        const btnButtons = params.slice(2, 5).map(b => ({ displayText: b.trim() }));
+        
+        if (!targetPhone) {
+          return { isCommand: true, success: false, command, message: "Erro: número do contato não encontrado" };
+        }
+        
+        const btnPhone = targetPhone.replace(/\D/g, "");
+        console.log("Sending buttons menu:", { title: btnTitle, description: btnDescription, buttons: btnButtons, phone: btnPhone });
+        
+        try {
+          const btnRes = await fetch(`${baseUrl}/send/menu`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "token": instanceToken,
+            },
+            body: JSON.stringify({
+              number: btnPhone,
+              type: "buttons",
+              title: btnTitle,
+              description: btnDescription,
+              buttons: btnButtons,
+            }),
+          });
+          
+          const btnText = await btnRes.text();
+          console.log("Buttons menu response:", { status: btnRes.status, body: btnText.substring(0, 300) });
+          
+          if (btnRes.ok) {
+            return { isCommand: true, success: true, command, message: `Botões enviados para ${btnPhone}` };
+          } else {
+            return { isCommand: true, success: false, command, message: `Falha ao enviar botões (${btnRes.status}): ${btnText.substring(0, 100)}` };
+          }
+        } catch (e) {
+          return { isCommand: true, success: false, command, message: `Erro ao enviar botões: ${e instanceof Error ? e.message : "Falha"}` };
+        }
+      }
+
+      case "#lista": {
+        // Formato: #lista titulo|descrição|textoBotão|secao1:item1,item2|secao2:item3,item4
+        // Enviado no chat de um contato - envia lista interativa
+        if (params.length < 4) {
+          return { isCommand: true, success: false, command, message: "Formato: #lista titulo|descrição|textoBotão|seção:item1,item2|seção2:item3,item4" };
+        }
+        
+        const listTitle = params[0].trim();
+        const listDescription = params[1].trim();
+        const listButtonText = params[2].trim();
+        const sectionParams = params.slice(3);
+        
+        // Parse sections: each param is "sectionTitle:item1,item2,item3"
+        const sections = sectionParams.map(sp => {
+          const colonIdx = sp.indexOf(":");
+          if (colonIdx === -1) {
+            return { title: "", rows: [{ title: sp.trim() }] };
+          }
+          const sectionTitle = sp.substring(0, colonIdx).trim();
+          const items = sp.substring(colonIdx + 1).split(",").map(item => ({
+            title: item.trim(),
+          }));
+          return { title: sectionTitle, rows: items };
+        });
+        
+        if (!targetPhone) {
+          return { isCommand: true, success: false, command, message: "Erro: número do contato não encontrado" };
+        }
+        
+        const listPhone = targetPhone.replace(/\D/g, "");
+        console.log("Sending list menu:", { title: listTitle, description: listDescription, buttonText: listButtonText, sections, phone: listPhone });
+        
+        try {
+          const listRes = await fetch(`${baseUrl}/send/menu`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "token": instanceToken,
+            },
+            body: JSON.stringify({
+              number: listPhone,
+              type: "list",
+              title: listTitle,
+              description: listDescription,
+              buttonText: listButtonText,
+              sections,
+            }),
+          });
+          
+          const listText = await listRes.text();
+          console.log("List menu response:", { status: listRes.status, body: listText.substring(0, 300) });
+          
+          if (listRes.ok) {
+            return { isCommand: true, success: true, command, message: `Lista enviada para ${listPhone}` };
+          } else {
+            return { isCommand: true, success: false, command, message: `Falha ao enviar lista (${listRes.status}): ${listText.substring(0, 100)}` };
+          }
+        } catch (e) {
+          return { isCommand: true, success: false, command, message: `Erro ao enviar lista: ${e instanceof Error ? e.message : "Falha"}` };
+        }
+      }
+
+      case "#enquete": {
+        // Formato: #enquete pergunta|opcao1|opcao2|opcao3...
+        // Enviado no chat de um contato - envia enquete/poll
+        if (params.length < 3) {
+          return { isCommand: true, success: false, command, message: "Formato: #enquete pergunta|opção1|opção2|opção3... (mín. 2 opções)" };
+        }
+        
+        const pollTitle = params[0].trim();
+        const pollOptions = params.slice(1).map(o => o.trim());
+        
+        if (!targetPhone) {
+          return { isCommand: true, success: false, command, message: "Erro: número do contato não encontrado" };
+        }
+        
+        const pollPhone = targetPhone.replace(/\D/g, "");
+        console.log("Sending poll:", { title: pollTitle, options: pollOptions, phone: pollPhone });
+        
+        try {
+          const pollRes = await fetch(`${baseUrl}/send/menu`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "token": instanceToken,
+            },
+            body: JSON.stringify({
+              number: pollPhone,
+              type: "poll",
+              title: pollTitle,
+              options: pollOptions,
+            }),
+          });
+          
+          const pollText = await pollRes.text();
+          console.log("Poll response:", { status: pollRes.status, body: pollText.substring(0, 300) });
+          
+          if (pollRes.ok) {
+            return { isCommand: true, success: true, command, message: `Enquete enviada para ${pollPhone}` };
+          } else {
+            return { isCommand: true, success: false, command, message: `Falha ao enviar enquete (${pollRes.status}): ${pollText.substring(0, 100)}` };
+          }
+        } catch (e) {
+          return { isCommand: true, success: false, command, message: `Erro ao enviar enquete: ${e instanceof Error ? e.message : "Falha"}` };
         }
       }
       
