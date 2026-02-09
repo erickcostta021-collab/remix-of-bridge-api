@@ -22,14 +22,14 @@ const PLANS = [
   },
   {
     key: "plan_50",
-    name: "50 Instâncias",
+    name: "50 Conexões",
     description: "Para negócios em crescimento",
     price: 798,
     instances: 50,
   },
   {
     key: "plan_100",
-    name: "100 Instâncias",
+    name: "100 Conexões",
     description: "Para agências e equipes",
     price: 1298,
     instances: 100,
@@ -105,10 +105,10 @@ export function PlansDialog({ children }: PlansDialogProps) {
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-muted-foreground">
-                        Instâncias
-                      </span>
-                      <span className="text-sm font-bold text-primary">
-                        {flexibleQuantity}
+                       Conexões
+                       </span>
+                     <span className="text-sm font-bold text-primary">
+                       {flexibleQuantity}
                       </span>
                     </div>
                     <Slider
@@ -127,9 +127,9 @@ export function PlansDialog({ children }: PlansDialogProps) {
                   </span>
                   <span className="text-muted-foreground text-sm">/mês</span>
                   {isFlexible && (
-                    <p className="text-xs text-primary mt-1">
-                      R$35 por instância
-                    </p>
+                     <p className="text-xs text-primary mt-1">
+                       R$35 por conexão
+                     </p>
                   )}
                 </div>
 
@@ -143,10 +143,10 @@ export function PlansDialog({ children }: PlansDialogProps) {
                       {b}
                     </li>
                   ))}
-                  <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                    {instances} instância{instances > 1 ? "s" : ""}
-                  </li>
+                   <li className="flex items-center gap-2 text-sm text-muted-foreground">
+                     <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                     {instances} conexão{instances > 1 ? "ões" : ""} WhatsApp ↔ GHL
+                   </li>
                 </ul>
 
                 <Button

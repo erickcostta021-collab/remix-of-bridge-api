@@ -362,7 +362,7 @@ const LandingPage = () => {
               Planos e Preços
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Escolha o plano ideal para o tamanho do seu negócio.
+              Escolha o plano ideal para o tamanho do seu negócio. Cada conexão representa uma ponte entre seu WhatsApp e o GHL — a instância UAZAPI é sua.
             </p>
           </div>
 
@@ -378,12 +378,12 @@ const LandingPage = () => {
                   <span className="text-4xl font-bold text-foreground">R${totalPrice}</span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
-                <p className="text-sm text-brand-green font-medium mt-1">R$35 por instância</p>
+                <p className="text-sm text-brand-green font-medium mt-1">R$35 por conexão</p>
               </div>
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-muted-foreground">Instâncias</span>
-                  <span className="text-lg font-bold text-brand-green">{instanceCount}</span>
+                   <span className="text-sm text-muted-foreground">Conexões</span>
+                   <span className="text-lg font-bold text-brand-green">{instanceCount}</span>
                 </div>
                 <Slider
                   value={[instanceCount]}
@@ -401,7 +401,7 @@ const LandingPage = () => {
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  {instanceCount} Instância{instanceCount > 1 ? 's' : ''} WhatsApp
+                  {instanceCount} Conexão{instanceCount > 1 ? 'ões' : ''} WhatsApp ↔ GHL
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
@@ -433,7 +433,7 @@ const LandingPage = () => {
             {/* 50 Instances Plan */}
             <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 flex flex-col">
               <div className="mb-6">
-                <h3 className="text-xl font-semibold text-foreground mb-2">50 Instâncias</h3>
+                <h3 className="text-xl font-semibold text-foreground mb-2">50 Conexões</h3>
                 <p className="text-muted-foreground text-sm">Para negócios em crescimento</p>
               </div>
               <div className="mb-6">
@@ -443,7 +443,7 @@ const LandingPage = () => {
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  50 Instâncias WhatsApp
+                  50 Conexões WhatsApp ↔ GHL
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
@@ -475,7 +475,7 @@ const LandingPage = () => {
                 Mais Popular
               </div>
               <div className="mb-6">
-                <h3 className="text-xl font-semibold text-foreground mb-2">100 Instâncias</h3>
+                <h3 className="text-xl font-semibold text-foreground mb-2">100 Conexões</h3>
                 <p className="text-muted-foreground text-sm">Para agências e equipes</p>
               </div>
               <div className="mb-6">
@@ -485,7 +485,7 @@ const LandingPage = () => {
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  100 Instâncias WhatsApp
+                  100 Conexões WhatsApp ↔ GHL
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />

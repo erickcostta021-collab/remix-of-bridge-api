@@ -19,20 +19,20 @@ const PLANS = {
     maxQuantity: 10,
   },
   plan_50: {
-    name: "50 Instâncias",
+    name: "50 Conexões",
     description: "Para negócios em crescimento",
     price: 798,
     instances: 50,
   },
   plan_100: {
-    name: "100 Instâncias",
+    name: "100 Conexões",
     description: "Para agências e equipes",
     price: 1298,
     instances: 100,
     popular: true,
   },
   plan_300: {
-    name: "300 Instâncias",
+    name: "300 Conexões",
     description: "Para grandes operações",
     price: 2998,
     instances: 300,
@@ -190,7 +190,7 @@ const Checkout = () => {
               {isFlexible && (
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm text-muted-foreground">Instâncias</span>
+                    <span className="text-sm text-muted-foreground">Conexões</span>
                     <span className="text-lg font-bold text-brand-green">{quantity}</span>
                   </div>
                   <Slider
@@ -214,7 +214,7 @@ const Checkout = () => {
                   <span className="text-muted-foreground">/mês</span>
                 </div>
                 <span className="text-sm text-muted-foreground">
-                  {totalInstances} instância{totalInstances > 1 ? 's' : ''}
+                  {totalInstances} conexão{totalInstances > 1 ? 'ões' : ''}
                 </span>
               </div>
             </div>
