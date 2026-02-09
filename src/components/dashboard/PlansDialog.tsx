@@ -16,9 +16,10 @@ const PLANS = [
   {
     key: "flexible",
     name: "Flexível",
-    description: "Escolha a quantidade ideal",
+    description: "Comece com até 5 conexões grátis por 5 dias",
     pricePerUnit: 35,
     isFlexible: true,
+    trialInfo: "Trial grátis de 5 dias (até 5 conexões)",
   },
   {
     key: "plan_50",
@@ -97,9 +98,18 @@ export function PlansDialog({ children }: PlansDialogProps) {
                 <h3 className="text-lg font-semibold text-foreground">
                   {plan.name}
                 </h3>
-                <p className="text-sm text-muted-foreground mb-4">
+                <p className="text-sm text-muted-foreground mb-2">
                   {plan.description}
                 </p>
+
+                {isFlexible && flexibleQuantity <= 5 && (
+                  <div className="mb-3 flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2">
+                    <Zap className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-green-500">
+                      🎉 Trial grátis por 5 dias
+                    </span>
+                  </div>
+                )}
 
                 {isFlexible && (
                   <div className="mb-4">
@@ -118,6 +128,11 @@ export function PlansDialog({ children }: PlansDialogProps) {
                       max={10}
                       step={1}
                     />
+                    {flexibleQuantity <= 5 && (
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        Até 5 conexões: teste grátis. A partir de 6: cobrança imediata.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -130,6 +145,11 @@ export function PlansDialog({ children }: PlansDialogProps) {
                      <p className="text-xs text-primary mt-1">
                        R$35 por conexão
                      </p>
+                  )}
+                  {isFlexible && flexibleQuantity <= 5 && (
+                    <p className="text-xs text-green-500 font-medium mt-0.5">
+                      Cobrado apenas após o trial
+                    </p>
                   )}
                 </div>
 
