@@ -1711,46 +1711,99 @@ async function processGroupCommand(
         // If 4 params: title|desc|footer|btn1,btn2,btn3  — buttons are comma-separated in last param
         // If 3 params: title|desc|btn1,btn2,btn3  — no footer, buttons are in 3rd param
         const btnRaw = params.length >= 4 ? params[3] : params[2];
-        const btnButtons = btnRaw.split(",").map((b, i) => ({
-          buttonId: String(i + 1),
-          buttonText: b.trim(),
-          displayText: b.trim(),
-        })).slice(0, 3);
+        const btnButtonsParsed = btnRaw.split(",").map(b => b.trim()).filter(b => b.length > 0).slice(0, 3);
         
         if (!targetPhone) {
           return { isCommand: true, success: false, command, message: "Erro: número do contato não encontrado" };
         }
         
         const btnPhone = targetPhone.replace(/\D/g, "");
-        console.log("Sending buttons menu:", { title: btnTitle, description: btnDescription, footer: btnFooter, buttons: btnButtons, phone: btnPhone });
+        console.log("Sending buttons menu:", { title: btnTitle, description: btnDescription, footer: btnFooter, buttons: btnButtonsParsed, phone: btnPhone });
         
-        try {
-          const btnRes = await fetch(`${baseUrl}/send/menu`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "token": instanceToken,
-            },
-            body: JSON.stringify({
-              number: btnPhone,
-              type: "buttons",
-              title: btnTitle,
-              description: btnDescription,
-              footer: btnFooter,
-              buttons: btnButtons,
-            }),
-          });
-          
-          const btnText = await btnRes.text();
-          console.log("Buttons menu response:", { status: btnRes.status, body: btnText.substring(0, 300) });
-          
-          if (btnRes.ok) {
-            return { isCommand: true, success: true, command, message: `Botões enviados para ${btnPhone}` };
-          } else {
-            return { isCommand: true, success: false, command, message: `Falha ao enviar botões (${btnRes.status}): ${btnText.substring(0, 100)}` };
+        // Try multiple payload formats since UAZAPI may expect different structures
+        const btnPayloadAttempts = [
+          // Attempt 1: body + footer + buttons with id/text
+          {
+            number: btnPhone,
+            type: "buttons",
+            title: btnTitle,
+            body: btnDescription,
+            footer: btnFooter,
+            buttons: btnButtonsParsed.map((b, i) => ({ id: String(i + 1), text: b })),
+          },
+          // Attempt 2: description + footer + buttons with buttonId/buttonText
+          {
+            number: btnPhone,
+            type: "buttons",
+            title: btnTitle,
+            description: btnDescription,
+            footer: btnFooter,
+            buttons: btnButtonsParsed.map((b, i) => ({ buttonId: String(i + 1), buttonText: b })),
+          },
+          // Attempt 3: message + footer + buttons with displayText
+          {
+            number: btnPhone,
+            type: "buttons",
+            title: btnTitle,
+            message: btnDescription,
+            footer: btnFooter,
+            buttons: btnButtonsParsed.map((b, i) => ({ buttonId: String(i + 1), buttonText: b, displayText: b })),
+          },
+          // Attempt 4: body + footer + buttons as WhatsApp native format
+          {
+            number: btnPhone,
+            type: "buttons",
+            title: btnTitle,
+            body: btnDescription,
+            footer: btnFooter,
+            buttons: btnButtonsParsed.map((b, i) => ({ type: "reply", reply: { id: String(i + 1), title: b } })),
+          },
+          // Attempt 5: text field + buttons
+          {
+            number: btnPhone,
+            type: "buttons",
+            title: btnTitle,
+            text: btnDescription,
+            footer: btnFooter,
+            buttons: btnButtonsParsed.map((b, i) => ({ id: String(i + 1), text: b })),
+          },
+        ];
+        
+        let btnSuccess = false;
+        let btnLastStatus = 0;
+        let btnLastBody = "";
+        
+        for (let ai = 0; ai < btnPayloadAttempts.length; ai++) {
+          try {
+            const payload = btnPayloadAttempts[ai];
+            console.log(`Buttons attempt ${ai + 1}:`, JSON.stringify(payload).substring(0, 300));
+            
+            const btnRes = await fetch(`${baseUrl}/send/menu`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "token": instanceToken,
+              },
+              body: JSON.stringify(payload),
+            });
+            
+            btnLastStatus = btnRes.status;
+            btnLastBody = await btnRes.text();
+            console.log(`Buttons attempt ${ai + 1} response:`, { status: btnLastStatus, body: btnLastBody.substring(0, 300) });
+            
+            if (btnRes.ok) {
+              btnSuccess = true;
+              break;
+            }
+          } catch (e) {
+            console.log(`Buttons attempt ${ai + 1} error:`, e instanceof Error ? e.message : "unknown");
           }
-        } catch (e) {
-          return { isCommand: true, success: false, command, message: `Erro ao enviar botões: ${e instanceof Error ? e.message : "Falha"}` };
+        }
+        
+        if (btnSuccess) {
+          return { isCommand: true, success: true, command, message: `Botões enviados para ${btnPhone}` };
+        } else {
+          return { isCommand: true, success: false, command, message: `Falha ao enviar botões (${btnLastStatus}): ${btnLastBody.substring(0, 100)}` };
         }
       }
 
