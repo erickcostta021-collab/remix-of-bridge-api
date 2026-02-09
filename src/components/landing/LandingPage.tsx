@@ -66,12 +66,12 @@ const LandingPage = () => {
 
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full overflow-hidden shadow-md">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden shadow-md">
               <img src={circleLogo} alt="Bridge API" className="w-full h-full object-cover scale-[1.85]" />
             </div>
-            <span className="text-xl font-semibold text-foreground">Bridge API</span>
+            <span className="text-lg sm:text-xl font-semibold text-foreground">Bridge API</span>
           </div>
           
           {/* Center Navigation */}
@@ -90,14 +90,14 @@ const LandingPage = () => {
             </button>
           </nav>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Link to="/login">
-              <Button variant="outline" className="border-border text-foreground hover:bg-secondary transition-all duration-300">
+              <Button variant="outline" size="sm" className="border-border text-foreground hover:bg-secondary transition-all duration-300 text-xs sm:text-sm">
                 Entrar
               </Button>
             </Link>
             <Link to="/register">
-              <Button className="bg-brand-green hover:bg-brand-green/90 text-white transition-all duration-300">
+              <Button size="sm" className="bg-brand-green hover:bg-brand-green/90 text-white transition-all duration-300 text-xs sm:text-sm">
                 Inicie Agora
               </Button>
             </Link>
@@ -106,26 +106,26 @@ const LandingPage = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-6 relative z-10">
+      <section className="pt-24 sm:pt-32 pb-12 sm:pb-20 px-4 sm:px-6 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary border border-border text-brand-green text-sm font-medium mb-6">
-            <Zap className="h-4 w-4" />
+          <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-secondary border border-border text-brand-green text-xs sm:text-sm font-medium mb-4 sm:mb-6">
+            <Zap className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Integração WhatsApp + GHL
           </div>
           
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-6 text-foreground">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-4 sm:mb-6 text-foreground">
             Conecte o WhatsApp ao GoHighLevel{" "}
             <span className="text-brand-green">Como Nunca Antes</span>
           </h1>
           
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 sm:mb-10 px-2">
             Liberte o Potencial Total da Sua Comunicação. Gerencie Múltiplas Instâncias, 
             Otimize Interações e Automatize seu Atendimento Direto do GHL.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/register">
-              <Button size="lg" className="bg-brand-green hover:bg-brand-green/90 text-white px-8 py-6 text-lg transition-all duration-300 group">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0">
+            <Link to="/register" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full sm:w-auto bg-brand-green hover:bg-brand-green/90 text-white px-8 py-6 text-base sm:text-lg transition-all duration-300 group">
                 Inicie Agora
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
@@ -133,7 +133,7 @@ const LandingPage = () => {
             <Button 
               size="lg" 
               variant="outline" 
-              className="px-8 py-6 text-lg border-border text-foreground hover:bg-secondary transition-all duration-300"
+              className="w-full sm:w-auto px-8 py-6 text-base sm:text-lg border-border text-foreground hover:bg-secondary transition-all duration-300"
               onClick={() => document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' })}
             >
               Saiba Mais
@@ -160,10 +160,10 @@ const LandingPage = () => {
       </section>
 
       {/* How it Works Section */}
-      <section id="como-funciona" className="py-20 px-6 scroll-mt-20 relative z-10">
+      <section id="como-funciona" className="py-12 sm:py-20 px-4 sm:px-6 scroll-mt-20 relative z-10">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+          <div className="text-center mb-10 sm:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-3 sm:mb-4">
               Como Funciona a Bridge API?
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -244,8 +244,8 @@ const LandingPage = () => {
           </div>
 
           {/* Steps */}
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-card rounded-2xl p-8 border border-border text-center">
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-8">
+            <div className="bg-card rounded-xl sm:rounded-2xl p-6 sm:p-8 border border-border text-center">
               <div className="w-12 h-12 rounded-full bg-brand-green/10 flex items-center justify-center mx-auto mb-4">
                 <span className="text-xl font-bold text-brand-green">1</span>
               </div>
@@ -254,7 +254,7 @@ const LandingPage = () => {
                 Use sua própria conta da UAZAPI. Basta ter o token e a URL da sua instância em mãos para começar.
               </p>
             </div>
-            <div className="bg-card rounded-2xl p-8 border border-border text-center">
+            <div className="bg-card rounded-xl sm:rounded-2xl p-6 sm:p-8 border border-border text-center">
               <div className="w-12 h-12 rounded-full bg-brand-blue/10 flex items-center justify-center mx-auto mb-4">
                 <span className="text-xl font-bold text-brand-blue">2</span>
               </div>
@@ -263,7 +263,7 @@ const LandingPage = () => {
                 Cadastre suas conexões no painel da Bridge API, vincule à sua subconta do GHL e ative a ponte com um clique.
               </p>
             </div>
-            <div className="bg-card rounded-2xl p-8 border border-border text-center">
+            <div className="bg-card rounded-xl sm:rounded-2xl p-6 sm:p-8 border border-border text-center">
               <div className="w-12 h-12 rounded-full bg-brand-green/10 flex items-center justify-center mx-auto mb-4">
                 <span className="text-xl font-bold text-brand-green">3</span>
               </div>
@@ -277,10 +277,10 @@ const LandingPage = () => {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 px-6 relative z-10 bg-secondary/30">
+      <section className="py-12 sm:py-20 px-4 sm:px-6 relative z-10 bg-secondary/30">
         <div className="max-w-6xl mx-auto relative">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+          <div className="text-center mb-10 sm:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-3 sm:mb-4">
               Funcionalidades Poderosas
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -288,7 +288,7 @@ const LandingPage = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
             {/* Feature 1 */}
             <div className="group bg-card rounded-xl p-6 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
               <div className="w-11 h-11 rounded-lg bg-secondary flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-300">
@@ -411,10 +411,10 @@ const LandingPage = () => {
       </section>
 
       {/* Pricing Section */}
-      <section id="precos" className="py-20 px-6 scroll-mt-20 relative z-10">
+      <section id="precos" className="py-12 sm:py-20 px-4 sm:px-6 scroll-mt-20 relative z-10">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+          <div className="text-center mb-8 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-3 sm:mb-4">
               Planos e Preços
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
@@ -473,7 +473,7 @@ const LandingPage = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
             {/* Flexible Plan */}
             <div className="group bg-card rounded-2xl p-8 border border-border hover:border-brand-blue hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 flex flex-col">
               <div className="mb-6">
@@ -673,10 +673,10 @@ const LandingPage = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-6 relative z-10">
+      <section className="py-12 sm:py-20 px-4 sm:px-6 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="bg-brand-green rounded-3xl p-12 md:p-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+          <div className="bg-brand-green rounded-2xl sm:rounded-3xl p-8 sm:p-12 md:p-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-3 sm:mb-4">
               Pronto para ir para o próximo Level?
             </h2>
             <p className="text-lg text-white/90 max-w-2xl mx-auto mb-8">
