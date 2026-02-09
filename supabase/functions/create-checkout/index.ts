@@ -143,8 +143,32 @@ serve(async (req) => {
     const origin = req.headers.get("origin") || "https://bridge-api.lovable.app";
     
     // Trial for flexible plan with up to 5 instances
+    // Only eligible if customer has NO prior payment methods (first-time user)
     const qty = quantity || 1;
-    const isTrialEligible = plan === "flexible" && qty >= 1 && qty <= 5;
+    let isTrialEligible = plan === "flexible" && qty >= 1 && qty <= 5;
+
+    if (isTrialEligible && customerId) {
+      // Check if customer already has payment methods registered
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: customerId,
+        limit: 1,
+      });
+      if (paymentMethods.data.length > 0) {
+        isTrialEligible = false;
+        logStep("Trial disabled: customer already has payment method", { customerId });
+      } else {
+        // Also check for any previous subscriptions (active, canceled, etc.)
+        const prevSubs = await stripe.subscriptions.list({
+          customer: customerId,
+          limit: 1,
+          status: "all",
+        });
+        if (prevSubs.data.length > 0) {
+          isTrialEligible = false;
+          logStep("Trial disabled: customer has previous subscriptions", { customerId });
+        }
+      }
+    }
     logStep("Trial eligibility", { isTrialEligible, plan, quantity: qty });
 
     const session = await stripe.checkout.sessions.create({
