@@ -15,7 +15,7 @@ import {
   Link2,
   ImageUp
 } from "lucide-react";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/bridge-api-logo.jpg";
 import whatsappLogo from "@/assets/whatsapp-logo.svg";
 import ghlIcon from "@/assets/ghl-icon.png";
 import bridgeImg from "@/assets/bridge.png";
@@ -46,7 +46,9 @@ const LandingPage = () => {
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="Bridge API" className="h-10 w-10 rounded-full" />
+            <div className="w-10 h-10 rounded-xl overflow-hidden shadow-md">
+              <img src={logo} alt="Bridge API" className="w-full h-full object-cover" />
+            </div>
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
           </div>
           
@@ -574,7 +576,9 @@ const LandingPage = () => {
       <footer className="py-8 px-6 border-t border-border relative z-10">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="Bridge API" className="h-8 w-8 rounded-full" />
+            <div className="w-8 h-8 rounded-lg overflow-hidden shadow-sm">
+              <img src={logo} alt="Bridge API" className="w-full h-full object-cover" />
+            </div>
             <span className="text-muted-foreground">Bridge API © {new Date().getFullYear()} - Todos os direitos reservados.</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-muted-foreground">

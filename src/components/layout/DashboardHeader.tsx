@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Menu, KeyRound, LogOut, CreditCard, User, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/bridge-api-logo.jpg";
 
 export function DashboardHeader() {
   const { signOut } = useAuth();
@@ -78,12 +78,14 @@ export function DashboardHeader() {
 
         <div className="group flex items-center gap-3 cursor-default select-none">
           <div className="relative">
-            <img
-              src={logo}
-              alt="Bridge API"
-              className="h-10 w-10 rounded-full ring-2 ring-primary/20 transition-all duration-500 group-hover:scale-110 group-hover:ring-primary/40 group-hover:shadow-[0_0_16px_hsl(var(--primary)/0.25)]"
-            />
-            <div className="absolute -inset-1 rounded-full bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10 blur-sm" />
+            <div className="w-10 h-10 rounded-xl overflow-hidden shadow-md ring-2 ring-primary/20 transition-all duration-500 group-hover:scale-110 group-hover:ring-primary/40 group-hover:shadow-[0_0_16px_hsl(var(--primary)/0.25)]">
+              <img
+                src={logo}
+                alt="Bridge API"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="absolute -inset-1 rounded-xl bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10 blur-sm" />
           </div>
           <div className="flex flex-col">
             <span className="text-lg font-bold tracking-tight text-foreground leading-tight">
