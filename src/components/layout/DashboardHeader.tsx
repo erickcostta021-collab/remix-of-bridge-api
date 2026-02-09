@@ -104,18 +104,16 @@ export function DashboardHeader() {
       </div>
 
       {/* Right: plans + avatar */}
-      <div className="flex items-center gap-4">
-        {!hasActiveSubscription && (
-          <PlansDialog>
-            <Button
-              size="sm"
-              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all duration-300"
-            >
-              <CreditCard className="h-4 w-4 mr-2" />
-              Assinar Plano
-            </Button>
-          </PlansDialog>
-        )}
+      <div className="flex items-center gap-3">
+        <PlansDialog>
+          <Button
+            size="sm"
+            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all duration-300"
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Comprar Conexões
+          </Button>
+        </PlansDialog>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
