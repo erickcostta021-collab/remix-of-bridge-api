@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { Slider } from "@/components/ui/slider";
@@ -20,10 +20,29 @@ import whatsappLogo from "@/assets/whatsapp-logo.svg";
 import ghlIcon from "@/assets/ghl-icon.png";
 import bridgeImg from "@/assets/bridge.png";
 
+const EXCHANGE_RATE = 5.50;
+
 const LandingPage = () => {
   const [instanceCount, setInstanceCount] = useState(1);
+  const [currency, setCurrency] = useState<'BRL' | 'USD'>('BRL');
   const pricePerInstance = 35;
   const totalPrice = instanceCount * pricePerInstance;
+
+  const formatPrice = useCallback((brlValue: number) => {
+    if (currency === 'BRL') {
+      return `R$${brlValue.toLocaleString('pt-BR')}`;
+    }
+    const usdValue = Math.round(brlValue / EXCHANGE_RATE);
+    return `$${usdValue.toLocaleString('en-US')}`;
+  }, [currency]);
+
+  const formatPerUnit = useCallback((brlValue: number) => {
+    if (currency === 'BRL') {
+      return `R$${brlValue} por conexão`;
+    }
+    const usdValue = (brlValue / EXCHANGE_RATE).toFixed(2);
+    return `$${usdValue} por conexão`;
+  }, [currency]);
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
@@ -357,13 +376,58 @@ const LandingPage = () => {
       {/* Pricing Section */}
       <section id="precos" className="py-20 px-6 scroll-mt-20 relative z-10">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
+          <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
               Planos e Preços
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
               Escolha o plano ideal para o tamanho do seu negócio. Cada conexão representa uma ponte entre seu WhatsApp e o GHL — a instância UAZAPI é sua.
             </p>
+
+            {/* Currency Switch */}
+            <div className="inline-flex flex-col items-center gap-2">
+              <div
+                className="relative inline-flex items-center bg-secondary rounded-full p-1 border border-border"
+                role="radiogroup"
+                aria-label="Selecionar moeda"
+              >
+                <button
+                  role="radio"
+                  aria-checked={currency === 'BRL'}
+                  onClick={() => setCurrency('BRL')}
+                  className={`relative z-10 px-5 py-2 rounded-full text-sm font-semibold transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                    currency === 'BRL'
+                      ? 'text-white'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  R$ BRL
+                </button>
+                <button
+                  role="radio"
+                  aria-checked={currency === 'USD'}
+                  onClick={() => setCurrency('USD')}
+                  className={`relative z-10 px-5 py-2 rounded-full text-sm font-semibold transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                    currency === 'USD'
+                      ? 'text-white'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  $ USD
+                </button>
+                {/* Sliding indicator */}
+                <div
+                  className="absolute top-1 h-[calc(100%-8px)] w-[calc(50%-4px)] rounded-full bg-brand-green shadow-md transition-transform duration-300 ease-out"
+                  style={{
+                    transform: currency === 'USD' ? 'translateX(100%)' : 'translateX(0)',
+                    left: '4px',
+                  }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground/60">
+                {currency === 'USD' ? `Taxa: 1 USD = ${EXCHANGE_RATE.toFixed(2)} BRL` : 'Valores em Real Brasileiro'}
+              </span>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -375,10 +439,10 @@ const LandingPage = () => {
               </div>
               <div className="mb-4">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-foreground">R${totalPrice}</span>
+                  <span className="text-4xl font-bold text-foreground transition-opacity duration-300">{formatPrice(totalPrice)}</span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
-                <p className="text-sm text-brand-green font-medium mt-1">R$35 por conexão</p>
+                <p className="text-sm text-brand-green font-medium mt-1">{formatPerUnit(35)}</p>
               </div>
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
@@ -437,7 +501,7 @@ const LandingPage = () => {
                 <p className="text-muted-foreground text-sm">Para negócios em crescimento</p>
               </div>
               <div className="mb-6">
-                <span className="text-4xl font-bold text-foreground">R$798</span>
+                <span className="text-4xl font-bold text-foreground transition-opacity duration-300">{formatPrice(798)}</span>
                 <span className="text-muted-foreground">/mês</span>
               </div>
               <ul className="space-y-3 mb-8 flex-grow">
@@ -479,7 +543,7 @@ const LandingPage = () => {
                 <p className="text-muted-foreground text-sm">Para agências e equipes</p>
               </div>
               <div className="mb-6">
-                <span className="text-4xl font-bold text-foreground">R$1.298</span>
+                <span className="text-4xl font-bold text-foreground transition-opacity duration-300">{formatPrice(1298)}</span>
                 <span className="text-muted-foreground">/mês</span>
               </div>
               <ul className="space-y-3 mb-8 flex-grow">
