@@ -60,7 +60,7 @@ export default function Dashboard() {
             </div>
             
             {/* Subaccount Info */}
-            <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-xl border border-border">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-secondary/50 rounded-xl border border-border">
               <div>
                 <p className="font-medium text-foreground">{selectedSubaccount.account_name}</p>
                 <p className="text-xs text-muted-foreground font-mono">{selectedSubaccount.location_id}</p>
@@ -71,7 +71,7 @@ export default function Dashboard() {
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="outline"
                   size="sm"
@@ -95,7 +95,6 @@ export default function Dashboard() {
                       let token = selectedSubaccount.embed_token;
                       
                       if (!token) {
-                        // Generate token if not exists
                         const { data: tokenData } = await supabase.rpc("generate_embed_token");
                         token = tokenData || btoa(crypto.randomUUID()).slice(0, 20);
                         
@@ -114,17 +113,17 @@ export default function Dashboard() {
                   }}
                   className={hasActiveSubscription ? "border-border" : "border-border opacity-40 cursor-not-allowed"}
                 >
-                  <Link2 className="h-4 w-4 mr-2" />
-                  Copiar Link GHL
+                  <Link2 className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Copiar Link GHL</span>
                 </Button>
                 {hasUAZAPIConfig && !isSharedAccount && hasActiveSubscription && (
                   <AddInstanceDialog subaccount={selectedSubaccount} />
                 )}
                 {!hasActiveSubscription && !isSharedAccount && (
                   <PlansDialog>
-                    <Button className="bg-brand-green hover:bg-brand-green/90">
-                      <Lock className="h-4 w-4 mr-2" />
-                      Assinar Plano
+                    <Button className="bg-brand-green hover:bg-brand-green/90" size="sm">
+                      <Lock className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Assinar Plano</span>
                     </Button>
                   </PlansDialog>
                 )}
@@ -181,7 +180,7 @@ export default function Dashboard() {
           )}
 
           {/* Instances Grid */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {/* Instance Cards */}
             {instances.map((instance) => (
               <InstanceCard key={instance.id} instance={instance} />
@@ -278,7 +277,7 @@ export default function Dashboard() {
         )}
 
         {/* Search */}
-        <div className="relative max-w-md">
+        <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar subcontas..."
@@ -308,7 +307,7 @@ export default function Dashboard() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {filteredSubaccounts.map((subaccount) => (
               <SubaccountCard
                 key={subaccount.id}
