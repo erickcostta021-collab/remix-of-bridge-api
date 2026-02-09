@@ -10,17 +10,20 @@ export function useAuth() {
   useEffect(() => {
     // Set up auth state listener BEFORE checking session
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      (event, session) => {
+        // Only set user if email is confirmed (not just signed up)
+        const confirmedUser = session?.user?.email_confirmed_at ? session.user : null;
+        setSession(confirmedUser ? session : null);
+        setUser(confirmedUser);
         setLoading(false);
       }
     );
 
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+      const confirmedUser = session?.user?.email_confirmed_at ? session.user : null;
+      setSession(confirmedUser ? session : null);
+      setUser(confirmedUser);
       setLoading(false);
     });
 
