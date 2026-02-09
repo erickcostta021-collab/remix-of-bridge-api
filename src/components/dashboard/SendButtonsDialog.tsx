@@ -129,7 +129,7 @@ export function SendButtonsDialog({ open, onOpenChange }: SendButtonsDialogProps
 
         <div className="mt-4 p-3 rounded-lg bg-muted/30 border border-border">
           <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">Dica:</strong> Esses comandos devem ser enviados no chat de um contato individual no CRM, não dentro de grupos.
+            <strong className="text-foreground">Dica:</strong> Esses comandos devem ser enviados no chat de um contato individual no CRM.
           </p>
         </div>
       </DialogContent>
