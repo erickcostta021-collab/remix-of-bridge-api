@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
@@ -13,7 +12,7 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[CUSTOMER-PORTAL] ${step}${detailsStr}`);
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -49,7 +48,11 @@ serve(async (req) => {
     });
 
     if (customers.data.length === 0) {
-      throw new Error("Nenhum cliente Stripe encontrado para este usuário");
+      logStep("No Stripe customer found");
+      return new Response(JSON.stringify({ error: "NO_CUSTOMER" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
     }
 
     const customerId = customers.data[0].id;
