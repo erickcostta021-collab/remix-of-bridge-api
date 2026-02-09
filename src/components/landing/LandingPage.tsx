@@ -438,14 +438,6 @@ const LandingPage = () => {
                 <p className="text-muted-foreground text-sm">Comece com até 5 conexões grátis por 5 dias</p>
               </div>
 
-              {instanceCount <= 5 && (
-                <div className="mb-4 flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2.5">
-                  <Gift className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  <span className="text-sm font-semibold text-green-500">
-                    🎉 Trial grátis por 5 dias
-                  </span>
-                </div>
-              )}
 
               <div className="mb-4">
                 <div className="flex items-baseline gap-1">
