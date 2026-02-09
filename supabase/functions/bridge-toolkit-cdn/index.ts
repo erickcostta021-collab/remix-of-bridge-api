@@ -6,7 +6,7 @@ const corsHeaders = {
 
 const BRIDGE_TOOLKIT_SCRIPT = `
 (function() {
-    console.log("🚀 Bridge Toolkit v22: Iniciando (Menu Fix)...");
+    console.log("🚀 Bridge Toolkit v23: Iniciando (Edit Button Fix)...");
 
     const BRIDGE_CONFIG = {
         supabase_url: 'https://jsupvprudyxyiyxwqxuq.supabase.co',
@@ -572,10 +572,19 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             }
         }, true); // Capture phase - runs BEFORE bubbling
         
-        // Also capture clicks on send buttons - more aggressive detection
-        document.addEventListener('click', async (e) => {
+        // Guard to prevent duplicate processing across pointerdown/mousedown/click
+        let sendButtonProcessing = false;
+        
+        // Helper: handle send button interception for both edit and reply
+        const handleSendButtonIntercept = async (e) => {
             // Only if we have a reply or edit context
             if (!replyContext && !editContext) return;
+            if (sendButtonProcessing) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                return;
+            }
             
             const target = e.target;
             
@@ -645,36 +654,48 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                 e.stopPropagation();
                 e.stopImmediatePropagation();
                 
-                if (editContext) {
-                    // Handle edit via button
-                    console.log("✏️ Bridge: Sending edit via button...");
-                    showToast("Editando mensagem...");
-                    
-                    // Include GHL user ID for attribution
-                    const ghlUserId = getGhlUserId();
-                    const result = await sendAction('edit', editContext.ghlId, { new_text: text.trim(), ghl_user_id: ghlUserId });
-                    
-                    if (result) {
-                        console.log("✅ Bridge: Edit sent successfully via button");
-                        showToast("Mensagem editada!");
-                        clearInput(inputArea);
-                        clearEditContext();
+                sendButtonProcessing = true;
+                
+                try {
+                    if (editContext) {
+                        // Handle edit via button
+                        console.log("✏️ Bridge: Sending edit via button...");
+                        showToast("Editando mensagem...");
+                        
+                        // Include GHL user ID for attribution
+                        const ghlUserId = getGhlUserId();
+                        const result = await sendAction('edit', editContext.ghlId, { new_text: text.trim(), ghl_user_id: ghlUserId });
+                        
+                        if (result) {
+                            console.log("✅ Bridge: Edit sent successfully via button");
+                            showToast("Mensagem editada!");
+                            clearInput(inputArea);
+                            clearEditContext();
+                        }
+                    } else if (replyContext) {
+                        // Handle reply via button
+                        console.log("📤 Bridge: Sending reply via button...");
+                        showToast("Enviando resposta...");
+                        
+                        const result = await sendReply(text.trim());
+                        
+                        if (result) {
+                            console.log("✅ Bridge: Reply sent successfully via button");
+                            clearInput(inputArea);
+                            clearReplyContext();
+                        }
                     }
-                } else if (replyContext) {
-                    // Handle reply via button
-                    console.log("📤 Bridge: Sending reply via button...");
-                    showToast("Enviando resposta...");
-                    
-                    const result = await sendReply(text.trim());
-                    
-                    if (result) {
-                        console.log("✅ Bridge: Reply sent successfully via button");
-                        clearInput(inputArea);
-                        clearReplyContext();
-                    }
+                } finally {
+                    sendButtonProcessing = false;
                 }
             }
-        }, true); // Capture phase
+        };
+        
+        // Intercept pointerdown and mousedown (fire BEFORE click, preventing GHL from sending)
+        document.addEventListener('pointerdown', handleSendButtonIntercept, true);
+        document.addEventListener('mousedown', handleSendButtonIntercept, true);
+        // Keep click as fallback
+        document.addEventListener('click', handleSendButtonIntercept, true);
         
         console.log("✅ Bridge: Document-level interceptors attached successfully");
     };
