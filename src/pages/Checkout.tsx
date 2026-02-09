@@ -7,7 +7,7 @@ import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Zap, Check } from "lucide-react";
-import logo from "@/assets/logo.png";
+import circleLogo from "@/assets/bridge-circle-logo.png";
 import { useAuth } from "@/hooks/useAuth";
 
 const PLANS = {
@@ -146,7 +146,9 @@ const Checkout = () => {
       <header className="border-b border-border">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3">
-            <img src={logo} alt="Bridge API" className="h-10 w-10" />
+            <div className="w-10 h-10 rounded-full overflow-hidden shadow-md ring-2 ring-primary/20">
+              <img src={circleLogo} alt="Bridge API" className="w-full h-full object-cover scale-[1.85]" />
+            </div>
             <span className="text-xl font-semibold text-foreground">Bridge API</span>
           </Link>
           <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
