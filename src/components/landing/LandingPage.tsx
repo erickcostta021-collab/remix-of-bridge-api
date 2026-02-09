@@ -14,7 +14,9 @@ import {
   Gift,
   Link2,
   ImageUp,
-  MousePointerClick
+  MousePointerClick,
+  Phone,
+  Lock
 } from "lucide-react";
 import circleLogo from "@/assets/bridge-circle-logo.png";
 import whatsappLogo from "@/assets/whatsapp-logo.svg";
@@ -382,6 +384,27 @@ const LandingPage = () => {
               <p className="text-muted-foreground leading-relaxed">
                 Envie botões de resposta rápida, listas interativas, enquetes e botões de pagamento PIX 
                 diretamente pelo chat do GoHighLevel com comandos simples.
+              </p>
+            </div>
+
+            {/* Feature 8 - Ligação (Coming Soon) */}
+            <div className="group relative bg-card rounded-2xl p-8 border border-border overflow-hidden opacity-75">
+              {/* Lock overlay */}
+              <div className="absolute inset-0 bg-card/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center gap-2">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                  <Lock className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <span className="text-sm font-semibold text-muted-foreground tracking-wide uppercase">Em Breve</span>
+              </div>
+              <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-6">
+                <Phone className="h-7 w-7 text-brand-green" />
+              </div>
+              <h3 className="text-xl font-semibold text-foreground mb-3">
+                Ligações por Voz
+              </h3>
+              <p className="text-muted-foreground leading-relaxed">
+                Realize e receba chamadas de voz diretamente pelo GoHighLevel, 
+                integrando telefonia ao seu fluxo de atendimento via WhatsApp.
               </p>
             </div>
           </div>
