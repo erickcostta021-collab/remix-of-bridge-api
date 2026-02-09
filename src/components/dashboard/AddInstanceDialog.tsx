@@ -296,8 +296,8 @@ export function AddInstanceDialog({ subaccount }: AddInstanceDialogProps) {
         {!canCreateInstance && instanceLimit > 0 && (
           <Alert variant="destructive" className="mb-2">
             <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Limite de {instanceLimit} instâncias atingido. Faça upgrade do seu plano para adicionar mais.
+            <AlertDescription className="text-sm font-medium leading-relaxed">
+              Limite de {instanceLimit} {instanceLimit === 1 ? "instância" : "instâncias"} atingido. Faça upgrade do seu plano para adicionar mais.
             </AlertDescription>
           </Alert>
         )}
