@@ -172,7 +172,7 @@ const LandingPage = () => {
           </div>
 
           {/* Architecture Diagram */}
-          <div className="relative flex flex-col lg:flex-row items-start justify-center gap-6 lg:gap-0 mb-16">
+          <div className="relative flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-0 mb-16">
             {/* WhatsApp Side */}
             <div className="flex flex-col items-center text-center lg:w-1/5 relative z-10">
               <div className="w-20 h-20 rounded-2xl bg-card shadow-lg flex items-center justify-center border border-border mb-4">
