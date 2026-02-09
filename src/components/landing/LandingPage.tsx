@@ -520,7 +520,7 @@ const LandingPage = () => {
               <ul className="space-y-3 mb-8 flex-grow">
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
-                  {instanceCount} Conexão{instanceCount > 1 ? 'ões' : ''} WhatsApp ↔ GHL
+                  {instanceCount} {instanceCount > 1 ? 'Conexões' : 'Conexão'} WhatsApp ↔ GHL
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <Zap className="h-4 w-4 text-brand-green" />
