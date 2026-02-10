@@ -183,23 +183,15 @@ const GHOST_RECORDER_SCRIPT = `/**
         actionGroup.style.pointerEvents = "none";
 
         try {
-            // Sempre força audio/mpeg com extensão .mp3 independente do formato original
-            var blobToUse = audioBlob;
-            var mimeType = audioBlob.type || '';
-            
-            // Se não é mp4/aac nativo, converte para WAV primeiro (dados reais)
-            if (mimeType.indexOf('mp4') === -1 && mimeType.indexOf('aac') === -1 && mimeType.indexOf('mpeg') === -1) {
-                blobToUse = await convertToWav(audioBlob);
-            }
-            
-            // Força MIME type audio/mpeg e extensão .mp3 para o GHL aceitar
-            var fileToUpload = new File([blobToUse], 'record.mp3', { type: 'audio/mpeg' });
+            // Converte SEMPRE para WAV real (PCM data com headers corretos)
+            var wavBlob = await convertToWav(audioBlob);
+            var fileToUpload = new File([wavBlob], 'recording_' + Date.now() + '.wav', { type: 'audio/wav' });
             
             console.log("DOUG.TECH: fileToUpload BEFORE injection:", {
                 name: fileToUpload.name,
                 type: fileToUpload.type,
                 size: fileToUpload.size,
-                originalType: mimeType
+                originalType: audioBlob.type
             });
             
             nativeGHLUpload(fileToUpload);
