@@ -6,6 +6,22 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Metrics logger (fire-and-forget)
+let _metricsSupabase: any = null;
+function logMetric(functionName: string, statusCode: number, errorType: string | null, processingTimeMs?: number) {
+  try {
+    if (!_metricsSupabase) {
+      _metricsSupabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    }
+    _metricsSupabase.from("webhook_metrics").insert({
+      function_name: functionName,
+      status_code: statusCode,
+      error_type: errorType,
+      processing_time_ms: processingTimeMs || null,
+    }).then(() => {}).catch(() => {});
+  } catch { /* ignore */ }
+}
+
 // Retry wrapper for GHL API calls with exponential backoff
 async function fetchGHL(
   url: string,
@@ -13,10 +29,12 @@ async function fetchGHL(
   maxRetries = 3,
 ): Promise<Response> {
   let lastError: Error | null = null;
+  const start = Date.now();
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(url, options);
       if (response.status === 429) {
+        logMetric("webhook-inbound", 429, "429", Date.now() - start);
         const retryAfter = response.headers.get("retry-after");
         const waitMs = retryAfter
           ? parseInt(retryAfter, 10) * 1000
@@ -28,14 +46,17 @@ async function fetchGHL(
         }
       }
       if (response.status >= 500 && attempt < maxRetries) {
+        logMetric("webhook-inbound", response.status, "5xx", Date.now() - start);
         const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
         console.warn(`[GHL] Server error (${response.status}), retry ${attempt + 1}/${maxRetries} in ${waitMs}ms`);
         await new Promise((r) => setTimeout(r, waitMs));
         continue;
       }
+      if (response.ok) logMetric("webhook-inbound", response.status, "success", Date.now() - start);
       return response;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
+      logMetric("webhook-inbound", 0, "network", Date.now() - start);
       if (attempt < maxRetries) {
         const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
         console.warn(`[GHL] Network error, retry ${attempt + 1}/${maxRetries} in ${waitMs}ms:`, lastError.message);
