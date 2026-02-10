@@ -79,7 +79,7 @@ const GHOST_RECORDER_SCRIPT = `/**
             isRecording = false; stopTimer();
             if (currentStream) currentStream.getTracks().forEach(t => t.stop());
             mediaRecorder.onstop = () => {
-                audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
                 const audioUrl = URL.createObjectURL(audioBlob);
                 audioPlayer = new Audio(audioUrl);
                 mainBtn.style.display = 'none'; timerDisplay.style.display = 'none'; actionGroup.style.display = 'flex';
@@ -94,7 +94,7 @@ const GHOST_RECORDER_SCRIPT = `/**
         actionGroup.style.opacity = "0.5";
         actionGroup.style.pointerEvents = "none";
 
-        const nativeFile = new File([audioBlob], \`audio_voice_\${Date.now()}.mp3\`, { type: 'audio/mpeg' });
+        const nativeFile = new File([audioBlob], \`audio_voice_\${Date.now()}.ogg\`, { type: 'audio/ogg; codecs=opus' });
         nativeGHLUpload(nativeFile);
         
         // Reset após o burst
@@ -107,25 +107,51 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     function nativeGHLUpload(file) {
         try {
+            // Tenta encontrar o input de arquivo do GHL
             const fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
-                              document.querySelector('input[type="file"][multiple]');
+                              document.querySelector('input[type="file"][multiple]') ||
+                              document.querySelector('input[type="file"]');
             
             if (fileInput) {
                 const dt = new DataTransfer();
                 dt.items.add(file);
-                fileInput.files = dt.files;
                 
-                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+                // Usa o setter nativo do prototype para acionar React
+                const nativeFileSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
+                nativeFileSetter.call(fileInput, dt.files);
                 
+                // Dispara eventos que o React intercepta
+                fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                
+                // Também tenta via drop event como fallback
+                try {
+                    const dropEvent = new DragEvent('drop', { bubbles: true, composed: true, dataTransfer: dt });
+                    fileInput.dispatchEvent(dropEvent);
+                } catch(dropErr) {}
+                
+                // Aguarda o GHL processar o arquivo antes de tentar enviar
                 let attempts = 0;
                 const burstInterval = setInterval(() => {
                     const success = forceSendClick();
                     attempts++;
-                    if (success || attempts > 30) {
+                    if (success || attempts > 40) {
                         clearInterval(burstInterval);
                     }
-                }, 50); 
+                }, 100); 
+            } else {
+                console.warn("DOUG.TECH: File input not found");
+                // Fallback: tenta usar clipboard API
+                try {
+                    const clipboardItem = new ClipboardItem({ [file.type]: file });
+                    navigator.clipboard.write([clipboardItem]).then(() => {
+                        const textarea = document.querySelector('textarea');
+                        if (textarea) {
+                            textarea.focus();
+                            document.execCommand('paste');
+                        }
+                    });
+                } catch(clipErr) { console.warn("Clipboard fallback failed", clipErr); }
             }
         } catch(e) { console.error("Erro injection", e); }
     }
