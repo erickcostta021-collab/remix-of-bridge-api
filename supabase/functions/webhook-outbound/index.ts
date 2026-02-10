@@ -2096,6 +2096,17 @@ serve(async (req: Request) => {
       .eq("user_id", subaccount.user_id)
       .single();
 
+    // Fallback to admin OAuth credentials if user doesn't have their own
+    if (settings && (!settings.ghl_client_id || !settings.ghl_client_secret)) {
+      console.log("User OAuth credentials not found, trying admin credentials...");
+      const { data: adminCreds } = await supabase.rpc("get_admin_oauth_credentials");
+      if (adminCreds?.[0]?.ghl_client_id && adminCreds?.[0]?.ghl_client_secret) {
+        settings.ghl_client_id = adminCreds[0].ghl_client_id;
+        settings.ghl_client_secret = adminCreds[0].ghl_client_secret;
+        console.log("Using admin OAuth credentials as fallback");
+      }
+    }
+
     // Per-instance base URL takes priority over global settings
     const resolvedBaseUrl = instance.uazapi_base_url || settings?.uazapi_base_url;
 

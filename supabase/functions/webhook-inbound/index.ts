@@ -1655,12 +1655,23 @@ serve(async (req) => {
       .eq("user_id", subaccount.user_id)
       .single();
 
-    if (!settings?.ghl_client_id) {
-      console.log("OAuth credentials not found in user settings");
-      return new Response(
-        JSON.stringify({ received: true, ignored: true, reason: "oauth credentials missing" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Fallback to admin OAuth credentials if user doesn't have their own
+    if (!settings?.ghl_client_id || !settings?.ghl_client_secret) {
+      console.log("User OAuth credentials not found, trying admin credentials...");
+      const { data: adminCreds } = await supabase.rpc("get_admin_oauth_credentials");
+      if (adminCreds?.[0]?.ghl_client_id && adminCreds?.[0]?.ghl_client_secret) {
+        if (settings) {
+          settings.ghl_client_id = adminCreds[0].ghl_client_id;
+          settings.ghl_client_secret = adminCreds[0].ghl_client_secret;
+        }
+        console.log("Using admin OAuth credentials as fallback");
+      } else {
+        console.log("OAuth credentials not found in user or admin settings");
+        return new Response(
+          JSON.stringify({ received: true, ignored: true, reason: "oauth credentials missing" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Validate track_id: if message was sent by API but doesn't match user's configured track_id, discard it
