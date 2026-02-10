@@ -197,12 +197,6 @@ export function Sidebar() {
             )}
           </div>
 
-          {/* Configurações */}
-          {renderNavItem({ to: "/settings", icon: Settings, label: "Configurações" })}
-
-          {/* Admin items */}
-          {isAdmin && adminNavItems.map((item) => renderNavItem(item))}
-
           {/* Utilidades Dropdown */}
           <div className="pt-1">
             <TooltipProvider delayDuration={0}>
@@ -246,6 +240,10 @@ export function Sidebar() {
 
             {utilitiesOpen && !collapsed && (
               <div className="mt-1 ml-3 pl-3 border-l border-white/[0.08] space-y-0.5 animate-fade-in">
+                {/* Comandos */}
+                <p className="px-3 py-1.5 text-xs font-semibold text-sidebar-foreground/40 uppercase tracking-wider">
+                  Comandos
+                </p>
                 <button
                   onClick={() => setGroupCommandsOpen(true)}
                   className={cn(
@@ -256,6 +254,21 @@ export function Sidebar() {
                   <Users className="h-4 w-4 flex-shrink-0" />
                   <span className="whitespace-nowrap">Gerenciar Grupos</span>
                 </button>
+                <button
+                  onClick={() => setSendButtonsOpen(true)}
+                  className={cn(
+                    "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
+                    "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                >
+                  <MousePointerClick className="h-4 w-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">Enviar Botões</span>
+                </button>
+
+                {/* Personalizar GHL */}
+                <p className="px-3 py-1.5 pt-3 text-xs font-semibold text-sidebar-foreground/40 uppercase tracking-wider">
+                  Personalizar GHL
+                </p>
                 <button
                   onClick={() => setCustomizeSmsOpen(true)}
                   className={cn(
@@ -276,19 +289,15 @@ export function Sidebar() {
                   <Palette className="h-4 w-4 flex-shrink-0" />
                   <span className="whitespace-nowrap">Tema WhatsApp</span>
                 </button>
-                <button
-                  onClick={() => setSendButtonsOpen(true)}
-                  className={cn(
-                    "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
-                    "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                  )}
-                >
-                  <MousePointerClick className="h-4 w-4 flex-shrink-0" />
-                  <span className="whitespace-nowrap">Enviar Botões</span>
-                </button>
               </div>
             )}
           </div>
+
+          {/* Configurações */}
+          {renderNavItem({ to: "/settings", icon: Settings, label: "Configurações" })}
+
+          {/* Admin items */}
+          {isAdmin && adminNavItems.map((item) => renderNavItem(item))}
         </nav>
 
         {/* Collapse toggle at bottom (desktop only) */}
