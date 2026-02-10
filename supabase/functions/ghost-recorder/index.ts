@@ -63,27 +63,13 @@ const GHOST_RECORDER_SCRIPT = `/**
         }
     }
 
-    // Detecta o melhor mimeType suportado pelo navegador
-    function getPreferredMimeType() {
-        var types = ['audio/mp4', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
-        for (var i = 0; i < types.length; i++) {
-            if (MediaRecorder.isTypeSupported(types[i])) {
-                console.log("DOUG.TECH: Using mimeType: " + types[i]);
-                return types[i];
-            }
-        }
-        return '';
-    }
-
     async function handleMainClick() {
         if (!isRecording) {
             try {
                 currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                var mimeType = getPreferredMimeType();
-                var options = mimeType ? { mimeType: mimeType } : {};
-                mediaRecorder = new MediaRecorder(currentStream, options);
+                mediaRecorder = new MediaRecorder(currentStream);
                 audioChunks = [];
-                mediaRecorder.ondataavailable = function(e) { if (e.data.size > 0) audioChunks.push(e.data); };
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
                 mediaRecorder.start();
                 isRecording = true;
                 mainBtn.innerHTML = ICONS.stop; timerDisplay.style.display = 'block'; startTimer();
@@ -91,87 +77,13 @@ const GHOST_RECORDER_SCRIPT = `/**
         } else {
             if (mediaRecorder) mediaRecorder.stop();
             isRecording = false; stopTimer();
-            if (currentStream) currentStream.getTracks().forEach(function(t) { t.stop(); });
-            mediaRecorder.onstop = function() {
-                var recMime = mediaRecorder.mimeType || 'audio/webm';
-                audioBlob = new Blob(audioChunks, { type: recMime });
-                var audioUrl = URL.createObjectURL(audioBlob);
+            if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+            mediaRecorder.onstop = () => {
+                audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
+                const audioUrl = URL.createObjectURL(audioBlob);
                 audioPlayer = new Audio(audioUrl);
                 mainBtn.style.display = 'none'; timerDisplay.style.display = 'none'; actionGroup.style.display = 'flex';
-                console.log("DOUG.TECH: Recorded as " + recMime + ", size: " + audioBlob.size);
             };
-        }
-    }
-
-    // Converte AudioBuffer para WAV Blob
-    function audioBufferToWav(buffer) {
-        var numChannels = buffer.numberOfChannels;
-        var sampleRate = buffer.sampleRate;
-        var format = 1; // PCM
-        var bitsPerSample = 16;
-        
-        var interleaved;
-        if (numChannels === 2) {
-            var left = buffer.getChannelData(0);
-            var right = buffer.getChannelData(1);
-            interleaved = new Float32Array(left.length + right.length);
-            for (var i = 0, j = 0; i < left.length; i++) {
-                interleaved[j++] = left[i];
-                interleaved[j++] = right[i];
-            }
-        } else {
-            interleaved = buffer.getChannelData(0);
-        }
-        
-        var dataLength = interleaved.length * (bitsPerSample / 8);
-        var headerLength = 44;
-        var wavBuffer = new ArrayBuffer(headerLength + dataLength);
-        var view = new DataView(wavBuffer);
-        
-        // RIFF header
-        writeString(view, 0, 'RIFF');
-        view.setUint32(4, 36 + dataLength, true);
-        writeString(view, 8, 'WAVE');
-        writeString(view, 12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, format, true);
-        view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
-        view.setUint16(32, numChannels * (bitsPerSample / 8), true);
-        view.setUint16(34, bitsPerSample, true);
-        writeString(view, 36, 'data');
-        view.setUint32(40, dataLength, true);
-        
-        // Audio data
-        var offset = 44;
-        for (var k = 0; k < interleaved.length; k++, offset += 2) {
-            var s = Math.max(-1, Math.min(1, interleaved[k]));
-            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-        }
-        
-        return new Blob([wavBuffer], { type: 'audio/wav' });
-    }
-    
-    function writeString(view, offset, str) {
-        for (var i = 0; i < str.length; i++) {
-            view.setUint8(offset + i, str.charCodeAt(i));
-        }
-    }
-
-    // Converte blob de áudio para WAV usando Web Audio API
-    async function convertToWav(blob) {
-        try {
-            var arrayBuffer = await blob.arrayBuffer();
-            var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            var audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            var wavBlob = audioBufferToWav(audioBuffer);
-            audioCtx.close();
-            console.log("DOUG.TECH: Converted to WAV, size: " + wavBlob.size);
-            return wavBlob;
-        } catch(e) {
-            console.error("DOUG.TECH: WAV conversion failed, using original", e);
-            return blob;
         }
     }
 
@@ -182,76 +94,78 @@ const GHOST_RECORDER_SCRIPT = `/**
         actionGroup.style.opacity = "0.5";
         actionGroup.style.pointerEvents = "none";
 
-        try {
-            // Converte SEMPRE para WAV real (PCM data com headers corretos)
-            var wavBlob = await convertToWav(audioBlob);
-            var fileToUpload = new File([wavBlob], 'recording_' + Date.now() + '.wav', { type: 'audio/wav' });
-            
-            console.log("DOUG.TECH: fileToUpload BEFORE injection:", {
-                name: fileToUpload.name,
-                type: fileToUpload.type,
-                size: fileToUpload.size,
-                originalType: audioBlob.type
-            });
-            
-            nativeGHLUpload(fileToUpload);
-        } catch(e) {
-            console.error("DOUG.TECH: Send error", e);
-        }
+        const nativeFile = new File([audioBlob], \`audio_voice_\${Date.now()}.ogg\`, { type: 'audio/ogg; codecs=opus' });
+        nativeGHLUpload(nativeFile);
         
         // Reset após o burst
-        setTimeout(function() {
+        setTimeout(() => {
             fullReset();
             actionGroup.style.opacity = "1";
             actionGroup.style.pointerEvents = "auto";
-        }, 2500);
+        }, 1500);
     }
 
     function nativeGHLUpload(file) {
         try {
-            var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
-                            document.querySelector('input[type="file"][multiple]');
+            // Tenta encontrar o input de arquivo do GHL
+            const fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
+                              document.querySelector('input[type="file"][multiple]') ||
+                              document.querySelector('input[type="file"]');
             
             if (fileInput) {
-                // Remove atributo accept que pode estar bloqueando áudios
-                if (fileInput.hasAttribute('accept')) {
-                    console.log("DOUG.TECH: Removing accept attribute: " + fileInput.getAttribute('accept'));
-                    fileInput.removeAttribute('accept');
-                }
-                
-                var dt = new DataTransfer();
+                const dt = new DataTransfer();
                 dt.items.add(file);
-                fileInput.files = dt.files;
                 
-                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+                // Usa o setter nativo do prototype para acionar React
+                const nativeFileSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
+                nativeFileSetter.call(fileInput, dt.files);
                 
-                console.log("DOUG.TECH: File injected - name: " + file.name + ", type: " + file.type + ", size: " + file.size);
+                // Dispara eventos que o React intercepta
+                fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
                 
-                var attempts = 0;
-                var burstInterval = setInterval(function() {
-                    var success = forceSendClick();
+                // Também tenta via drop event como fallback
+                try {
+                    const dropEvent = new DragEvent('drop', { bubbles: true, composed: true, dataTransfer: dt });
+                    fileInput.dispatchEvent(dropEvent);
+                } catch(dropErr) {}
+                
+                // Aguarda o GHL processar o arquivo antes de tentar enviar
+                let attempts = 0;
+                const burstInterval = setInterval(() => {
+                    const success = forceSendClick();
                     attempts++;
-                    if (success || attempts > 30) {
+                    if (success || attempts > 40) {
                         clearInterval(burstInterval);
                     }
-                }, 50); 
+                }, 100); 
             } else {
-                console.warn("DOUG.TECH: No file input found");
+                console.warn("DOUG.TECH: File input not found");
+                // Fallback: tenta usar clipboard API
+                try {
+                    const clipboardItem = new ClipboardItem({ [file.type]: file });
+                    navigator.clipboard.write([clipboardItem]).then(() => {
+                        const textarea = document.querySelector('textarea');
+                        if (textarea) {
+                            textarea.focus();
+                            document.execCommand('paste');
+                        }
+                    });
+                } catch(clipErr) { console.warn("Clipboard fallback failed", clipErr); }
             }
-        } catch(e) { console.error("DOUG.TECH: Erro injection", e); }
+        } catch(e) { console.error("Erro injection", e); }
     }
 
     function forceSendClick() {
-        var buttons = Array.from(document.querySelectorAll('button'));
-        var sendBtn = buttons.find(function(b) { return b.innerHTML.includes('M2.01 21L23 12 2.01 3'); });
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const sendBtn = buttons.find(b => b.innerHTML.includes('M2.01 21L23 12 2.01 3'));
 
         if (sendBtn && !sendBtn.disabled) {
             sendBtn.click();
             return true;
         } 
         
-        var textarea = document.querySelector('textarea');
+        const textarea = document.querySelector('textarea');
         if(textarea) {
             textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
         }
@@ -262,7 +176,7 @@ const GHOST_RECORDER_SCRIPT = `/**
         if(!audioPlayer) return;
         if(audioPlayer.paused) {
             audioPlayer.play(); actionGroup.children[1].innerHTML = ICONS.pause;
-            audioPlayer.onended = function() { actionGroup.children[1].innerHTML = ICONS.play; };
+            audioPlayer.onended = () => actionGroup.children[1].innerHTML = ICONS.play;
         } else {
             audioPlayer.pause(); actionGroup.children[1].innerHTML = ICONS.play;
         }
@@ -270,7 +184,7 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     function fullReset() {
         if(audioPlayer) { audioPlayer.pause(); audioPlayer = null; }
-        if(currentStream) { currentStream.getTracks().forEach(function(t) { t.stop(); }); currentStream = null; }
+        if(currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
         mediaRecorder = null; audioChunks = []; audioBlob = null; isRecording = false; stopTimer();
         if(mainBtn) {
             mainBtn.innerHTML = ICONS.mic; mainBtn.style.display = 'block'; actionGroup.style.display = 'none';
@@ -281,16 +195,16 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     function startTimer() {
         startTime = Date.now();
-        timerInterval = setInterval(function() {
-            var diff = Math.floor((Date.now() - startTime) / 1000);
-            var m = Math.floor(diff / 60).toString().padStart(2,'0');
-            var s = (diff % 60).toString().padStart(2,'0');
-            timerDisplay.innerText = m + ":" + s;
+        timerInterval = setInterval(() => {
+            const diff = Math.floor((Date.now() - startTime) / 1000);
+            const m = Math.floor(diff / 60).toString().padStart(2,'0');
+            const s = (diff % 60).toString().padStart(2,'0');
+            timerDisplay.innerText = \`\${m}:\${s}\`;
         }, 1000);
     }
     function stopTimer() { clearInterval(timerInterval); }
 
-    var observer = new MutationObserver(function() { if (!document.getElementById('doug-maestro-ui')) createUI(); });
+    const observer = new MutationObserver(() => { if (!document.getElementById('doug-maestro-ui')) createUI(); });
     observer.observe(document.body, { childList: true, subtree: true });
     setTimeout(createUI, 1500);
 })();`;
@@ -304,7 +218,7 @@ Deno.serve(async (req) => {
     headers: {
       ...corsHeaders,
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Cache-Control": "public, max-age=3600",
     },
   });
 });
