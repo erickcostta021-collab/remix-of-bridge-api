@@ -74,7 +74,8 @@ function ButtonCommandsList() {
             className="flex items-start justify-between gap-2 p-3 rounded-lg border border-border bg-muted/20"
           >
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-medium text-foreground">{cmd.description}</p>
+              <div className="flex items-center gap-2 flex-wrap mt-1">
                 <span className="font-mono text-primary font-medium text-sm">
                   {cmd.command}
                 </span>
@@ -82,7 +83,6 @@ function ButtonCommandsList() {
                   {cmd.context}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground mt-1">{cmd.description}</p>
               {cmd.format && (
                 <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-foreground mt-1 inline-block">
                   {cmd.format}
