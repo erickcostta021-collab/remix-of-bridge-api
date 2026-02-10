@@ -411,6 +411,31 @@ export async function reconfigureWebhookOnApi(
 }
 
 // ---------------------------------------------------------------------------
+// Server health check (lightweight ping)
+// ---------------------------------------------------------------------------
+
+export async function checkServerHealth(
+  instance: Instance,
+  globalBaseUrl?: string | null,
+): Promise<boolean> {
+  try {
+    const base = getBaseUrlForInstance(instance, globalBaseUrl);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(`${base}/instance/status`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json", token: instance.uazapi_instance_token },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    return response.ok || response.status < 500;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Status mapping helper
 // ---------------------------------------------------------------------------
 

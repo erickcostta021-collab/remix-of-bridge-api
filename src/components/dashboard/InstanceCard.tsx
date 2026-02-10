@@ -49,7 +49,9 @@ import {
   RotateCcw
 } from "lucide-react";
 import { Instance, useInstances } from "@/hooks/useInstances";
+import { checkServerHealth } from "@/hooks/instances/instanceApi";
 import { useGHLUsers, GHLUser } from "@/hooks/useGHLUsers";
+import { useSettings } from "@/hooks/useSettings";
 import { toast } from "sonner";
 import { AssignGHLUserDialog } from "./AssignGHLUserDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -71,6 +73,7 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
     unlinkInstance
   } = useInstances();
   const { fetchLocationUsers } = useGHLUsers();
+  const { settings } = useSettings();
   
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [loadingQR, setLoadingQR] = useState(false);
@@ -85,6 +88,7 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(instance.profile_pic_url || null);
   const [assignUserDialogOpen, setAssignUserDialogOpen] = useState(false);
   const [ghlUserName, setGhlUserName] = useState<string | null>(null);
+  const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const [subaccount, setSubaccount] = useState<{
     id: string;
     location_id: string;
@@ -120,8 +124,11 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
     fetchSubaccount();
   }, [instance.subaccount_id, instance.ghl_user_id]);
 
-  // Fetch phone number and profile pic on mount
+  // Fetch phone number, profile pic, and server health on mount
   useEffect(() => {
+    // Check server health
+    checkServerHealth(instance, settings?.uazapi_base_url).then(setServerOnline).catch(() => setServerOnline(false));
+
     if (!connectedPhone || !profilePicUrl) {
       syncInstanceStatus.mutateAsync(instance).then((result) => {
         if (result?.phone) {
@@ -340,6 +347,17 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
                     <h3 className="font-semibold text-card-foreground truncate">
                       {instance.instance_name}
                     </h3>
+                    {/* Server health badge */}
+                    <div 
+                      className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                        serverOnline === null 
+                          ? "bg-muted-foreground/40 animate-pulse" 
+                          : serverOnline 
+                            ? "bg-emerald-500" 
+                            : "bg-destructive"
+                      }`}
+                      title={serverOnline === null ? "Verificando servidor..." : serverOnline ? "Servidor UAZAPI online" : "Servidor UAZAPI offline"}
+                    />
                     <Badge variant="outline" className={`${status.className} shrink-0`}>
                       <StatusIcon className="h-3 w-3 mr-1" />
                       {status.label}
