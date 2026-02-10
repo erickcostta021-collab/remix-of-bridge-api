@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, Save, Loader2, CheckCircle2, Info, Unlink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -32,6 +33,7 @@ interface SubaccountData {
   location_id: string;
   ghl_access_token: string | null;
   ghl_user_id: string | null;
+  skip_outbound: boolean;
 }
 
 export default function SubaccountSettings() {
@@ -316,15 +318,50 @@ export default function SubaccountSettings() {
           <TabsContent value="privacy" className="mt-6">
             <Card className="bg-card border-border max-w-xl">
               <CardHeader>
-                <CardTitle className="text-lg">Privacidade</CardTitle>
+                <CardTitle className="text-lg">Provedor Oficial</CardTitle>
                 <CardDescription>
-                  Configurações de privacidade e segurança
+                  Configure se esta subconta já possui um WhatsApp oficial conectado no GHL
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground text-sm">
-                  Configurações de privacidade serão adicionadas em breve.
-                </p>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="skip-outbound" className="text-sm font-medium">
+                      Desativar envio pela Bridge
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Ative se esta subconta já possui um provedor oficial de WhatsApp (Meta/360dialog). 
+                      A Bridge continuará recebendo mensagens (inbound), mas não enviará pelo UAZAPI (outbound).
+                    </p>
+                  </div>
+                  <Switch
+                    id="skip-outbound"
+                    checked={subaccount.skip_outbound}
+                    onCheckedChange={async (checked) => {
+                      try {
+                        const { error } = await supabase
+                          .from("ghl_subaccounts")
+                          .update({ skip_outbound: checked })
+                          .eq("id", subaccount.id);
+                        if (error) throw error;
+                        setSubaccount({ ...subaccount, skip_outbound: checked });
+                        toast.success(checked ? "Envio outbound desativado" : "Envio outbound ativado");
+                      } catch (err: any) {
+                        toast.error("Erro ao salvar: " + err.message);
+                      }
+                    }}
+                  />
+                </div>
+
+                {subaccount.skip_outbound && (
+                  <Alert className="border-warning bg-warning/10">
+                    <Info className="h-4 w-4 text-warning" />
+                    <AlertDescription className="text-warning text-xs">
+                      O envio via Bridge está desativado. Mensagens serão enviadas apenas pelo provedor oficial do GHL.
+                      Comandos com # continuam funcionando normalmente.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

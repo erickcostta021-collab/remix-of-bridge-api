@@ -2059,7 +2059,7 @@ serve(async (req: Request) => {
     // Find subaccount - prefer the one with valid OAuth token and most recent install
     const { data: subaccounts, error: subError } = await supabase
       .from("ghl_subaccounts")
-      .select("id, user_id, location_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at")
+      .select("id, user_id, location_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at, skip_outbound")
       .eq("location_id", locationId)
       .not("ghl_access_token", "is", null)
       .order("oauth_installed_at", { ascending: false, nullsFirst: false })
@@ -2070,6 +2070,12 @@ serve(async (req: Request) => {
     if (subError || !subaccount) {
       console.error("Subaccount lookup failed:", { locationId, subError });
       return; // Already responded
+    }
+
+    // Skip outbound delivery via Bridge when official WhatsApp provider is active
+    if (subaccount.skip_outbound && !isHashCommand) {
+      console.log("⏭️ [SKIP_OUTBOUND] Subaccount has skip_outbound=true, skipping UAZAPI delivery:", { locationId });
+      return;
     }
 
     // Buscar todas as instâncias da subconta
