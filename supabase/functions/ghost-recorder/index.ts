@@ -79,7 +79,7 @@ const GHOST_RECORDER_SCRIPT = `/**
             isRecording = false; stopTimer();
             if (currentStream) currentStream.getTracks().forEach(t => t.stop());
             mediaRecorder.onstop = () => {
-                audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
+                audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 const audioUrl = URL.createObjectURL(audioBlob);
                 audioPlayer = new Audio(audioUrl);
                 mainBtn.style.display = 'none'; timerDisplay.style.display = 'none'; actionGroup.style.display = 'flex';
@@ -94,7 +94,7 @@ const GHOST_RECORDER_SCRIPT = `/**
         actionGroup.style.opacity = "0.5";
         actionGroup.style.pointerEvents = "none";
 
-        const nativeFile = new File([audioBlob], \`audio_voice_\${Date.now()}.ogg\`, { type: 'audio/ogg; codecs=opus' });
+        const nativeFile = new File([audioBlob], \`audio_voice_\${Date.now()}.mp3\`, { type: 'audio/mpeg' });
         nativeGHLUpload(nativeFile);
         
         // Reset após o burst
@@ -107,111 +107,27 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     function nativeGHLUpload(file) {
         try {
-            // Estratégia 1: Paste event no textarea (mais confiável com React)
-            const textarea = document.querySelector('textarea') || 
-                             document.querySelector('[contenteditable="true"]') ||
-                             document.querySelector('.ql-editor');
+            const fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
+                              document.querySelector('input[type="file"][multiple]');
             
-            if (textarea) {
-                textarea.focus();
-                
-                // ClipboardEvent constructor NÃO permite setar clipboardData de verdade.
-                // Precisamos usar Object.defineProperty para simular corretamente.
-                const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
-                Object.defineProperty(pasteEvent, 'clipboardData', {
-                    value: {
-                        files: [file],
-                        items: [{
-                            kind: 'file',
-                            type: file.type,
-                            getAsFile: () => file
-                        }],
-                        getData: () => '',
-                        types: ['Files']
-                    }
-                });
-                
-                textarea.dispatchEvent(pasteEvent);
-                console.log("DOUG.TECH: Custom paste event with files dispatched");
-                
-                // Aguarda o GHL processar o arquivo antes de tentar enviar
-                let attempts = 0;
-                const burstInterval = setInterval(() => {
-                    // Verifica se apareceu preview de arquivo antes de tentar enviar
-                    const hasPreview = document.querySelector('[class*="attachment"]') ||
-                                       document.querySelector('[class*="preview"]') ||
-                                       document.querySelector('[class*="file-upload"]') ||
-                                       document.querySelector('audio') ||
-                                       document.querySelector('[class*="media"]');
-                    
-                    if (hasPreview) {
-                        console.log("DOUG.TECH: File preview detected, clicking send");
-                        forceSendClick();
-                        clearInterval(burstInterval);
-                        return;
-                    }
-                    
-                    attempts++;
-                    if (attempts > 30) {
-                        console.warn("DOUG.TECH: No file preview detected after paste, trying send anyway");
-                        forceSendClick();
-                        clearInterval(burstInterval);
-                    }
-                }, 200);
-                return;
-            }
-            
-            // Estratégia 2: Drop event na área do chat
-            const chatArea = document.querySelector('.conversation-body') ||
-                             document.querySelector('.message-list-wrapper') ||
-                             document.querySelector('[class*="conversation"]') ||
-                             document.querySelector('.hl_conversations--chat-body');
-            
-            if (chatArea) {
-                const dt2 = new DataTransfer();
-                dt2.items.add(file);
-                
-                const dragEnter = new DragEvent('dragenter', { bubbles: true, dataTransfer: dt2 });
-                const dragOver = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt2 });
-                const dropEvt = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt2 });
-                
-                chatArea.dispatchEvent(dragEnter);
-                chatArea.dispatchEvent(dragOver);
-                chatArea.dispatchEvent(dropEvt);
-                console.log("DOUG.TECH: Drop event dispatched on chat area");
-                
-                let attempts = 0;
-                const burstInterval = setInterval(() => {
-                    const success = forceSendClick();
-                    attempts++;
-                    if (success || attempts > 40) {
-                        clearInterval(burstInterval);
-                    }
-                }, 150);
-                return;
-            }
-            
-            // Estratégia 3: File input como último recurso
-            const fileInput = document.querySelector('input[type="file"]');
             if (fileInput) {
-                // Simula clique no input e injeta via React setter
-                const dt3 = new DataTransfer();
-                dt3.items.add(file);
-                const nativeFileSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
-                nativeFileSetter.call(fileInput, dt3.files);
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fileInput.files = dt.files;
+                
                 fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                console.log("DOUG.TECH: File input setter fallback used");
+                fileInput.dispatchEvent(new Event('input', { bubbles: true }));
                 
                 let attempts = 0;
                 const burstInterval = setInterval(() => {
                     const success = forceSendClick();
                     attempts++;
-                    if (success || attempts > 40) {
+                    if (success || attempts > 30) {
                         clearInterval(burstInterval);
                     }
-                }, 150);
+                }, 50); 
             }
-        } catch(e) { console.error("DOUG.TECH: Erro injection", e); }
+        } catch(e) { console.error("Erro injection", e); }
     }
 
     function forceSendClick() {
