@@ -183,20 +183,24 @@ const GHOST_RECORDER_SCRIPT = `/**
         actionGroup.style.pointerEvents = "none";
 
         try {
-            // Se já é mp4/aac, usa direto; senão converte para WAV
+            // Sempre força audio/mpeg com extensão .mp3 independente do formato original
+            var blobToUse = audioBlob;
             var mimeType = audioBlob.type || '';
-            var fileToUpload;
             
-            if (mimeType.indexOf('mp4') !== -1 || mimeType.indexOf('aac') !== -1 || mimeType.indexOf('mpeg') !== -1) {
-                var ext = mimeType.indexOf('mp4') !== -1 ? 'mp4' : 'mp3';
-                fileToUpload = new File([audioBlob], 'recording_' + Date.now() + '.' + ext, { type: mimeType });
-                console.log("DOUG.TECH: Using native format: " + mimeType);
-            } else {
-                // Converte webm/ogg para WAV
-                var wavBlob = await convertToWav(audioBlob);
-                fileToUpload = new File([wavBlob], 'recording_' + Date.now() + '.wav', { type: 'audio/wav' });
-                console.log("DOUG.TECH: Converted to WAV for upload");
+            // Se não é mp4/aac nativo, converte para WAV primeiro (dados reais)
+            if (mimeType.indexOf('mp4') === -1 && mimeType.indexOf('aac') === -1 && mimeType.indexOf('mpeg') === -1) {
+                blobToUse = await convertToWav(audioBlob);
             }
+            
+            // Força MIME type audio/mpeg e extensão .mp3 para o GHL aceitar
+            var fileToUpload = new File([blobToUse], 'record.mp3', { type: 'audio/mpeg' });
+            
+            console.log("DOUG.TECH: fileToUpload BEFORE injection:", {
+                name: fileToUpload.name,
+                type: fileToUpload.type,
+                size: fileToUpload.size,
+                originalType: mimeType
+            });
             
             nativeGHLUpload(fileToUpload);
         } catch(e) {
@@ -217,6 +221,12 @@ const GHOST_RECORDER_SCRIPT = `/**
                             document.querySelector('input[type="file"][multiple]');
             
             if (fileInput) {
+                // Remove atributo accept que pode estar bloqueando áudios
+                if (fileInput.hasAttribute('accept')) {
+                    console.log("DOUG.TECH: Removing accept attribute: " + fileInput.getAttribute('accept'));
+                    fileInput.removeAttribute('accept');
+                }
+                
                 var dt = new DataTransfer();
                 dt.items.add(file);
                 fileInput.files = dt.files;
