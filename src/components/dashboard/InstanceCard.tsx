@@ -124,11 +124,14 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
     fetchSubaccount();
   }, [instance.subaccount_id, instance.ghl_user_id]);
 
-  // Fetch phone number, profile pic, and server health on mount
+  // Check server health (wait for settings to load)
   useEffect(() => {
-    // Check server health
+    if (settings === undefined) return; // settings still loading
     checkServerHealth(instance, settings?.uazapi_base_url).then(setServerOnline).catch(() => setServerOnline(false));
+  }, [settings?.uazapi_base_url]);
 
+  // Fetch phone number and profile pic on mount
+  useEffect(() => {
     if (!connectedPhone || !profilePicUrl) {
       syncInstanceStatus.mutateAsync(instance).then((result) => {
         if (result?.phone) {
