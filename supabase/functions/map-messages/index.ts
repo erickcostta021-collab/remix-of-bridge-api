@@ -7,6 +7,38 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
 };
 
+// Retry wrapper for GHL API calls with exponential backoff
+async function fetchGHL(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+
+      if (res.ok || (res.status >= 400 && res.status < 429) || res.status === 404) {
+        return res;
+      }
+
+      if (res.status === 429 || res.status >= 500) {
+        if (attempt === maxRetries) return res;
+        const retryAfter = res.headers.get("retry-after");
+        const delay = retryAfter
+          ? parseInt(retryAfter, 10) * 1000
+          : Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.log(`⏳ GHL retry ${attempt + 1}/${maxRetries} after ${delay}ms (status ${res.status})`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+
+      return res;
+    } catch (e) {
+      if (attempt === maxRetries) throw e;
+      const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+      console.log(`⏳ GHL network retry ${attempt + 1}/${maxRetries} after ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw new Error("fetchGHL: exhausted retries");
+}
+
 // Helper function to try multiple API endpoints/formats
 async function tryUazapiEndpoints(
   baseUrl: string,
@@ -62,7 +94,7 @@ async function getValidToken(supabase: any, subaccount: any, settings: any): Pro
       user_type: "Location",
     });
 
-    const tokenResponse = await fetch("https://services.leadconnectorhq.com/oauth/token", {
+    const tokenResponse = await fetchGHL("https://services.leadconnectorhq.com/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -381,7 +413,7 @@ serve(async (req) => {
             newText: new_text?.substring(0, 30),
           });
           
-          const response = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+          const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${ghlToken}`,
@@ -636,7 +668,7 @@ serve(async (req) => {
             originalText: originalText?.substring(0, 30),
           });
           
-          const response = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+          const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${ghlToken}`,
@@ -804,7 +836,7 @@ serve(async (req) => {
             replyText: text?.substring(0, 30),
           });
           
-          const response = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+          const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${ghlToken}`,
