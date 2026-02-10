@@ -113,6 +113,7 @@ export type Database = {
           location_id: string
           oauth_installed_at: string | null
           oauth_last_refresh: string | null
+          skip_outbound: boolean
           updated_at: string
           user_id: string
         }
@@ -131,6 +132,7 @@ export type Database = {
           location_id: string
           oauth_installed_at?: string | null
           oauth_last_refresh?: string | null
+          skip_outbound?: boolean
           updated_at?: string
           user_id: string
         }
@@ -149,6 +151,7 @@ export type Database = {
           location_id?: string
           oauth_installed_at?: string | null
           oauth_last_refresh?: string | null
+          skip_outbound?: boolean
           updated_at?: string
           user_id?: string
         }
