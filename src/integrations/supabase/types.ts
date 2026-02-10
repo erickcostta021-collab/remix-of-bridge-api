@@ -336,6 +336,50 @@ export type Database = {
         }
         Relationships: []
       }
+      server_health_alerts: {
+        Row: {
+          created_at: string
+          first_detected_at: string
+          id: string
+          instance_id: string | null
+          instance_name: string
+          resolved_at: string | null
+          server_url: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          first_detected_at?: string
+          id?: string
+          instance_id?: string | null
+          instance_name: string
+          resolved_at?: string | null
+          server_url: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          first_detected_at?: string
+          id?: string
+          instance_id?: string | null
+          instance_name?: string
+          resolved_at?: string | null
+          server_url?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "server_health_alerts_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_settings: {
         Row: {
           created_at: string
@@ -393,14 +437,57 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_metrics: {
+        Row: {
+          created_at: string
+          error_type: string | null
+          function_name: string
+          id: string
+          instance_id: string | null
+          location_id: string | null
+          processing_time_ms: number | null
+          status_code: number
+        }
+        Insert: {
+          created_at?: string
+          error_type?: string | null
+          function_name: string
+          id?: string
+          instance_id?: string | null
+          location_id?: string | null
+          processing_time_ms?: number | null
+          status_code?: number
+        }
+        Update: {
+          created_at?: string
+          error_type?: string | null
+          function_name?: string
+          id?: string
+          instance_id?: string | null
+          location_id?: string | null
+          processing_time_ms?: number | null
+          status_code?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_metrics_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      cleanup_old_health_alerts: { Args: never; Returns: undefined }
       cleanup_old_message_mappings: { Args: never; Returns: undefined }
       cleanup_old_phone_mappings: { Args: never; Returns: undefined }
       cleanup_old_processed_messages: { Args: never; Returns: undefined }
+      cleanup_old_webhook_metrics: { Args: never; Returns: undefined }
       generate_embed_token: { Args: never; Returns: string }
       get_admin_oauth_credentials: {
         Args: never

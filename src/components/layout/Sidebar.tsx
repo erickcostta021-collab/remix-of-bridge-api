@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Palette,
   MousePointerClick,
+  Activity,
 } from "lucide-react";
 import { CustomizeSmsDialog } from "@/components/dashboard/CustomizeSmsDialog";
 import { WhatsAppThemeDialog } from "@/components/dashboard/WhatsAppThemeDialog";
@@ -31,6 +32,10 @@ const navItems = [
   { to: "/settings", icon: Settings, label: "Configurações" },
 ];
 
+const adminNavItems = [
+  { to: "/admin/health", icon: Activity, label: "Saúde do Sistema" },
+];
+
 export function Sidebar() {
   const { collapsed, toggle } = useSidebarState();
   const { getOAuthUrl } = useSettings();
@@ -41,6 +46,13 @@ export function Sidebar() {
   const [customizeSmsOpen, setCustomizeSmsOpen] = useState(false);
   const [whatsappThemeOpen, setWhatsappThemeOpen] = useState(false);
   const [sendButtonsOpen, setSendButtonsOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    import("@/integrations/supabase/client").then(({ supabase }) => {
+      supabase.rpc("is_admin").then(({ data }) => setIsAdmin(!!data));
+    });
+  }, []);
 
   const oauthUrl = getOAuthUrl();
 
@@ -95,6 +107,47 @@ export function Sidebar() {
                       )}
                     >
                       {/* Active indicator bar */}
+                      {isActive && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
+                      )}
+                      <item.icon className={cn(
+                        "h-5 w-5 flex-shrink-0 transition-transform duration-200",
+                        isActive ? "text-primary" : "group-hover:scale-110"
+                      )} />
+                      <span className={cn(
+                        "transition-all duration-300 whitespace-nowrap",
+                        collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
+                      )}>
+                        {item.label}
+                      </span>
+                    </NavLink>
+                  </TooltipTrigger>
+                  {collapsed && (
+                    <TooltipContent side="right" className="font-medium">
+                      {item.label}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })}
+
+          {/* Admin items */}
+          {isAdmin && adminNavItems.map((item) => {
+            const isActive = location.pathname === item.to;
+            return (
+              <TooltipProvider key={item.to} delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <NavLink
+                      to={item.to}
+                      className={cn(
+                        "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 relative overflow-hidden",
+                        isActive
+                          ? "bg-primary/15 text-primary shadow-sm shadow-primary/10"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                      )}
+                    >
                       {isActive && (
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
                       )}

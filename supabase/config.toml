@@ -61,3 +61,6 @@ verify_jwt = false
 
 [functions.check-email-exists]
 verify_jwt = false
+
+[functions.health-check]
+verify_jwt = false

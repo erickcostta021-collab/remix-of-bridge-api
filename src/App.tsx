@@ -21,6 +21,7 @@ const SubaccountSettings = lazy(() => import("./pages/SubaccountSettings"));
 const EmbedInstances = lazy(() => import("./pages/EmbedInstances"));
 const OAuthCallback = lazy(() => import("./pages/OAuthCallback"));
 const OAuthSuccess = lazy(() => import("./pages/OAuthSuccess"));
+const AdminHealth = lazy(() => import("./pages/AdminHealth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -95,6 +96,15 @@ const App = () => (
             />
             {/* Public embed route - no auth required */}
             <Route path="/embed/:embedToken" element={<EmbedInstances />} />
+            {/* Admin health dashboard */}
+            <Route
+              path="/admin/health"
+              element={
+                <ProtectedRoute>
+                  <AdminHealth />
+                </ProtectedRoute>
+              }
+            />
             {/* OAuth routes - public for GHL */}
             <Route path="/oauth/callback" element={<OAuthCallback />} />
             <Route path="/oauth/success/:locationId" element={<OAuthSuccess />} />
