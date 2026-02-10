@@ -53,9 +53,9 @@ const GHOST_RECORDER_SCRIPT = `/**
             actionGroup = document.createElement('div');
             actionGroup.style.cssText = "display: none; align-items: center; gap: 5px; background: #f3f4f6; padding: 4px; border-radius: 20px;";
             
-            const btnPlay = document.createElement('div'); btnPlay.innerHTML = ICONS.play; btnPlay.onclick = togglePreview; btnPlay.style.cursor='pointer'; btnPlay.style.padding='4px';
-            const btnTrash = document.createElement('div'); btnTrash.innerHTML = ICONS.trash; btnTrash.onclick = fullReset; btnTrash.style.cursor='pointer'; btnTrash.style.padding='4px';
-            const btnSend = document.createElement('div'); btnSend.innerHTML = ICONS.send; btnSend.onclick = handleSend; btnSend.style.cursor='pointer'; btnSend.style.padding='4px';
+            var btnPlay = document.createElement('div'); btnPlay.innerHTML = ICONS.play; btnPlay.onclick = togglePreview; btnPlay.style.cursor='pointer'; btnPlay.style.padding='4px';
+            var btnTrash = document.createElement('div'); btnTrash.innerHTML = ICONS.trash; btnTrash.onclick = fullReset; btnTrash.style.cursor='pointer'; btnTrash.style.padding='4px';
+            var btnSend = document.createElement('div'); btnSend.innerHTML = ICONS.send; btnSend.onclick = handleSend; btnSend.style.cursor='pointer'; btnSend.style.padding='4px';
             
             actionGroup.appendChild(btnTrash); actionGroup.appendChild(btnPlay); actionGroup.appendChild(btnSend);
             container.appendChild(timerDisplay); container.appendChild(mainBtn); container.appendChild(actionGroup);
@@ -69,7 +69,7 @@ const GHOST_RECORDER_SCRIPT = `/**
                 currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(currentStream);
                 audioChunks = [];
-                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+                mediaRecorder.ondataavailable = function(e) { if (e.data.size > 0) audioChunks.push(e.data); };
                 mediaRecorder.start();
                 isRecording = true;
                 mainBtn.innerHTML = ICONS.stop; timerDisplay.style.display = 'block'; startTimer();
@@ -77,28 +77,90 @@ const GHOST_RECORDER_SCRIPT = `/**
         } else {
             if (mediaRecorder) mediaRecorder.stop();
             isRecording = false; stopTimer();
-            if (currentStream) currentStream.getTracks().forEach(t => t.stop());
-            mediaRecorder.onstop = () => {
-                audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
-                const audioUrl = URL.createObjectURL(audioBlob);
+            if (currentStream) currentStream.getTracks().forEach(function(t) { t.stop(); });
+            mediaRecorder.onstop = async function() {
+                var rawBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                try {
+                    audioBlob = await convertToWav(rawBlob);
+                } catch(e) {
+                    console.warn("WAV conversion failed, using raw blob", e);
+                    audioBlob = rawBlob;
+                }
+                var audioUrl = URL.createObjectURL(audioBlob);
                 audioPlayer = new Audio(audioUrl);
                 mainBtn.style.display = 'none'; timerDisplay.style.display = 'none'; actionGroup.style.display = 'flex';
             };
         }
     }
 
+    function convertToWav(blob) {
+        return new Promise(function(resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function() {
+                var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                audioCtx.decodeAudioData(reader.result).then(function(buffer) {
+                    var numChannels = 1;
+                    var sampleRate = buffer.sampleRate;
+                    var rawData = buffer.getChannelData(0);
+                    var wavBuffer = encodeWav(rawData, sampleRate, numChannels);
+                    resolve(new Blob([wavBuffer], { type: 'audio/wav' }));
+                }).catch(reject);
+            };
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(blob);
+        });
+    }
+
+    function encodeWav(samples, sampleRate, numChannels) {
+        var bytesPerSample = 2;
+        var blockAlign = numChannels * bytesPerSample;
+        var dataSize = samples.length * bytesPerSample;
+        var bufferSize = 44 + dataSize;
+        var buffer = new ArrayBuffer(bufferSize);
+        var view = new DataView(buffer);
+
+        function writeString(offset, str) {
+            for (var i = 0; i < str.length; i++) {
+                view.setUint8(offset + i, str.charCodeAt(i));
+            }
+        }
+
+        writeString(0, 'RIFF');
+        view.setUint32(4, bufferSize - 8, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * blockAlign, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bytesPerSample * 8, true);
+        writeString(36, 'data');
+        view.setUint32(40, dataSize, true);
+
+        var offset = 44;
+        for (var i = 0; i < samples.length; i++) {
+            var s = Math.max(-1, Math.min(1, samples[i]));
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            offset += 2;
+        }
+
+        return buffer;
+    }
+
     async function handleSend() {
         if (!audioBlob) return;
         
-        // UI Feedback imediato
         actionGroup.style.opacity = "0.5";
         actionGroup.style.pointerEvents = "none";
 
-        const nativeFile = new File([audioBlob], \`audio_voice_\${Date.now()}.ogg\`, { type: 'audio/ogg; codecs=opus' });
+        var ext = audioBlob.type.indexOf('wav') !== -1 ? 'wav' : 'ogg';
+        var mimeType = audioBlob.type.indexOf('wav') !== -1 ? 'audio/wav' : audioBlob.type;
+        var nativeFile = new File([audioBlob], 'audio_voice_' + Date.now() + '.' + ext, { type: mimeType });
         nativeGHLUpload(nativeFile);
         
-        // Reset após o burst
-        setTimeout(() => {
+        setTimeout(function() {
             fullReset();
             actionGroup.style.opacity = "1";
             actionGroup.style.pointerEvents = "auto";
@@ -107,33 +169,31 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     function nativeGHLUpload(file) {
         try {
-            // Tenta encontrar o input de arquivo do GHL
-            const fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
-                              document.querySelector('input[type="file"][multiple]') ||
-                              document.querySelector('input[type="file"]');
+            var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
+                            document.querySelector('input[type="file"][multiple]') ||
+                            document.querySelector('input[type="file"]');
             
             if (fileInput) {
-                const dt = new DataTransfer();
+                // Remove accept attribute to avoid format blocking
+                fileInput.removeAttribute('accept');
+
+                var dt = new DataTransfer();
                 dt.items.add(file);
                 
-                // Usa o setter nativo do prototype para acionar React
-                const nativeFileSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
+                var nativeFileSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
                 nativeFileSetter.call(fileInput, dt.files);
                 
-                // Dispara eventos que o React intercepta
                 fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
                 fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
                 
-                // Também tenta via drop event como fallback
                 try {
-                    const dropEvent = new DragEvent('drop', { bubbles: true, composed: true, dataTransfer: dt });
+                    var dropEvent = new DragEvent('drop', { bubbles: true, composed: true, dataTransfer: dt });
                     fileInput.dispatchEvent(dropEvent);
                 } catch(dropErr) {}
                 
-                // Aguarda o GHL processar o arquivo antes de tentar enviar
-                let attempts = 0;
-                const burstInterval = setInterval(() => {
-                    const success = forceSendClick();
+                var attempts = 0;
+                var burstInterval = setInterval(function() {
+                    var success = forceSendClick();
                     attempts++;
                     if (success || attempts > 40) {
                         clearInterval(burstInterval);
@@ -141,31 +201,20 @@ const GHOST_RECORDER_SCRIPT = `/**
                 }, 100); 
             } else {
                 console.warn("DOUG.TECH: File input not found");
-                // Fallback: tenta usar clipboard API
-                try {
-                    const clipboardItem = new ClipboardItem({ [file.type]: file });
-                    navigator.clipboard.write([clipboardItem]).then(() => {
-                        const textarea = document.querySelector('textarea');
-                        if (textarea) {
-                            textarea.focus();
-                            document.execCommand('paste');
-                        }
-                    });
-                } catch(clipErr) { console.warn("Clipboard fallback failed", clipErr); }
             }
         } catch(e) { console.error("Erro injection", e); }
     }
 
     function forceSendClick() {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const sendBtn = buttons.find(b => b.innerHTML.includes('M2.01 21L23 12 2.01 3'));
+        var buttons = Array.from(document.querySelectorAll('button'));
+        var sendBtn = buttons.find(function(b) { return b.innerHTML.indexOf('M2.01 21L23 12 2.01 3') !== -1; });
 
         if (sendBtn && !sendBtn.disabled) {
             sendBtn.click();
             return true;
         } 
         
-        const textarea = document.querySelector('textarea');
+        var textarea = document.querySelector('textarea');
         if(textarea) {
             textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
         }
@@ -176,7 +225,7 @@ const GHOST_RECORDER_SCRIPT = `/**
         if(!audioPlayer) return;
         if(audioPlayer.paused) {
             audioPlayer.play(); actionGroup.children[1].innerHTML = ICONS.pause;
-            audioPlayer.onended = () => actionGroup.children[1].innerHTML = ICONS.play;
+            audioPlayer.onended = function() { actionGroup.children[1].innerHTML = ICONS.play; };
         } else {
             audioPlayer.pause(); actionGroup.children[1].innerHTML = ICONS.play;
         }
@@ -184,7 +233,7 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     function fullReset() {
         if(audioPlayer) { audioPlayer.pause(); audioPlayer = null; }
-        if(currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+        if(currentStream) { currentStream.getTracks().forEach(function(t) { t.stop(); }); currentStream = null; }
         mediaRecorder = null; audioChunks = []; audioBlob = null; isRecording = false; stopTimer();
         if(mainBtn) {
             mainBtn.innerHTML = ICONS.mic; mainBtn.style.display = 'block'; actionGroup.style.display = 'none';
@@ -195,16 +244,16 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     function startTimer() {
         startTime = Date.now();
-        timerInterval = setInterval(() => {
-            const diff = Math.floor((Date.now() - startTime) / 1000);
-            const m = Math.floor(diff / 60).toString().padStart(2,'0');
-            const s = (diff % 60).toString().padStart(2,'0');
-            timerDisplay.innerText = \`\${m}:\${s}\`;
+        timerInterval = setInterval(function() {
+            var diff = Math.floor((Date.now() - startTime) / 1000);
+            var m = Math.floor(diff / 60).toString().padStart(2,'0');
+            var s = (diff % 60).toString().padStart(2,'0');
+            timerDisplay.innerText = m + ':' + s;
         }, 1000);
     }
     function stopTimer() { clearInterval(timerInterval); }
 
-    const observer = new MutationObserver(() => { if (!document.getElementById('doug-maestro-ui')) createUI(); });
+    var observer = new MutationObserver(function() { if (!document.getElementById('doug-maestro-ui')) createUI(); });
     observer.observe(document.body, { childList: true, subtree: true });
     setTimeout(createUI, 1500);
 })();`;
@@ -218,7 +267,7 @@ Deno.serve(async (req) => {
     headers: {
       ...corsHeaders,
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
     },
   });
 });
