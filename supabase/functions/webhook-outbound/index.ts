@@ -2056,11 +2056,13 @@ serve(async (req: Request) => {
       return; // Already responded
     }
 
-    // Find subaccount (usando limit(1) para evitar erro com duplicatas)
+    // Find subaccount - prefer the one with valid OAuth token and most recent install
     const { data: subaccounts, error: subError } = await supabase
       .from("ghl_subaccounts")
       .select("id, user_id, location_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at")
       .eq("location_id", locationId)
+      .not("ghl_access_token", "is", null)
+      .order("oauth_installed_at", { ascending: false, nullsFirst: false })
       .limit(1);
     
     const subaccount = subaccounts?.[0] || null;
