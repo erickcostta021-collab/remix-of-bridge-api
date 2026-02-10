@@ -124,12 +124,6 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
     fetchSubaccount();
   }, [instance.subaccount_id, instance.ghl_user_id]);
 
-  // Check server health (wait for settings to load)
-  useEffect(() => {
-    if (settings === undefined) return; // settings still loading
-    checkServerHealth(instance, settings?.uazapi_base_url).then(setServerOnline).catch(() => setServerOnline(false));
-  }, [settings?.uazapi_base_url]);
-
   // Fetch phone number and profile pic on mount
   useEffect(() => {
     if (!connectedPhone || !profilePicUrl) {
@@ -248,6 +242,9 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
   const handleSyncStatus = async () => {
     setSyncing(true);
     try {
+      // Check server health on demand
+      checkServerHealth(instance, settings?.uazapi_base_url).then(setServerOnline).catch(() => setServerOnline(false));
+      
       const result = await syncInstanceStatus.mutateAsync(instance);
       if (result?.phone) {
         setConnectedPhone(result.phone);
@@ -350,17 +347,15 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
                     <h3 className="font-semibold text-card-foreground truncate">
                       {instance.instance_name}
                     </h3>
-                    {/* Server health badge */}
-                    <div 
-                      className={`h-2.5 w-2.5 rounded-full shrink-0 ${
-                        serverOnline === null 
-                          ? "bg-muted-foreground/40 animate-pulse" 
-                          : serverOnline 
-                            ? "bg-emerald-500" 
-                            : "bg-destructive"
-                      }`}
-                      title={serverOnline === null ? "Verificando servidor..." : serverOnline ? "Servidor UAZAPI online" : "Servidor UAZAPI offline"}
-                    />
+                    {/* Server health badge - only shown after manual check */}
+                    {serverOnline !== null && (
+                      <div 
+                        className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                          serverOnline ? "bg-emerald-500" : "bg-destructive"
+                        }`}
+                        title={serverOnline ? "Servidor UAZAPI online" : "Servidor UAZAPI offline"}
+                      />
+                    )}
                     <Badge variant="outline" className={`${status.className} shrink-0`}>
                       <StatusIcon className="h-3 w-3 mr-1" />
                       {status.label}
