@@ -20,6 +20,7 @@ import {
   Palette,
   MousePointerClick,
   Activity,
+  Rocket,
 } from "lucide-react";
 import { CustomizeSmsDialog } from "@/components/dashboard/CustomizeSmsDialog";
 import { WhatsAppThemeDialog } from "@/components/dashboard/WhatsAppThemeDialog";
@@ -42,6 +43,7 @@ export function Sidebar() {
   const { hasActiveSubscription } = useSubscription();
   const location = useLocation();
   const [utilitiesOpen, setUtilitiesOpen] = useState(false);
+  const [startHereOpen, setStartHereOpen] = useState(false);
   const [groupCommandsOpen, setGroupCommandsOpen] = useState(false);
   const [customizeSmsOpen, setCustomizeSmsOpen] = useState(false);
   const [whatsappThemeOpen, setWhatsappThemeOpen] = useState(false);
@@ -261,41 +263,72 @@ export function Sidebar() {
             )}
           </div>
 
-          {/* Install App Button */}
-          {oauthUrl && (
+          {/* Comece por aqui Dropdown */}
+          <div className="pt-1">
             <TooltipProvider delayDuration={0}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
+                    onClick={() => {
+                      if (collapsed) {
+                        // When collapsed, open directly if has oauth
+                        if (oauthUrl && hasActiveSubscription) handleInstallApp();
+                      } else {
+                        setStartHereOpen(!startHereOpen);
+                      }
+                    }}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 w-full text-left",
+                      "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    )}
+                  >
+                    <Rocket className="h-5 w-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+                    <span className={cn(
+                      "transition-all duration-300 whitespace-nowrap flex-1",
+                      collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
+                    )}>
+                      Comece por aqui
+                    </span>
+                    {!collapsed && (
+                      <ChevronDown className={cn(
+                        "h-4 w-4 text-sidebar-foreground/40 transition-transform duration-200",
+                        startHereOpen && "rotate-180"
+                      )} />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                {collapsed && (
+                  <TooltipContent side="right" className="font-medium">
+                    Comece por aqui
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+
+            {/* Dropdown items */}
+            {startHereOpen && !collapsed && (
+              <div className="mt-1 ml-3 pl-3 border-l border-white/[0.08] space-y-0.5 animate-fade-in">
+                <p className="px-3 py-1.5 text-xs font-semibold text-sidebar-foreground/40 uppercase tracking-wider">
+                  Passo a passo
+                </p>
+                {oauthUrl && (
+                  <button
                     onClick={hasActiveSubscription ? handleInstallApp : undefined}
                     disabled={!hasActiveSubscription}
                     className={cn(
-                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 w-full text-left relative overflow-hidden",
+                      "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
                       hasActiveSubscription
-                        ? "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
+                        ? "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                         : "text-sidebar-foreground/30 cursor-not-allowed"
                     )}
                   >
-                    <ExternalLink className={cn(
-                      "h-5 w-5 flex-shrink-0 transition-transform duration-200",
-                      hasActiveSubscription && "group-hover:scale-110"
-                    )} />
-                    <span className={cn(
-                      "transition-all duration-300 whitespace-nowrap",
-                      collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
-                    )}>
-                      Instalar App
-                    </span>
+                    <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                    <span className="whitespace-nowrap">Instalar App</span>
                   </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="font-medium">
-                  {hasActiveSubscription
-                    ? "Instalar App"
-                    : "Assine um plano para instalar o app"}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Collapse toggle at bottom (desktop only) */}
