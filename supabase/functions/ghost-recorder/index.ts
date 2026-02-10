@@ -107,28 +107,25 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     function nativeGHLUpload(file) {
         try {
-            // Tenta encontrar o input de arquivo do GHL
-            const fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
-                              document.querySelector('input[type="file"][multiple]') ||
-                              document.querySelector('input[type="file"]');
+            // Estratégia 1: Paste event no textarea (mais confiável com React)
+            const textarea = document.querySelector('textarea') || 
+                             document.querySelector('[contenteditable="true"]') ||
+                             document.querySelector('.ql-editor');
             
-            if (fileInput) {
+            if (textarea) {
+                textarea.focus();
+                
                 const dt = new DataTransfer();
                 dt.items.add(file);
                 
-                // Usa o setter nativo do prototype para acionar React
-                const nativeFileSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
-                nativeFileSetter.call(fileInput, dt.files);
+                const pasteEvent = new ClipboardEvent('paste', {
+                    bubbles: true,
+                    cancelable: true,
+                    clipboardData: dt
+                });
                 
-                // Dispara eventos que o React intercepta
-                fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                
-                // Também tenta via drop event como fallback
-                try {
-                    const dropEvent = new DragEvent('drop', { bubbles: true, composed: true, dataTransfer: dt });
-                    fileInput.dispatchEvent(dropEvent);
-                } catch(dropErr) {}
+                textarea.dispatchEvent(pasteEvent);
+                console.log("DOUG.TECH: Paste event dispatched on textarea");
                 
                 // Aguarda o GHL processar o arquivo antes de tentar enviar
                 let attempts = 0;
@@ -138,22 +135,61 @@ const GHOST_RECORDER_SCRIPT = `/**
                     if (success || attempts > 40) {
                         clearInterval(burstInterval);
                     }
-                }, 100); 
-            } else {
-                console.warn("DOUG.TECH: File input not found");
-                // Fallback: tenta usar clipboard API
-                try {
-                    const clipboardItem = new ClipboardItem({ [file.type]: file });
-                    navigator.clipboard.write([clipboardItem]).then(() => {
-                        const textarea = document.querySelector('textarea');
-                        if (textarea) {
-                            textarea.focus();
-                            document.execCommand('paste');
-                        }
-                    });
-                } catch(clipErr) { console.warn("Clipboard fallback failed", clipErr); }
+                }, 150);
+                return;
             }
-        } catch(e) { console.error("Erro injection", e); }
+            
+            // Estratégia 2: Drop event na área do chat
+            const chatArea = document.querySelector('.conversation-body') ||
+                             document.querySelector('.message-list-wrapper') ||
+                             document.querySelector('[class*="conversation"]') ||
+                             document.querySelector('.hl_conversations--chat-body');
+            
+            if (chatArea) {
+                const dt2 = new DataTransfer();
+                dt2.items.add(file);
+                
+                const dragEnter = new DragEvent('dragenter', { bubbles: true, dataTransfer: dt2 });
+                const dragOver = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt2 });
+                const dropEvt = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt2 });
+                
+                chatArea.dispatchEvent(dragEnter);
+                chatArea.dispatchEvent(dragOver);
+                chatArea.dispatchEvent(dropEvt);
+                console.log("DOUG.TECH: Drop event dispatched on chat area");
+                
+                let attempts = 0;
+                const burstInterval = setInterval(() => {
+                    const success = forceSendClick();
+                    attempts++;
+                    if (success || attempts > 40) {
+                        clearInterval(burstInterval);
+                    }
+                }, 150);
+                return;
+            }
+            
+            // Estratégia 3: File input como último recurso
+            const fileInput = document.querySelector('input[type="file"]');
+            if (fileInput) {
+                // Simula clique no input e injeta via React setter
+                const dt3 = new DataTransfer();
+                dt3.items.add(file);
+                const nativeFileSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
+                nativeFileSetter.call(fileInput, dt3.files);
+                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                console.log("DOUG.TECH: File input setter fallback used");
+                
+                let attempts = 0;
+                const burstInterval = setInterval(() => {
+                    const success = forceSendClick();
+                    attempts++;
+                    if (success || attempts > 40) {
+                        clearInterval(burstInterval);
+                    }
+                }, 150);
+            }
+        } catch(e) { console.error("DOUG.TECH: Erro injection", e); }
     }
 
     function forceSendClick() {
