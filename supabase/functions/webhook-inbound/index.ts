@@ -2014,20 +2014,36 @@ serve(async (req) => {
       await updateContactPhoto(contact.id, profilePhoto, token);
     }
 
-    // Add tag with the connected instance phone number
-    // This helps identify which WhatsApp number is associated with this contact
+    // Update contact source with the connected instance phone number
     if (contact.id && instance.phone) {
-      // Format the phone number for the tag (e.g., "WA: +55 11 99999-9999")
       const formattedPhone = instance.phone.replace(/\D/g, '');
-      let phoneTag = `WA: +${formattedPhone}`;
+      let phoneSource = `WA: +${formattedPhone}`;
       if (formattedPhone.length >= 12) {
-        phoneTag = `WA: +${formattedPhone.slice(0, 2)} ${formattedPhone.slice(2, 4)} ${formattedPhone.slice(4, 9)}-${formattedPhone.slice(9)}`;
+        phoneSource = `WA: +${formattedPhone.slice(0, 2)} ${formattedPhone.slice(2, 4)} ${formattedPhone.slice(4, 9)}-${formattedPhone.slice(9)}`;
       } else if (formattedPhone.length >= 10) {
-        phoneTag = `WA: +${formattedPhone.slice(0, 2)} ${formattedPhone.slice(2)}`;
+        phoneSource = `WA: +${formattedPhone.slice(0, 2)} ${formattedPhone.slice(2)}`;
       }
       
-      console.log("Adding instance phone tag to contact:", { contactId: contact.id, phoneTag });
-      await addTagToContact(contact.id, phoneTag, token);
+      console.log("Updating contact source with instance phone:", { contactId: contact.id, phoneSource });
+      try {
+        const sourceResp = await fetch(`https://services.leadconnectorhq.com/contacts/${contact.id}`, {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Version": "2021-07-28",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify({ source: phoneSource }),
+        });
+        if (!sourceResp.ok) {
+          console.error("Failed to update contact source:", await sourceResp.text());
+        } else {
+          console.log("Contact source updated successfully:", phoneSource);
+        }
+      } catch (e) {
+        console.error("Error updating contact source:", e);
+      }
     }
 
     // Auto-assign contact to GHL user if configured on this instance
