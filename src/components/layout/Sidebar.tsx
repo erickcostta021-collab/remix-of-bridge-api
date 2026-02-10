@@ -262,7 +262,7 @@ export function Sidebar() {
                   )}
                 >
                   <MousePointerClick className="h-4 w-4 flex-shrink-0" />
-                  <span className="whitespace-nowrap">Enviar Botões</span>
+                  <span className="whitespace-nowrap">Comandos de Enviar Botões</span>
                 </button>
 
                 {/* Personalizar GHL */}

@@ -1,13 +1,20 @@
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Copy, Check } from "lucide-react";
+import { toast } from "sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Copy, Check } from "lucide-react";
-import { toast } from "sonner";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 
 interface GroupCommandsDialogProps {
   open: boolean;
@@ -103,7 +110,7 @@ const commands = [
   },
 ];
 
-export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogProps) {
+function CommandsList() {
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
 
   const handleCopy = (cmd: typeof commands[0]) => {
@@ -117,6 +124,82 @@ export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogP
   };
 
   return (
+    <>
+      <div className="space-y-2">
+        {commands.map((cmd) => (
+          <div
+            key={cmd.command}
+            className="flex items-start justify-between gap-2 p-3 rounded-lg border border-border bg-muted/20"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-primary font-medium text-sm">
+                  {cmd.command}
+                </span>
+                <Badge
+                  variant={cmd.context === "Global" ? "default" : "secondary"}
+                  className="text-xs"
+                >
+                  {cmd.context}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">{cmd.description}</p>
+              {cmd.format && (
+                <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-foreground mt-1 inline-block">
+                  {cmd.format}
+                </code>
+              )}
+              {cmd.notes && (
+                <p className="text-xs text-muted-foreground mt-1">{cmd.notes}</p>
+              )}
+            </div>
+            <button
+              onClick={() => handleCopy(cmd)}
+              className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex-shrink-0"
+              title="Copiar comando"
+            >
+              {copiedCommand === cmd.command ? (
+                <Check className="h-4 w-4 text-primary" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 p-3 rounded-lg bg-muted/30 border border-border">
+        <p className="text-xs text-muted-foreground">
+          <strong className="text-foreground">Dica:</strong> Comandos com contexto "Dentro do grupo" devem ser enviados de dentro da conversa do grupo no CRM.
+          O comando <code className="text-primary">#criargrupo</code> pode ser enviado de qualquer conversa.
+        </p>
+      </div>
+    </>
+  );
+}
+
+export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogProps) {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent className="max-h-[85vh]">
+          <DrawerHeader>
+            <DrawerTitle>Comandos de Grupo do WhatsApp</DrawerTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Envie esses comandos pelo chat do GoHighLevel para gerenciar grupos do WhatsApp.
+            </p>
+          </DrawerHeader>
+          <div className="px-4 pb-6 overflow-y-auto">
+            <CommandsList />
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
@@ -125,75 +208,7 @@ export function GroupCommandsDialog({ open, onOpenChange }: GroupCommandsDialogP
             Envie esses comandos pelo chat do GoHighLevel para gerenciar grupos do WhatsApp.
           </p>
         </DialogHeader>
-
-        <div className="mt-4 rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/50 border-b border-border">
-                <th className="text-left px-4 py-3 font-semibold text-foreground">Comando</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground hidden sm:table-cell">Descrição</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground">Formato</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground hidden md:table-cell">Contexto</th>
-                <th className="px-3 py-3 w-10"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {commands.map((cmd, i) => (
-                <tr
-                  key={cmd.command}
-                  className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}
-                >
-                  <td className="px-4 py-3 font-mono text-primary font-medium whitespace-nowrap">
-                    {cmd.command}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
-                    {cmd.description}
-                  </td>
-                  <td className="px-4 py-3">
-                    {cmd.format ? (
-                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-foreground">
-                        {cmd.format}
-                      </code>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">Sem parâmetros</span>
-                    )}
-                    {cmd.notes && (
-                      <p className="text-xs text-muted-foreground mt-1">{cmd.notes}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <Badge
-                      variant={cmd.context === "Global" ? "default" : "secondary"}
-                      className="text-xs"
-                    >
-                      {cmd.context}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-3">
-                    <button
-                      onClick={() => handleCopy(cmd)}
-                      className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                      title="Copiar comando"
-                    >
-                      {copiedCommand === cmd.command ? (
-                        <Check className="h-4 w-4 text-primary" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-4 p-3 rounded-lg bg-muted/30 border border-border">
-          <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">Dica:</strong> Comandos com contexto "Dentro do grupo" devem ser enviados de dentro da conversa do grupo no CRM.
-            O comando <code className="text-primary">#criargrupo</code> pode ser enviado de qualquer conversa.
-          </p>
-        </div>
+        <CommandsList />
       </DialogContent>
     </Dialog>
   );

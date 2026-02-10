@@ -1,13 +1,20 @@
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Copy, Check } from "lucide-react";
+import { toast } from "sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Copy, Check } from "lucide-react";
-import { toast } from "sonner";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 
 interface SendButtonsDialogProps {
   open: boolean;
@@ -45,7 +52,7 @@ const buttonCommands = [
   },
 ];
 
-export function SendButtonsDialog({ open, onOpenChange }: SendButtonsDialogProps) {
+function ButtonCommandsList() {
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
 
   const handleCopy = (cmd: typeof buttonCommands[0]) => {
@@ -59,79 +66,87 @@ export function SendButtonsDialog({ open, onOpenChange }: SendButtonsDialogProps
   };
 
   return (
+    <>
+      <div className="space-y-2">
+        {buttonCommands.map((cmd) => (
+          <div
+            key={cmd.command}
+            className="flex items-start justify-between gap-2 p-3 rounded-lg border border-border bg-muted/20"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-primary font-medium text-sm">
+                  {cmd.command}
+                </span>
+                <Badge variant="outline" className="text-xs">
+                  {cmd.context}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">{cmd.description}</p>
+              {cmd.format && (
+                <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-foreground mt-1 inline-block">
+                  {cmd.format}
+                </code>
+              )}
+              {cmd.notes && (
+                <p className="text-xs text-muted-foreground mt-1">{cmd.notes}</p>
+              )}
+            </div>
+            <button
+              onClick={() => handleCopy(cmd)}
+              className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex-shrink-0"
+              title="Copiar comando"
+            >
+              {copiedCommand === cmd.command ? (
+                <Check className="h-4 w-4 text-primary" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 p-3 rounded-lg bg-muted/30 border border-border">
+        <p className="text-xs text-muted-foreground">
+          <strong className="text-foreground">Dica:</strong> Esses comandos devem ser enviados no chat de um contato individual no CRM.
+        </p>
+      </div>
+    </>
+  );
+}
+
+export function SendButtonsDialog({ open, onOpenChange }: SendButtonsDialogProps) {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent className="max-h-[85vh]">
+          <DrawerHeader>
+            <DrawerTitle>Comandos de Enviar Botões</DrawerTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Comandos para enviar botões interativos pelo chat do GoHighLevel.
+            </p>
+          </DrawerHeader>
+          <div className="px-4 pb-6 overflow-y-auto">
+            <ButtonCommandsList />
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl">Enviar Botões</DialogTitle>
+          <DialogTitle className="text-xl">Comandos de Enviar Botões</DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
             Comandos para enviar botões interativos pelo chat do GoHighLevel.
           </p>
         </DialogHeader>
-
-        <div className="mt-4 rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/50 border-b border-border">
-                <th className="text-left px-4 py-3 font-semibold text-foreground">Comando</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground hidden sm:table-cell">Descrição</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground">Formato</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground hidden md:table-cell">Contexto</th>
-                <th className="px-3 py-3 w-10"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {buttonCommands.map((cmd, i) => (
-                <tr
-                  key={cmd.command}
-                  className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}
-                >
-                  <td className="px-4 py-3 font-mono text-primary font-medium whitespace-nowrap">
-                    {cmd.command}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
-                    {cmd.description}
-                  </td>
-                  <td className="px-4 py-3">
-                    {cmd.format ? (
-                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-foreground">
-                        {cmd.format}
-                      </code>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">Sem parâmetros</span>
-                    )}
-                    {cmd.notes && (
-                      <p className="text-xs text-muted-foreground mt-1">{cmd.notes}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <Badge variant="outline" className="text-xs">
-                      {cmd.context}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-3">
-                    <button
-                      onClick={() => handleCopy(cmd)}
-                      className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                      title="Copiar comando"
-                    >
-                      {copiedCommand === cmd.command ? (
-                        <Check className="h-4 w-4 text-primary" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-4 p-3 rounded-lg bg-muted/30 border border-border">
-          <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">Dica:</strong> Esses comandos devem ser enviados no chat de um contato individual no CRM.
-          </p>
-        </div>
+        <ButtonCommandsList />
       </DialogContent>
     </Dialog>
   );
