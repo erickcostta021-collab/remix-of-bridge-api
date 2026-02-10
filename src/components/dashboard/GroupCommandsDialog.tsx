@@ -98,9 +98,9 @@ const commands = [
   {
     command: "#linkgrupo",
     description: "Obtém o link de convite do grupo",
-    format: "",
+    format: "55",
     context: "Dentro do grupo",
-    notes: "Formato global: #linkgrupo ID|TELEFONE",
+    notes: "Formato global: #linkgrupo TELEFONE",
   },
   {
     command: "#sairgrupo",
