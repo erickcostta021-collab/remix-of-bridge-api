@@ -37,6 +37,8 @@ Deno.serve(async (req) => {
       .from("ghl_subaccounts")
       .select("id")
       .eq("location_id", locationId)
+      .not("ghl_access_token", "is", null)
+      .order("oauth_installed_at", { ascending: false, nullsFirst: false })
       .limit(1);
     
     const subaccount = subaccounts?.[0] || null;

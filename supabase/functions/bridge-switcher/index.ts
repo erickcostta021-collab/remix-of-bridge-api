@@ -355,11 +355,14 @@ Deno.serve(async (req) => {
 
         try {
           // Get the GHL access token for this location
-          const { data: subaccount } = await supabase
+          const { data: subaccountRows } = await supabase
             .from("ghl_subaccounts")
             .select("ghl_access_token, ghl_token_expires_at")
             .eq("location_id", locationId)
-            .maybeSingle();
+            .not("ghl_access_token", "is", null)
+            .order("oauth_installed_at", { ascending: false, nullsFirst: false })
+            .limit(1);
+          const subaccount = subaccountRows?.[0] || null;
 
           if (subaccount?.ghl_access_token) {
             // Check if token needs refresh (expires in less than 5 minutes)
