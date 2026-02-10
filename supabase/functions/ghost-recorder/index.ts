@@ -115,27 +115,49 @@ const GHOST_RECORDER_SCRIPT = `/**
             if (textarea) {
                 textarea.focus();
                 
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                
-                const pasteEvent = new ClipboardEvent('paste', {
-                    bubbles: true,
-                    cancelable: true,
-                    clipboardData: dt
+                // ClipboardEvent constructor NÃO permite setar clipboardData de verdade.
+                // Precisamos usar Object.defineProperty para simular corretamente.
+                const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
+                Object.defineProperty(pasteEvent, 'clipboardData', {
+                    value: {
+                        files: [file],
+                        items: [{
+                            kind: 'file',
+                            type: file.type,
+                            getAsFile: () => file
+                        }],
+                        getData: () => '',
+                        types: ['Files']
+                    }
                 });
                 
                 textarea.dispatchEvent(pasteEvent);
-                console.log("DOUG.TECH: Paste event dispatched on textarea");
+                console.log("DOUG.TECH: Custom paste event with files dispatched");
                 
                 // Aguarda o GHL processar o arquivo antes de tentar enviar
                 let attempts = 0;
                 const burstInterval = setInterval(() => {
-                    const success = forceSendClick();
+                    // Verifica se apareceu preview de arquivo antes de tentar enviar
+                    const hasPreview = document.querySelector('[class*="attachment"]') ||
+                                       document.querySelector('[class*="preview"]') ||
+                                       document.querySelector('[class*="file-upload"]') ||
+                                       document.querySelector('audio') ||
+                                       document.querySelector('[class*="media"]');
+                    
+                    if (hasPreview) {
+                        console.log("DOUG.TECH: File preview detected, clicking send");
+                        forceSendClick();
+                        clearInterval(burstInterval);
+                        return;
+                    }
+                    
                     attempts++;
-                    if (success || attempts > 40) {
+                    if (attempts > 30) {
+                        console.warn("DOUG.TECH: No file preview detected after paste, trying send anyway");
+                        forceSendClick();
                         clearInterval(burstInterval);
                     }
-                }, 150);
+                }, 200);
                 return;
             }
             
