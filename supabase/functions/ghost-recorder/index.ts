@@ -5,36 +5,56 @@ const corsHeaders = {
 };
 
 const GHOST_RECORDER_SCRIPT = `/**
- * 🚀 DOUG.TECH - GHOST RECORDER (NATIVE INJECTION MODE)
- * Envio exclusivo via interface do GHL.
+ * DOUG.TECH - GHOST RECORDER v3
  */
 (function() {
-    console.log("🚀 DOUG.TECH: Modo Injeção Nativa Ativado...");
+    console.log("DOUG.TECH: Ghost Recorder v3 carregado");
 
-    let mediaRecorder = null;
-    let currentStream = null;
-    let audioChunks = [];
-    let audioBlob = null;
-    let audioPlayer = null;
-    let isRecording = false;
-    let timerInterval;
-    let startTime;
+    var mediaRecorder = null;
+    var currentStream = null;
+    var audioChunks = [];
+    var audioBlob = null;
+    var audioPlayer = null;
+    var isRecording = false;
+    var timerInterval;
+    var startTime;
+    var recordedMimeType = '';
 
-    const ICONS = {
-        mic: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-500 hover:text-gray-700"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>\`,
-        stop: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-red-500 animate-pulse"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>\`,
-        play: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-blue-600"><path d="M8 5v14l11-7z"/></svg>\`,
-        pause: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-blue-600"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>\`,
-        trash: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-400 hover:text-red-500"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>\`,
-        send: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-green-500 hover:text-green-600"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>\`
+    var ICONS = {
+        mic: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-500 hover:text-gray-700"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>',
+        stop: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-red-500 animate-pulse"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>',
+        play: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-blue-600"><path d="M8 5v14l11-7z"/></svg>',
+        pause: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-blue-600"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>',
+        trash: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-400 hover:text-red-500"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
+        send: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-green-500 hover:text-green-600"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>'
     };
 
-    let container, mainBtn, actionGroup, timerDisplay;
+    var container, mainBtn, actionGroup, timerDisplay;
+
+    // Detect best supported recording format
+    function getPreferredMimeType() {
+        var candidates = [
+            'audio/mp4',
+            'audio/aac',
+            'audio/mpeg',
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/ogg;codecs=opus'
+        ];
+        for (var i = 0; i < candidates.length; i++) {
+            if (MediaRecorder.isTypeSupported(candidates[i])) {
+                console.log("DOUG.TECH: Using mimeType:", candidates[i]);
+                return candidates[i];
+            }
+        }
+        console.log("DOUG.TECH: No preferred mimeType supported, using default");
+        return '';
+    }
 
     function createUI() {
-        const toolbar = document.querySelector('.message-input-actions') || 
-                        document.querySelector('.toolbar-container') ||
-                        document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
+        var toolbar = document.querySelector('.message-input-actions') || 
+                      document.querySelector('.toolbar-container') ||
+                      document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
 
         if (toolbar && !document.getElementById('doug-maestro-ui')) {
             container = document.createElement('div');
@@ -67,7 +87,11 @@ const GHOST_RECORDER_SCRIPT = `/**
         if (!isRecording) {
             try {
                 currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(currentStream);
+                var preferredMime = getPreferredMimeType();
+                var options = preferredMime ? { mimeType: preferredMime } : {};
+                mediaRecorder = new MediaRecorder(currentStream, options);
+                recordedMimeType = mediaRecorder.mimeType;
+                console.log("DOUG.TECH: Recording with mimeType:", recordedMimeType);
                 audioChunks = [];
                 mediaRecorder.ondataavailable = function(e) { if (e.data.size > 0) audioChunks.push(e.data); };
                 mediaRecorder.start();
@@ -79,12 +103,21 @@ const GHOST_RECORDER_SCRIPT = `/**
             isRecording = false; stopTimer();
             if (currentStream) currentStream.getTracks().forEach(function(t) { t.stop(); });
             mediaRecorder.onstop = async function() {
-                var rawBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-                try {
-                    audioBlob = await convertToWav(rawBlob);
-                } catch(e) {
-                    console.warn("WAV conversion failed, using raw blob", e);
+                var rawBlob = new Blob(audioChunks, { type: recordedMimeType });
+                console.log("DOUG.TECH: Raw blob size:", rawBlob.size, "type:", rawBlob.type);
+
+                // If recorded in mp4/aac, use directly; otherwise convert to WAV
+                if (recordedMimeType.indexOf('mp4') !== -1 || recordedMimeType.indexOf('aac') !== -1 || recordedMimeType.indexOf('mpeg') !== -1) {
                     audioBlob = rawBlob;
+                    console.log("DOUG.TECH: Using native mp4/aac recording");
+                } else {
+                    try {
+                        audioBlob = await convertToWav(rawBlob);
+                        console.log("DOUG.TECH: Converted to WAV, size:", audioBlob.size);
+                    } catch(e) {
+                        console.warn("DOUG.TECH: WAV conversion failed:", e);
+                        audioBlob = rawBlob;
+                    }
                 }
                 var audioUrl = URL.createObjectURL(audioBlob);
                 audioPlayer = new Audio(audioUrl);
@@ -99,12 +132,26 @@ const GHOST_RECORDER_SCRIPT = `/**
             reader.onload = function() {
                 var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 audioCtx.decodeAudioData(reader.result).then(function(buffer) {
-                    var numChannels = 1;
-                    var sampleRate = buffer.sampleRate;
+                    var sampleRate = Math.min(buffer.sampleRate, 16000);
                     var rawData = buffer.getChannelData(0);
-                    var wavBuffer = encodeWav(rawData, sampleRate, numChannels);
-                    resolve(new Blob([wavBuffer], { type: 'audio/wav' }));
-                }).catch(reject);
+                    
+                    // Resample if needed
+                    var data = rawData;
+                    if (buffer.sampleRate !== sampleRate) {
+                        var ratio = buffer.sampleRate / sampleRate;
+                        var newLen = Math.floor(rawData.length / ratio);
+                        data = new Float32Array(newLen);
+                        for (var i = 0; i < newLen; i++) {
+                            data[i] = rawData[Math.floor(i * ratio)];
+                        }
+                    }
+                    
+                    var wavBuf = encodeWav(data, sampleRate, 1);
+                    resolve(new Blob([wavBuf], { type: 'audio/wav' }));
+                    audioCtx.close();
+                }).catch(function(err) {
+                    reject(err);
+                });
             };
             reader.onerror = reject;
             reader.readAsArrayBuffer(blob);
@@ -119,16 +166,14 @@ const GHOST_RECORDER_SCRIPT = `/**
         var buffer = new ArrayBuffer(bufferSize);
         var view = new DataView(buffer);
 
-        function writeString(offset, str) {
-            for (var i = 0; i < str.length; i++) {
-                view.setUint8(offset + i, str.charCodeAt(i));
-            }
+        function w(offset, str) {
+            for (var i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
         }
 
-        writeString(0, 'RIFF');
+        w(0, 'RIFF');
         view.setUint32(4, bufferSize - 8, true);
-        writeString(8, 'WAVE');
-        writeString(12, 'fmt ');
+        w(8, 'WAVE');
+        w(12, 'fmt ');
         view.setUint32(16, 16, true);
         view.setUint16(20, 1, true);
         view.setUint16(22, numChannels, true);
@@ -136,7 +181,7 @@ const GHOST_RECORDER_SCRIPT = `/**
         view.setUint32(28, sampleRate * blockAlign, true);
         view.setUint16(32, blockAlign, true);
         view.setUint16(34, bytesPerSample * 8, true);
-        writeString(36, 'data');
+        w(36, 'data');
         view.setUint32(40, dataSize, true);
 
         var offset = 44;
@@ -145,7 +190,6 @@ const GHOST_RECORDER_SCRIPT = `/**
             view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
             offset += 2;
         }
-
         return buffer;
     }
 
@@ -155,16 +199,24 @@ const GHOST_RECORDER_SCRIPT = `/**
         actionGroup.style.opacity = "0.5";
         actionGroup.style.pointerEvents = "none";
 
-        var ext = audioBlob.type.indexOf('wav') !== -1 ? 'wav' : 'ogg';
-        var mimeType = audioBlob.type.indexOf('wav') !== -1 ? 'audio/wav' : audioBlob.type;
-        var nativeFile = new File([audioBlob], 'audio_voice_' + Date.now() + '.' + ext, { type: mimeType });
+        var fileExt, fileMime;
+        var blobType = audioBlob.type || '';
+        if (blobType.indexOf('mp4') !== -1) { fileExt = 'mp4'; fileMime = 'audio/mp4'; }
+        else if (blobType.indexOf('aac') !== -1) { fileExt = 'aac'; fileMime = 'audio/aac'; }
+        else if (blobType.indexOf('wav') !== -1) { fileExt = 'wav'; fileMime = 'audio/wav'; }
+        else if (blobType.indexOf('mpeg') !== -1) { fileExt = 'mp3'; fileMime = 'audio/mpeg'; }
+        else { fileExt = 'webm'; fileMime = 'audio/webm'; }
+
+        console.log("DOUG.TECH: Sending as", fileMime, "ext:", fileExt, "size:", audioBlob.size);
+        
+        var nativeFile = new File([audioBlob], 'audio_' + Date.now() + '.' + fileExt, { type: fileMime });
         nativeGHLUpload(nativeFile);
         
         setTimeout(function() {
             fullReset();
             actionGroup.style.opacity = "1";
             actionGroup.style.pointerEvents = "auto";
-        }, 1500);
+        }, 2000);
     }
 
     function nativeGHLUpload(file) {
@@ -174,7 +226,6 @@ const GHOST_RECORDER_SCRIPT = `/**
                             document.querySelector('input[type="file"]');
             
             if (fileInput) {
-                // Remove accept attribute to avoid format blocking
                 fileInput.removeAttribute('accept');
 
                 var dt = new DataTransfer();
@@ -202,7 +253,7 @@ const GHOST_RECORDER_SCRIPT = `/**
             } else {
                 console.warn("DOUG.TECH: File input not found");
             }
-        } catch(e) { console.error("Erro injection", e); }
+        } catch(e) { console.error("DOUG.TECH: Erro injection", e); }
     }
 
     function forceSendClick() {
@@ -268,6 +319,7 @@ Deno.serve(async (req) => {
       ...corsHeaders,
       "Content-Type": "application/javascript; charset=utf-8",
       "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
     },
   });
 });
