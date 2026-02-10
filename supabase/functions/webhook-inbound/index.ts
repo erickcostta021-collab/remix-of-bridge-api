@@ -6,6 +6,46 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Retry wrapper for GHL API calls with exponential backoff
+async function fetchGHL(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("retry-after");
+        const waitMs = retryAfter
+          ? parseInt(retryAfter, 10) * 1000
+          : Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.warn(`[GHL] Rate limited (429), retry ${attempt + 1}/${maxRetries} in ${waitMs}ms: ${url}`);
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, waitMs));
+          continue;
+        }
+      }
+      if (response.status >= 500 && attempt < maxRetries) {
+        const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.warn(`[GHL] Server error (${response.status}), retry ${attempt + 1}/${maxRetries} in ${waitMs}ms`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      return response;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.warn(`[GHL] Network error, retry ${attempt + 1}/${maxRetries} in ${waitMs}ms:`, lastError.message);
+        await new Promise((r) => setTimeout(r, waitMs));
+      }
+    }
+  }
+  throw lastError || new Error("fetchGHL: all retries exhausted");
+}
+
 async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
   const hashBuf = await crypto.subtle.digest("SHA-256", data);
@@ -77,7 +117,7 @@ async function getValidToken(supabase: any, integration: any, settings: any): Pr
       user_type: "Location",
     });
 
-    const tokenResponse = await fetch("https://services.leadconnectorhq.com/oauth/token", {
+    const tokenResponse = await fetchGHL("https://services.leadconnectorhq.com/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -125,7 +165,7 @@ async function addTagToContact(contactId: string, tag: string, token: string): P
   console.log("Adding tag to contact:", { contactId, tag });
   
   // First get current tags
-  const getResponse = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
+  const getResponse = await fetchGHL(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
     headers: {
       "Authorization": `Bearer ${token}`,
       "Version": "2021-07-28",
@@ -148,7 +188,7 @@ async function addTagToContact(contactId: string, tag: string, token: string): P
   // Add new tag to existing tags
   const updatedTags = [...currentTags, tag];
 
-  const response = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
+  const response = await fetchGHL(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
     method: "PUT",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -182,7 +222,7 @@ async function getPrimaryContactId(
     const cleanPhone = phone.replace(/\D/g, "");
     
     // Try with full phone first
-    let searchResponse = await fetch(
+    let searchResponse = await fetchGHL(
       `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${cleanPhone}`,
       {
         headers: {
@@ -210,7 +250,7 @@ async function getPrimaryContactId(
     // Try with last 10 digits as fallback
     if (cleanPhone.length > 10) {
       const last10 = cleanPhone.slice(-10);
-      searchResponse = await fetch(
+      searchResponse = await fetchGHL(
         `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${last10}`,
         {
           headers: {
@@ -252,7 +292,7 @@ async function findOrCreateContact(
   email?: string
 ): Promise<any> {
   // Search for existing contact
-  const searchResponse = await fetch(
+  const searchResponse = await fetchGHL(
     `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${phone}`,
     {
       headers: {
@@ -271,7 +311,7 @@ async function findOrCreateContact(
       // If email is provided (group chat) and contact doesn't have it, update the contact
       if (email && !existingContact.email) {
         try {
-          await fetch(`https://services.leadconnectorhq.com/contacts/${existingContact.id}`, {
+          await fetchGHL(`https://services.leadconnectorhq.com/contacts/${existingContact.id}`, {
             method: "PUT",
             headers: {
               "Authorization": `Bearer ${token}`,
@@ -303,7 +343,7 @@ async function findOrCreateContact(
     contactPayload.email = email;
   }
 
-  const createResponse = await fetch("https://services.leadconnectorhq.com/contacts/", {
+  const createResponse = await fetchGHL("https://services.leadconnectorhq.com/contacts/", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -346,7 +386,7 @@ async function updateContactPhoto(contactId: string, photoUrl: string, token: st
   
   console.log("Updating contact photo:", { contactId, photoUrl: photoUrl.substring(0, 50) });
   
-  const response = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
+  const response = await fetchGHL(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
     method: "PUT",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -374,7 +414,7 @@ async function assignContactToUser(contactId: string, userId: string, token: str
   
   console.log("Assigning contact to user:", { contactId, userId });
   
-  const response = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
+  const response = await fetchGHL(`https://services.leadconnectorhq.com/contacts/${contactId}`, {
     method: "PUT",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -399,7 +439,7 @@ async function assignContactToUser(contactId: string, userId: string, token: str
 // Helper to send text message to GHL (inbound = from lead)
 // Returns the GHL messageId if available
 async function sendMessageToGHL(contactId: string, message: string, token: string): Promise<string | null> {
-  const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+  const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -447,7 +487,7 @@ async function sendOutboundMessageToGHL(contactId: string, message: string, toke
   });
 
   // Use /inbound endpoint with direction=outbound - this renders the message without triggering webhooks
-  const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+  const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -470,7 +510,7 @@ async function sendOutboundMessageToGHL(contactId: string, message: string, toke
 // Helper to get or create conversation for a contact
 async function getOrCreateConversation(contactId: string, locationId: string, token: string): Promise<string> {
   // First try to get existing conversation
-  const searchResponse = await fetch(
+  const searchResponse = await fetchGHL(
     `https://services.leadconnectorhq.com/conversations/search?locationId=${locationId}&contactId=${contactId}`,
     {
       headers: {
@@ -489,7 +529,7 @@ async function getOrCreateConversation(contactId: string, locationId: string, to
   }
 
   // Create new conversation if not found
-  const createResponse = await fetch("https://services.leadconnectorhq.com/conversations/", {
+  const createResponse = await fetchGHL("https://services.leadconnectorhq.com/conversations/", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -516,7 +556,7 @@ async function getOrCreateConversation(contactId: string, locationId: string, to
 // Helper to send media message to GHL with attachments (inbound = from lead)
 // Returns the GHL messageId if available
 async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token: string, caption?: string): Promise<string | null> {
-  const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+  const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -562,7 +602,7 @@ async function sendOutboundMediaToGHL(contactId: string, attachmentUrls: string[
     attachments: attachmentUrls.length,
   });
 
-  const response = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+  const response = await fetchGHL(`https://services.leadconnectorhq.com/conversations/messages`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -836,7 +876,7 @@ serve(async (req) => {
       // Send media to GHL
       if (fdIsFromMe) {
         // Outbound media - use inbound endpoint with direction=outbound to avoid webhook loops
-        const fdRes = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+        const fdRes = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${fdToken}`,
@@ -1132,7 +1172,7 @@ serve(async (req) => {
                 });
                 
                 // Send as inbound message (from lead)
-                const response = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+                const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
                   method: "POST",
                   headers: {
                     "Authorization": `Bearer ${token}`,
@@ -1225,7 +1265,7 @@ serve(async (req) => {
                   const token = await getValidToken(supabase, subaccount, settings);
                   const formattedEditComment = `✏️ Editado: "${originalText}"\n\n${newText}`;
 
-                  const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+                  const icRes = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
                     method: "POST",
                     headers: {
                       "Authorization": `Bearer ${token}`,
@@ -1952,7 +1992,7 @@ serve(async (req) => {
               const conversationId = conversationData?.conversations?.[0]?.id;
               
               if (conversationId) {
-                const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+                const icRes = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
                   method: "POST",
                   headers: {
                     "Authorization": `Bearer ${token}`,
@@ -2026,7 +2066,7 @@ serve(async (req) => {
       
       console.log("Updating contact source with instance phone:", { contactId: contact.id, phoneSource });
       try {
-        const sourceResp = await fetch(`https://services.leadconnectorhq.com/contacts/${contact.id}`, {
+        const sourceResp = await fetchGHL(`https://services.leadconnectorhq.com/contacts/${contact.id}`, {
           method: "PUT",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -2278,7 +2318,7 @@ serve(async (req) => {
           const convData = await convSearchRes.json();
           const convId = convData?.conversations?.[0]?.id;
           if (convId) {
-            await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+            await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
               method: "POST",
               headers: {
                 "Authorization": "Bearer " + token,
@@ -2336,7 +2376,7 @@ serve(async (req) => {
         console.log("Sending outbound media to GHL (inbound endpoint):", { publicMediaUrl, textMessage });
         const before = Date.now();
         // Use /inbound endpoint with direction=outbound to avoid triggering GHL webhooks
-        const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
+        const res = await fetchGHL(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -2410,7 +2450,7 @@ serve(async (req) => {
               ? `↩️ Respondendo a: "${originalText.substring(0, 100)}${originalText.length > 100 ? '...' : ''}"\n\n${textMessage}`
               : textMessage;
 
-            const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+            const icRes = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
               method: "POST",
               headers: {
                 "Authorization": `Bearer ${token}`,
@@ -2461,7 +2501,7 @@ serve(async (req) => {
           // Normal outbound text (no reply context) – send as regular outbound message
           console.log("Sending outbound text to GHL (inbound endpoint):", { textMessage: textMessage?.substring(0, 50) });
           const before = Date.now();
-          const res = await fetch(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
+          const res = await fetchGHL(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${token}`,
