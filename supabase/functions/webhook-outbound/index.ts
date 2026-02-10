@@ -10,6 +10,46 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Retry wrapper for GHL API calls with exponential backoff
+async function fetchGHL(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("retry-after");
+        const waitMs = retryAfter
+          ? parseInt(retryAfter, 10) * 1000
+          : Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.warn(`[GHL] Rate limited (429), retry ${attempt + 1}/${maxRetries} in ${waitMs}ms: ${url}`);
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, waitMs));
+          continue;
+        }
+      }
+      if (response.status >= 500 && attempt < maxRetries) {
+        const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.warn(`[GHL] Server error (${response.status}), retry ${attempt + 1}/${maxRetries} in ${waitMs}ms`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      return response;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.warn(`[GHL] Network error, retry ${attempt + 1}/${maxRetries} in ${waitMs}ms:`, lastError.message);
+        await new Promise((r) => setTimeout(r, waitMs));
+      }
+    }
+  }
+  throw lastError || new Error("fetchGHL: all retries exhausted");
+}
+
 async function postJson(
   url: string,
   instanceToken: string,
@@ -117,7 +157,7 @@ async function getValidToken(supabase: any, subaccount: any, settings: any): Pro
       user_type: "Location",
     });
 
-    const tokenResponse = await fetch("https://services.leadconnectorhq.com/oauth/token", {
+    const tokenResponse = await fetchGHL("https://services.leadconnectorhq.com/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -154,7 +194,7 @@ async function getValidToken(supabase: any, subaccount: any, settings: any): Pro
 
 // Returns { phone, email } from GHL contact
 async function fetchGhlContact(token: string, contactId: string): Promise<{ phone: string; email: string }> {
-  const contactRes = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}`,
+  const contactRes = await fetchGHL(`https://services.leadconnectorhq.com/contacts/${contactId}`,
     {
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -631,7 +671,7 @@ async function updateGhlContactPhoto(
         const formData = new FormData();
         formData.append("file", imageBlob, "group-photo.jpg");
         
-        const uploadResponse = await fetch(
+        const uploadResponse = await fetchGHL(
           `https://services.leadconnectorhq.com/contacts/${ctx.contactId}/photo`,
           {
             method: "PUT",
@@ -666,7 +706,7 @@ async function updateGhlContactPhoto(
 
     for (const fields of fieldAttempts) {
       try {
-        const response = await fetch(
+        const response = await fetchGHL(
           `https://services.leadconnectorhq.com/contacts/${ctx.contactId}`,
           {
             method: "PUT",
@@ -790,7 +830,7 @@ async function sendGhlOutboundMessage(
       status: "delivered",
     };
 
-    const response = await fetch(`https://services.leadconnectorhq.com/conversations/messages`, {
+    const response = await fetchGHL(`https://services.leadconnectorhq.com/conversations/messages`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -954,7 +994,7 @@ async function processGroupCommand(
               console.log("[GHL] Creating group contact:", { contactName, groupPhone, groupEmail, locationId: ghlLocationId });
               
               // Search for existing contact
-              const searchRes = await fetch(
+              const searchRes = await fetchGHL(
                 `https://services.leadconnectorhq.com/contacts/?locationId=${ghlLocationId}&query=${groupPhone}`,
                 {
                   headers: {
@@ -973,7 +1013,7 @@ async function processGroupCommand(
                   console.log("[GHL] Found existing group contact:", ghlContactId);
                   // Update email if needed
                   if (!searchData.contacts[0].email) {
-                    await fetch(`https://services.leadconnectorhq.com/contacts/${ghlContactId}`, {
+                    await fetchGHL(`https://services.leadconnectorhq.com/contacts/${ghlContactId}`, {
                       method: "PUT",
                       headers: {
                         "Authorization": `Bearer ${ghlToken}`,
@@ -988,7 +1028,7 @@ async function processGroupCommand(
               
               // Create contact if not found
               if (!ghlContactId) {
-                const createRes = await fetch("https://services.leadconnectorhq.com/contacts/", {
+                const createRes = await fetchGHL("https://services.leadconnectorhq.com/contacts/", {
                   method: "POST",
                   headers: {
                     "Authorization": `Bearer ${ghlToken}`,
@@ -1025,7 +1065,7 @@ async function processGroupCommand(
               
               // Send ✅ as inbound message to create the conversation
               if (ghlContactId) {
-                const msgRes = await fetch("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+                const msgRes = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
                   method: "POST",
                   headers: {
                     "Authorization": `Bearer ${ghlToken}`,
@@ -1882,7 +1922,7 @@ async function processGroupCommand(
             try {
               const token = await getValidToken(ghlContext.supabase, ghlContext.subaccount, ghlContext.settings);
               if (token) {
-                const icRes = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+                const icRes = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
                   method: "POST",
                   headers: {
                     Authorization: `Bearer ${token}`,
