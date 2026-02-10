@@ -28,11 +28,6 @@ import { SendButtonsDialog } from "@/components/dashboard/SendButtonsDialog";
 
 import { useSidebarState } from "@/hooks/useSidebarState";
 
-const navItems = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/settings", icon: Settings, label: "Configurações" },
-];
-
 const adminNavItems = [
   { to: "/admin/health", icon: Activity, label: "Saúde do Sistema" },
 ];
@@ -70,6 +65,47 @@ export function Sidebar() {
     window.open(oauthUrl, "_blank");
   };
 
+  // Helper to render a nav link item
+  const renderNavItem = (item: { to: string; icon: any; label: string }) => {
+    const isActive = location.pathname === item.to;
+    return (
+      <TooltipProvider key={item.to} delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <NavLink
+              to={item.to}
+              className={cn(
+                "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 relative overflow-hidden",
+                isActive
+                  ? "bg-primary/15 text-primary shadow-sm shadow-primary/10"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              )}
+            >
+              {isActive && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
+              )}
+              <item.icon className={cn(
+                "h-5 w-5 flex-shrink-0 transition-transform duration-200",
+                isActive ? "text-primary" : "group-hover:scale-110"
+              )} />
+              <span className={cn(
+                "transition-all duration-300 whitespace-nowrap",
+                collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
+              )}>
+                {item.label}
+              </span>
+            </NavLink>
+          </TooltipTrigger>
+          {collapsed && (
+            <TooltipContent side="right" className="font-medium">
+              {item.label}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
   return (
     <>
       {/* Mobile overlay */}
@@ -93,87 +129,79 @@ export function Sidebar() {
       >
         {/* Navigation */}
         <nav className="flex-1 p-3 space-y-1.5 mt-2">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.to;
-            return (
-              <TooltipProvider key={item.to} delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <NavLink
-                      to={item.to}
-                      className={cn(
-                        "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 relative overflow-hidden",
-                        isActive
-                          ? "bg-primary/15 text-primary shadow-sm shadow-primary/10"
-                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                      )}
-                    >
-                      {/* Active indicator bar */}
-                      {isActive && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
-                      )}
-                      <item.icon className={cn(
-                        "h-5 w-5 flex-shrink-0 transition-transform duration-200",
-                        isActive ? "text-primary" : "group-hover:scale-110"
+          {/* Dashboard */}
+          {renderNavItem({ to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" })}
+
+          {/* Comece por aqui Dropdown */}
+          <div className="pt-1">
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      if (collapsed) {
+                        if (oauthUrl && hasActiveSubscription) handleInstallApp();
+                      } else {
+                        setStartHereOpen(!startHereOpen);
+                      }
+                    }}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 w-full text-left",
+                      "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    )}
+                  >
+                    <Rocket className="h-5 w-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+                    <span className={cn(
+                      "transition-all duration-300 whitespace-nowrap flex-1",
+                      collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
+                    )}>
+                      Comece por aqui
+                    </span>
+                    {!collapsed && (
+                      <ChevronDown className={cn(
+                        "h-4 w-4 text-sidebar-foreground/40 transition-transform duration-200",
+                        startHereOpen && "rotate-180"
                       )} />
-                      <span className={cn(
-                        "transition-all duration-300 whitespace-nowrap",
-                        collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
-                      )}>
-                        {item.label}
-                      </span>
-                    </NavLink>
-                  </TooltipTrigger>
-                  {collapsed && (
-                    <TooltipContent side="right" className="font-medium">
-                      {item.label}
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-            );
-          })}
+                    )}
+                  </button>
+                </TooltipTrigger>
+                {collapsed && (
+                  <TooltipContent side="right" className="font-medium">
+                    Comece por aqui
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+
+            {startHereOpen && !collapsed && (
+              <div className="mt-1 ml-3 pl-3 border-l border-white/[0.08] space-y-0.5 animate-fade-in">
+                <p className="px-3 py-1.5 text-xs font-semibold text-sidebar-foreground/40 uppercase tracking-wider">
+                  Passo a passo
+                </p>
+                {oauthUrl && (
+                  <button
+                    onClick={hasActiveSubscription ? handleInstallApp : undefined}
+                    disabled={!hasActiveSubscription}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
+                      hasActiveSubscription
+                        ? "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        : "text-sidebar-foreground/30 cursor-not-allowed"
+                    )}
+                  >
+                    <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                    <span className="whitespace-nowrap">Instalar App</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Configurações */}
+          {renderNavItem({ to: "/settings", icon: Settings, label: "Configurações" })}
 
           {/* Admin items */}
-          {isAdmin && adminNavItems.map((item) => {
-            const isActive = location.pathname === item.to;
-            return (
-              <TooltipProvider key={item.to} delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <NavLink
-                      to={item.to}
-                      className={cn(
-                        "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 relative overflow-hidden",
-                        isActive
-                          ? "bg-primary/15 text-primary shadow-sm shadow-primary/10"
-                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                      )}
-                    >
-                      {isActive && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
-                      )}
-                      <item.icon className={cn(
-                        "h-5 w-5 flex-shrink-0 transition-transform duration-200",
-                        isActive ? "text-primary" : "group-hover:scale-110"
-                      )} />
-                      <span className={cn(
-                        "transition-all duration-300 whitespace-nowrap",
-                        collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
-                      )}>
-                        {item.label}
-                      </span>
-                    </NavLink>
-                  </TooltipTrigger>
-                  {collapsed && (
-                    <TooltipContent side="right" className="font-medium">
-                      {item.label}
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-            );
-          })}
+          {isAdmin && adminNavItems.map((item) => renderNavItem(item))}
 
           {/* Utilidades Dropdown */}
           <div className="pt-1">
@@ -216,7 +244,6 @@ export function Sidebar() {
               </Tooltip>
             </TooltipProvider>
 
-            {/* Dropdown items */}
             {utilitiesOpen && !collapsed && (
               <div className="mt-1 ml-3 pl-3 border-l border-white/[0.08] space-y-0.5 animate-fade-in">
                 <button
@@ -259,73 +286,6 @@ export function Sidebar() {
                   <MousePointerClick className="h-4 w-4 flex-shrink-0" />
                   <span className="whitespace-nowrap">Enviar Botões</span>
                 </button>
-              </div>
-            )}
-          </div>
-
-          {/* Comece por aqui Dropdown */}
-          <div className="pt-1">
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => {
-                      if (collapsed) {
-                        // When collapsed, open directly if has oauth
-                        if (oauthUrl && hasActiveSubscription) handleInstallApp();
-                      } else {
-                        setStartHereOpen(!startHereOpen);
-                      }
-                    }}
-                    className={cn(
-                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 w-full text-left",
-                      "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                    )}
-                  >
-                    <Rocket className="h-5 w-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
-                    <span className={cn(
-                      "transition-all duration-300 whitespace-nowrap flex-1",
-                      collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 w-auto"
-                    )}>
-                      Comece por aqui
-                    </span>
-                    {!collapsed && (
-                      <ChevronDown className={cn(
-                        "h-4 w-4 text-sidebar-foreground/40 transition-transform duration-200",
-                        startHereOpen && "rotate-180"
-                      )} />
-                    )}
-                  </button>
-                </TooltipTrigger>
-                {collapsed && (
-                  <TooltipContent side="right" className="font-medium">
-                    Comece por aqui
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-
-            {/* Dropdown items */}
-            {startHereOpen && !collapsed && (
-              <div className="mt-1 ml-3 pl-3 border-l border-white/[0.08] space-y-0.5 animate-fade-in">
-                <p className="px-3 py-1.5 text-xs font-semibold text-sidebar-foreground/40 uppercase tracking-wider">
-                  Passo a passo
-                </p>
-                {oauthUrl && (
-                  <button
-                    onClick={hasActiveSubscription ? handleInstallApp : undefined}
-                    disabled={!hasActiveSubscription}
-                    className={cn(
-                      "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
-                      hasActiveSubscription
-                        ? "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                        : "text-sidebar-foreground/30 cursor-not-allowed"
-                    )}
-                  >
-                    <ExternalLink className="h-4 w-4 flex-shrink-0" />
-                    <span className="whitespace-nowrap">Instalar App</span>
-                  </button>
-                )}
               </div>
             )}
           </div>
