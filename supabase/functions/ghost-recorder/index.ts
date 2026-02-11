@@ -19,28 +19,28 @@ const GHOST_RECORDER_SCRIPT = `(function() {
         send: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-green-500"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>'
     };
 
+    function cleanPhone(raw) {
+        if (!raw) return null;
+        var clean = raw.replace(/\\D/g, '');
+        return clean.length >= 8 ? clean : null;
+    }
+
+    function extractPhone() {
+        var input = document.querySelector('input.hr-input-phone');
+        if (input && input.value) return cleanPhone(input.value);
+        var activeCard = document.querySelector('[data-is-active="true"][phone]');
+        if (activeCard) return cleanPhone(activeCard.getAttribute('phone'));
+        return null;
+    }
+
     function extractContextData() {
         var url = window.location.pathname;
         var locMatch = url.match(/\\/location\\/([^\\/]+)/);
         var convMatch = url.match(/\\/conversations\\/[^\\/]+\\/([^\\/]+)/);
-        var contMatch = url.match(/\\/contacts\\/detail\\/([^\\/]+)/);
         var locationId = locMatch ? locMatch[1] : null;
         var conversationId = convMatch ? convMatch[1] : null;
-        var contactId = contMatch ? contMatch[1] : null;
-        var phoneEl = document.querySelector('[data-test="phone-number"]') || 
-                      document.querySelector('a[href^="tel:"]');
-        var phone = phoneEl ? (phoneEl.textContent || '').trim() : null;
-        if (!phone) {
-            var phoneSpans = document.querySelectorAll('span');
-            for (var i = 0; i < phoneSpans.length; i++) {
-                var txt = phoneSpans[i].textContent || '';
-                if (txt.match(/^\\+?\\d[\\d\\s\\-()]{7,}$/)) {
-                    phone = txt.trim();
-                    break;
-                }
-            }
-        }
-        return { locationId: locationId, conversationId: conversationId, contactId: contactId, phone: phone };
+        var phone = extractPhone();
+        return { locationId: locationId, conversationId: conversationId, phone: phone };
     }
 
     function blobToBase64(blob) {
@@ -60,6 +60,10 @@ const GHOST_RECORDER_SCRIPT = `(function() {
                 alert("Erro: N\\u00e3o foi poss\\u00edvel detectar o locationId da URL.");
                 return false;
             }
+            if (!ctx.phone) {
+                alert("Erro: N\\u00e3o foi poss\\u00edvel detectar o telefone do lead.");
+                return false;
+            }
 
             var payload = {
                 audio: base64Audio,
@@ -69,7 +73,6 @@ const GHOST_RECORDER_SCRIPT = `(function() {
                 timestamp: new Date().toISOString()
             };
             if (ctx.conversationId) payload.conversationId = ctx.conversationId;
-            if (ctx.contactId) payload.contactId = ctx.contactId;
 
             return fetch(BRIDGE_API + "/ghost-audio", {
                 method: 'POST',

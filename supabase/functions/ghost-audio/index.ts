@@ -11,17 +11,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { audio, format, locationId, contactId, conversationId, phone } = await req.json();
+    const { audio, format, locationId, conversationId, phone } = await req.json();
 
-    if (!audio || !locationId) {
-      return new Response(JSON.stringify({ error: "audio and locationId are required" }), {
+    if (!audio || !locationId || !phone) {
+      return new Response(JSON.stringify({ error: "audio, locationId and phone are required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     console.log("[ghost-audio] Received:", { 
-      format, locationId, contactId, conversationId, 
+      format, locationId, conversationId, 
       phone, audioSize: audio?.length 
     });
 
@@ -47,50 +47,14 @@ Deno.serve(async (req) => {
 
     const sub = subaccount[0];
 
-    // 2. Resolve the target phone number from context
-    let targetPhone = phone;
-
-    // If no phone provided, try to resolve from contactId via GHL API or preferences
-    if (!targetPhone && contactId) {
-      // Try to get phone from contact_instance_preferences
-      const { data: pref } = await supabase
-        .from("contact_instance_preferences")
-        .select("lead_phone")
-        .eq("contact_id", contactId)
-        .eq("location_id", locationId)
-        .limit(1);
-      
-      if (pref?.length && pref[0].lead_phone) {
-        targetPhone = pref[0].lead_phone;
-      }
-    }
-
-    if (!targetPhone) {
-      // Try ghl_contact_phone_mapping
-      if (contactId) {
-        const { data: mapping } = await supabase
-          .from("ghl_contact_phone_mapping")
-          .select("original_phone")
-          .eq("contact_id", contactId)
-          .eq("location_id", locationId)
-          .limit(1);
-        
-        if (mapping?.length) {
-          targetPhone = mapping[0].original_phone;
-        }
-      }
-    }
-
-    if (!targetPhone) {
-      console.error("[ghost-audio] Could not resolve target phone");
-      return new Response(JSON.stringify({ error: "Could not resolve target phone number" }), {
+    // 2. Clean phone number directly from the provided phone
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length < 8) {
+      return new Response(JSON.stringify({ error: "Invalid phone number" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    // Clean phone number
-    const cleanPhone = targetPhone.replace(/\D/g, "");
     console.log("[ghost-audio] Target phone:", cleanPhone);
 
     // 3. Resolve the correct instance for this contact
