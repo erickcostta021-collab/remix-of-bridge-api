@@ -730,12 +730,10 @@ serve(async (req) => {
         );
       }
 
-      if (!mapping?.uazapi_message_id) {
-        console.log("❌ Message not mapped or missing UAZAPI ID:", ghl_id);
-        return new Response(
-          JSON.stringify({ error: "Message not found or not mapped to WhatsApp" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      const hasMapping = !!mapping?.uazapi_message_id;
+      
+      if (!hasMapping) {
+        console.log("⚠️ No mapping found for ghl_id:", ghl_id, "- will send without quote");
       }
 
       // Get instance configuration for this location
@@ -751,15 +749,32 @@ serve(async (req) => {
       // Build the phone number - try from mapping first, then from request
       let phoneNumber = contact_phone;
       
-      if (!phoneNumber && mapping.contact_id) {
+      const contactId = mapping?.contact_id || null;
+      
+      if (!phoneNumber && contactId) {
         const { data: phoneMapping } = await supabase
           .from("ghl_contact_phone_mapping")
           .select("original_phone")
-          .eq("contact_id", mapping.contact_id)
+          .eq("contact_id", contactId)
           .maybeSingle();
         
         if (phoneMapping?.original_phone) {
           phoneNumber = phoneMapping.original_phone.replace(/\D/g, "");
+        }
+      }
+      
+      // If still no phone and no mapping, try to find from recent messages in this location
+      if (!phoneNumber && !hasMapping) {
+        const { data: recentMapping } = await supabase
+          .from("ghl_contact_phone_mapping")
+          .select("original_phone")
+          .eq("location_id", location_id)
+          .order("updated_at", { ascending: false })
+          .limit(1);
+        
+        if (recentMapping?.[0]?.original_phone) {
+          phoneNumber = recentMapping[0].original_phone.replace(/\D/g, "");
+          console.log("📱 Found phone from recent mapping:", phoneNumber);
         }
       }
 
@@ -770,22 +785,24 @@ serve(async (req) => {
         );
       }
 
+      // Build send payload - with or without replyid
+      const sendBody: Record<string, string> = { 
+        number: phoneNumber, 
+        text: text 
+      };
+      if (hasMapping) {
+        sendBody.replyid = mapping.uazapi_message_id;
+      }
+
       console.log("↩️ Reply payload:", { 
         number: phoneNumber, 
         text, 
-        replyid: mapping.uazapi_message_id 
+        replyid: hasMapping ? mapping.uazapi_message_id : "(no mapping - sending without quote)",
       });
 
-      // Send reply using /send/text with replyid
+      // Send reply using /send/text (with or without replyid)
       const result = await tryUazapiEndpoints(config.baseUrl, config.token, [
-        { 
-          path: "/send/text", 
-          body: { 
-            number: phoneNumber, 
-            text: text, 
-            replyid: mapping.uazapi_message_id 
-          } 
-        },
+        { path: "/send/text", body: sendBody },
       ]);
 
       if (!result.success) {
@@ -808,11 +825,11 @@ serve(async (req) => {
         console.log("⚠️ Could not parse reply response for message ID");
       }
 
-      // Send InternalComment to GHL with reply context (like we do for edits)
+      // Send InternalComment to GHL with reply context
       let ghlInternalCommentSent = false;
       // Generate friendly label for media types when message_text is empty
-      let originalText = mapping.message_text || '';
-      if (!originalText) {
+      let originalText = mapping?.message_text || '';
+      if (!originalText && mapping) {
         const mType = (mapping.message_type || '').toLowerCase();
         if (mType.includes('audio') || mType.includes('ptt')) {
           originalText = 'Áudio';
@@ -829,7 +846,6 @@ serve(async (req) => {
         } else if (mType.includes('location')) {
           originalText = 'Localização';
         } else if (mType === 'media' && uazapiQuotedMessage) {
-          // Fallback: detect from UAZAPI response quotedMessage for legacy "media" entries
           if (uazapiQuotedMessage.audioMessage) {
             originalText = 'Áudio';
           } else if (uazapiQuotedMessage.imageMessage) {
@@ -847,8 +863,15 @@ serve(async (req) => {
           originalText = 'Mídia';
         }
       }
+      // For unmapped messages, use the text from the toolkit's replyContext
+      if (!originalText && !hasMapping) {
+        originalText = '(mensagem)';
+      }
       
-      if (config?.subaccount && config?.settings?.ghl_client_id && mapping.contact_id) {
+      // Determine contactId for InternalComment
+      const effectiveContactId = contactId || null;
+      
+      if (config?.subaccount && config?.settings?.ghl_client_id && effectiveContactId) {
         try {
           const ghlToken = await getValidToken(supabase, config.subaccount, config.settings);
           
@@ -858,7 +881,7 @@ serve(async (req) => {
           // Build request body with optional userId for attribution
           const requestBody: Record<string, string> = {
             type: "InternalComment",
-            contactId: mapping.contact_id,
+            contactId: effectiveContactId,
             message: formattedReplyMessage,
           };
           
@@ -869,10 +892,11 @@ serve(async (req) => {
           }
           
           console.log("📝 Sending reply InternalComment to GHL:", {
-            contactId: mapping.contact_id,
+            contactId: effectiveContactId,
             userId: effectiveUserId || "(not assigned)",
             originalText: originalText?.substring(0, 30),
             replyText: text?.substring(0, 30),
+            hasMapping,
           });
           
           const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
@@ -903,7 +927,8 @@ serve(async (req) => {
           success: true, 
           whatsapp_sent: true,
           new_message_id: newMessageId,
-          ghl_internal_comment: ghlInternalCommentSent
+          ghl_internal_comment: ghlInternalCommentSent,
+          had_quote: hasMapping
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
