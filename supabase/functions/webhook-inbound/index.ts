@@ -930,7 +930,7 @@ serve(async (req) => {
               location_id: fdSubaccount.location_id,
               contact_id: fdContact.id,
               message_text: fdCaption || "",
-              message_type: "media",
+              message_type: fdMimeType.startsWith("audio") ? "media:audio" : fdMimeType.startsWith("image") ? "media:image" : fdMimeType.startsWith("video") ? "media:video" : fdMimeType.startsWith("application") ? "media:document" : "media",
               from_me: true,
               original_timestamp: new Date().toISOString(),
             }, { onConflict: "ghl_message_id" });
@@ -948,7 +948,7 @@ serve(async (req) => {
             location_id: fdSubaccount.location_id,
             contact_id: fdContact.id,
             message_text: fdCaption || "",
-            message_type: "media",
+            message_type: fdMimeType.startsWith("audio") ? "media:audio" : fdMimeType.startsWith("image") ? "media:image" : fdMimeType.startsWith("video") ? "media:video" : fdMimeType.startsWith("application") ? "media:document" : "media",
             from_me: false,
             original_timestamp: new Date().toISOString(),
           }, { onConflict: "ghl_message_id" });
@@ -2456,7 +2456,7 @@ serve(async (req) => {
               location_id: subaccount.location_id,
               contact_id: contact.id,
               message_text: textMessage || "",
-              message_type: "media",
+              message_type: `media:${(mediaType || "").toLowerCase().replace("message", "")}` || "media",
               from_me: true,
               original_timestamp: new Date().toISOString(),
             }, { onConflict: "ghl_message_id" });
@@ -2677,7 +2677,7 @@ serve(async (req) => {
             location_id: subaccount.location_id,
             contact_id: contact.id,
             message_text: mediaCaption || "",
-            message_type: "media",
+            message_type: `media:${(mediaType || "").toLowerCase().replace("message", "")}` || "media",
             from_me: false,
             original_timestamp: new Date().toISOString(),
           }, { onConflict: "ghl_message_id" });
