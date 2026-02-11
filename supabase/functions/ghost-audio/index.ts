@@ -144,19 +144,34 @@ async function resolveContactId(
   return null;
 }
 
-// Extract media URL from UAZAPI response
-function extractMediaUrl(responseBody: string): string | null {
+// Upload audio to Supabase storage and return public URL
+async function uploadAudioToStorage(supabase: any, audioBase64: string, mimeType: string): Promise<string | null> {
   try {
-    const data = JSON.parse(responseBody);
-    // Try common response shapes from UAZAPI
-    const url = data?.mediaUrl || data?.url || data?.file?.url || data?.message?.mediaUrl || data?.result?.url;
-    if (url && typeof url === "string" && url.startsWith("http")) {
-      return url;
+    const ext = mimeType.includes("ogg") ? "ogg" : mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : "ogg";
+    const fileName = `audio_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    const binaryString = atob(audioBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
     }
-  } catch {
-    // not JSON or no URL field
+
+    const { error } = await supabase.storage
+      .from("ghost-audio")
+      .upload(fileName, bytes, { contentType: mimeType, upsert: false });
+
+    if (error) {
+      console.error("[ghost-audio] Storage upload failed:", error.message);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage.from("ghost-audio").getPublicUrl(fileName);
+    console.log("[ghost-audio] Audio uploaded to storage:", urlData.publicUrl);
+    return urlData.publicUrl;
+  } catch (err) {
+    console.error("[ghost-audio] Storage upload error:", err);
+    return null;
   }
-  return null;
 }
 
 // Mirror the audio as an outbound message in GHL conversation
@@ -328,7 +343,6 @@ Deno.serve(async (req) => {
     let lastStatus = 0;
     let lastBody = "";
     let audioSent = false;
-    let uazapiMediaUrl: string | null = null;
 
     for (const attempt of attempts) {
       const url = baseUrl + attempt.path;
@@ -348,8 +362,6 @@ Deno.serve(async (req) => {
         if (res.ok) {
           console.log("[ghost-audio] ✅ Audio sent successfully via", attempt.path);
           audioSent = true;
-          uazapiMediaUrl = extractMediaUrl(lastBody);
-          console.log("[ghost-audio] Extracted media URL from UAZAPI:", uazapiMediaUrl);
           break;
         }
       } catch (e) {
@@ -365,9 +377,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 6. Mirror in GHL using UAZAPI media URL (no storage needed)
+    // 6. Upload audio to storage and mirror in GHL
     try {
-
+      const audioUrl = await uploadAudioToStorage(supabase, audio, format || "audio/ogg");
       // Get user_settings for OAuth credentials
       let { data: settings } = await supabase
         .from("user_settings")
@@ -392,7 +404,7 @@ Deno.serve(async (req) => {
         const contactId = await resolveContactId(supabase, cleanPhone, locationId, ghlToken);
 
         if (contactId) {
-          await mirrorAudioInGHL(contactId, ghlToken, uazapiMediaUrl);
+          await mirrorAudioInGHL(contactId, ghlToken, audioUrl);
         } else {
           console.log("[ghost-audio] Contact not found in GHL, skipping mirror");
         }
