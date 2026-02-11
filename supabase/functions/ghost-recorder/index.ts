@@ -156,11 +156,19 @@ const GHOST_RECORDER_SCRIPT = `/**
         actionGroup.style.pointerEvents = "none";
 
         try {
-            const wavBlob = await convertToWav(audioBlob);
-            const nativeFile = new File([wavBlob], 'recording.wav', { type: 'audio/wav' });
-            nativeGHLUpload(nativeFile);
+            // Tenta WAV primeiro, fallback para webm raw
+            let fileToSend;
+            try {
+                const wavBlob = await convertToWav(audioBlob);
+                fileToSend = new File([wavBlob], 'recording.mp3', { type: 'audio/mpeg' });
+                console.log('DOUG.TECH: Usando WAV convertido, size:', wavBlob.size);
+            } catch(convErr) {
+                console.warn('DOUG.TECH: Fallback para webm raw', convErr);
+                fileToSend = new File([audioBlob], 'recording.mp3', { type: 'audio/mpeg' });
+            }
+            nativeGHLUpload(fileToSend);
         } catch(e) {
-            console.error('DOUG.TECH: Erro na conversão WAV', e);
+            console.error('DOUG.TECH: Erro no envio', e);
         }
         
         // Reset após a injeção
