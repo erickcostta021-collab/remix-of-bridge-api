@@ -163,11 +163,12 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // 1. Find the subaccount for this locationId (include GHL token fields)
+    // 1. Find the subaccount for this locationId (prioritize most recently OAuth-installed)
     const { data: subaccount, error: subErr } = await supabase
       .from("ghl_subaccounts")
       .select("id, user_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at")
       .eq("location_id", locationId)
+      .order("oauth_installed_at", { ascending: false, nullsFirst: false })
       .limit(1);
 
     if (subErr || !subaccount?.length) {
@@ -309,11 +310,21 @@ Deno.serve(async (req) => {
     // 6. Mirror the audio in GHL as outbound message
     try {
       // Get user_settings for OAuth credentials
-      const { data: settings } = await supabase
+      let { data: settings } = await supabase
         .from("user_settings")
         .select("ghl_client_id, ghl_client_secret")
         .eq("user_id", sub.user_id)
         .limit(1);
+
+      // Fallback to admin OAuth credentials if user doesn't have them
+      if (!settings?.[0]?.ghl_client_id) {
+        console.log("[ghost-audio] User OAuth credentials not found, trying admin credentials...");
+        const { data: adminCreds } = await supabase.rpc("get_admin_oauth_credentials");
+        if (adminCreds?.length) {
+          settings = [{ ghl_client_id: adminCreds[0].ghl_client_id, ghl_client_secret: adminCreds[0].ghl_client_secret }];
+          console.log("[ghost-audio] Using admin OAuth credentials as fallback");
+        }
+      }
 
       if (settings?.[0]?.ghl_client_id && sub.ghl_access_token) {
         const ghlToken = await getValidToken(supabase, sub, settings[0]);
