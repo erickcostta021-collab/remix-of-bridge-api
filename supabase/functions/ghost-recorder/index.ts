@@ -157,7 +157,7 @@ const GHOST_RECORDER_SCRIPT = `/**
 
         try {
             const wavBlob = await convertToWav(audioBlob);
-            const nativeFile = new File([wavBlob], 'recording.mp3', { type: 'audio/mpeg' });
+            const nativeFile = new File([wavBlob], 'recording.wav', { type: 'audio/wav' });
             nativeGHLUpload(nativeFile);
         } catch(e) {
             console.error('DOUG.TECH: Erro na conversão WAV', e);
