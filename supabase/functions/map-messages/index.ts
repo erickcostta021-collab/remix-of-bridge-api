@@ -807,7 +807,28 @@ serve(async (req) => {
 
       // Send InternalComment to GHL with reply context (like we do for edits)
       let ghlInternalCommentSent = false;
-      const originalText = mapping.message_text || '(mensagem original)';
+      // Generate friendly label for media types when message_text is empty
+      let originalText = mapping.message_text || '';
+      if (!originalText) {
+        const mType = (mapping.message_type || '').toLowerCase();
+        if (mType.includes('audio') || mType.includes('ptt')) {
+          originalText = 'Áudio';
+        } else if (mType.includes('image')) {
+          originalText = 'Imagem';
+        } else if (mType.includes('video')) {
+          originalText = 'Vídeo';
+        } else if (mType.includes('document')) {
+          originalText = 'Documento';
+        } else if (mType.includes('sticker')) {
+          originalText = 'Figurinha';
+        } else if (mType.includes('contact')) {
+          originalText = 'Contato';
+        } else if (mType.includes('location')) {
+          originalText = 'Localização';
+        } else {
+          originalText = 'Mídia';
+        }
+      }
       
       if (config?.subaccount && config?.settings?.ghl_client_id && mapping.contact_id) {
         try {
