@@ -5,7 +5,7 @@ const corsHeaders = {
 };
 
 const GHOST_RECORDER_SCRIPT = `(function() {
-    console.log("\\ud83d\\ude80 DOUG.TECH: Stevo Core Engine v3.1 (Anti-415)...");
+    console.log("\\ud83d\\ude80 DOUG.TECH: Stevo Engine V3 Loaded...");
 
     var mediaRecorder = null, audioChunks = [], audioBlob = null;
     var isRecording = false, timerInterval, startTime;
@@ -17,44 +17,47 @@ const GHOST_RECORDER_SCRIPT = `(function() {
         trash: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-400"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>'
     };
 
-    function processAudioLikeStevo(blob) {
-        return blob.arrayBuffer().then(function(buffer) {
-            var reconstructedBlob = new Blob([buffer], { type: 'audio/mpeg' });
-
-            var file = new File([reconstructedBlob], 'recording-' + Date.now() + '.mp3', {
-                type: 'audio/mpeg',
-                lastModified: Date.now()
-            });
-
-            var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') ||
-                            document.querySelector('input[type="file"][multiple]');
-
-            if (fileInput) {
-                var dt = new DataTransfer();
-                dt.items.add(file);
-                fileInput.files = dt.files;
-
-                var changeEvent = new Event('change', { bubbles: true, composed: true });
-                fileInput.dispatchEvent(changeEvent);
-
-                setTimeout(function() {
-                    var sendPath = document.querySelector('button svg path[d*="M2.01 21L23 12"]');
-                    var sendBtn = sendPath ? sendPath.closest('button') : null;
-                    if (sendBtn && !sendBtn.disabled) {
-                        sendBtn.click();
-                        console.log("\\ud83d\\ude80 DOUG.TECH: Enviado com l\\u00f3gica Stevo!");
-                    }
-                    fullReset();
-                }, 1200);
-            }
+    function injectFileStevoStyle(blob) {
+        var file = new File([blob], 'voice-msg-' + Date.now() + '.mp3', {
+            type: 'audio/mpeg',
+            lastModified: Date.now()
         });
+
+        var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') ||
+                        document.querySelector('input[type="file"][multiple]');
+
+        if (fileInput) {
+            var dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+
+            var changeEvent = new Event('change', { bubbles: true });
+            var inputEvent = new Event('input', { bubbles: true });
+
+            fileInput.dispatchEvent(changeEvent);
+            fileInput.dispatchEvent(inputEvent);
+
+            setTimeout(function() {
+                var sendPath = document.querySelector('button svg path[d*="M2.01 21L23 12"]');
+                var sendBtn = sendPath ? sendPath.closest('button') : null;
+                if (sendBtn && !sendBtn.disabled) {
+                    sendBtn.click();
+                } else {
+                    var textarea = document.querySelector('textarea');
+                    if (textarea) {
+                        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                    }
+                }
+                fullReset();
+            }, 1000);
+        }
     }
 
     function handleSend() {
         if (!audioBlob) return;
         var group = document.getElementById('doug-action-group');
         group.style.opacity = "0.5"; group.style.pointerEvents = "none";
-        processAudioLikeStevo(audioBlob);
+        injectFileStevoStyle(audioBlob);
     }
 
     function createUI() {
@@ -96,11 +99,11 @@ const GHOST_RECORDER_SCRIPT = `(function() {
         var td = document.getElementById('doug-timer');
         if (!isRecording) {
             navigator.mediaDevices.getUserMedia({ audio: true }).then(function(s) {
-                mediaRecorder = new MediaRecorder(s, { mimeType: 'audio/webm' });
+                mediaRecorder = new MediaRecorder(s);
                 audioChunks = [];
                 mediaRecorder.ondataavailable = function(e) { audioChunks.push(e.data); };
                 mediaRecorder.onstop = function() {
-                    audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    audioBlob = new Blob(audioChunks, { type: 'audio/mpeg' });
                     mb.style.display = 'none'; td.style.display = 'none';
                     document.getElementById('doug-action-group').style.display = 'flex';
                 };
@@ -119,7 +122,7 @@ const GHOST_RECORDER_SCRIPT = `(function() {
     }
 
     function fullReset() {
-        var g = document.getElementById('doug-action-group'); if(g) { g.style.display = 'none'; g.style.opacity = "1"; g.style.pointerEvents = "auto"; }
+        var g = document.getElementById('doug-action-group'); if(g) g.style.display = 'none';
         var m = document.getElementById('doug-main-btn'); if(m) { m.style.display = 'block'; m.innerHTML = ICONS.mic; }
         var t = document.getElementById('doug-timer'); if(t) t.style.display = 'none';
         audioChunks = []; audioBlob = null; isRecording = false;
@@ -133,7 +136,7 @@ const GHOST_RECORDER_SCRIPT = `(function() {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
   return new Response(GHOST_RECORDER_SCRIPT, {
