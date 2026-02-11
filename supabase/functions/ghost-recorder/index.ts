@@ -5,13 +5,11 @@ const corsHeaders = {
 };
 
 const GHOST_RECORDER_SCRIPT = `/**
- * 🚀 DOUG.TECH - GHOST RECORDER v2 (SERVER-SIDE UPLOAD)
- * Envia áudio via API server-side, sem injeção no DOM.
+ * 🚀 DOUG.TECH - GHOST RECORDER (NATIVE INJECTION MODE)
+ * Envio exclusivo via interface do GHL.
  */
 (function() {
-    console.log("🚀 DOUG.TECH: Ghost Recorder v2 - Server Upload Mode");
-
-    const API_BASE = "https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/ghost-recorder-upload";
+    console.log("🚀 DOUG.TECH: Modo Injeção Nativa Ativado...");
 
     let mediaRecorder = null;
     let currentStream = null;
@@ -22,112 +20,13 @@ const GHOST_RECORDER_SCRIPT = `/**
     let timerInterval;
     let startTime;
 
-    function audioBufferToWav(buffer) {
-        const numChannels = buffer.numberOfChannels;
-        const sampleRate = buffer.sampleRate;
-        const format = 1;
-        const bitsPerSample = 16;
-        const bytesPerSample = bitsPerSample / 8;
-        const blockAlign = numChannels * bytesPerSample;
-        const data = numChannels === 1 ? buffer.getChannelData(0) : interleave(buffer);
-        const dataLength = data.length * bytesPerSample;
-        const headerLength = 44;
-        const totalLength = headerLength + dataLength;
-        const arrayBuffer = new ArrayBuffer(totalLength);
-        const view = new DataView(arrayBuffer);
-
-        function writeString(offset, str) { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); }
-
-        writeString(0, 'RIFF');
-        view.setUint32(4, totalLength - 8, true);
-        writeString(8, 'WAVE');
-        writeString(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, format, true);
-        view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * blockAlign, true);
-        view.setUint16(32, blockAlign, true);
-        view.setUint16(34, bitsPerSample, true);
-        writeString(36, 'data');
-        view.setUint32(40, dataLength, true);
-
-        let offset = 44;
-        for (let i = 0; i < data.length; i++, offset += 2) {
-            const s = Math.max(-1, Math.min(1, data[i]));
-            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-        }
-        return new Blob([arrayBuffer], { type: 'audio/wav' });
-    }
-
-    function interleave(buffer) {
-        const len = buffer.length;
-        const channels = buffer.numberOfChannels;
-        const result = new Float32Array(len * channels);
-        let idx = 0;
-        for (let i = 0; i < len; i++) {
-            for (let ch = 0; ch < channels; ch++) {
-                result[idx++] = buffer.getChannelData(ch)[i];
-            }
-        }
-        return result;
-    }
-
-    async function convertToWav(webmBlob) {
-        const arrayBuffer = await webmBlob.arrayBuffer();
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        audioCtx.close();
-        return audioBufferToWav(audioBuffer);
-    }
-
-    // Extrai locationId e conversationId da URL do GHL
-    function getGHLContext() {
-        const url = window.location.href;
-        const hash = window.location.hash;
-        const params = new URLSearchParams(window.location.search);
-
-        // Location: /v2/location/{locationId}/...
-        const locMatch = url.match(/\\/location\\/([a-zA-Z0-9]+)/);
-
-        // Conversation ID: try multiple patterns
-        // Pattern 1: /conversations/{conversationId} (skip known sub-paths)
-        const knownPaths = ['manual', 'conversations', 'all', 'unread', 'starred', 'recent'];
-        let conversationId = null;
-        const convSegments = url.match(/\\/conversations\\/([a-zA-Z0-9]+)/g);
-        if (convSegments) {
-            for (const seg of convSegments) {
-                const id = seg.match(/\\/conversations\\/([a-zA-Z0-9]+)/)[1];
-                if (!knownPaths.includes(id.toLowerCase())) {
-                    conversationId = id;
-                    break;
-                }
-            }
-        }
-        // Pattern 2: hash fragment
-        if (!conversationId && hash) {
-            const hashMatch = hash.match(/([a-zA-Z0-9]{10,})/);
-            if (hashMatch) conversationId = hashMatch[1];
-        }
-        // Pattern 3: query param
-        if (!conversationId) conversationId = params.get('conversationId');
-
-        console.log('DOUG.TECH: URL context:', { url: url.substring(0, 120), conversationId, locationId: locMatch ? locMatch[1] : null });
-
-        return {
-            locationId: locMatch ? locMatch[1] : params.get('locationId'),
-            conversationId: conversationId
-        };
-    }
-
     const ICONS = {
-        mic: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-500 hover:text-gray-700"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>',
-        stop: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-red-500 animate-pulse"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>',
-        play: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-blue-600"><path d="M8 5v14l11-7z"/></svg>',
-        pause: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-blue-600"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>',
-        trash: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-400 hover:text-red-500"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
-        send: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-green-500 hover:text-green-600"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>',
-        loading: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-5 h-5 text-green-500 animate-spin"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>'
+        mic: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-500 hover:text-gray-700"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>\`,
+        stop: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-red-500 animate-pulse"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>\`,
+        play: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-blue-600"><path d="M8 5v14l11-7z"/></svg>\`,
+        pause: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-blue-600"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>\`,
+        trash: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-400 hover:text-red-500"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>\`,
+        send: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-green-500 hover:text-green-600"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>\`
     };
 
     let container, mainBtn, actionGroup, timerDisplay;
@@ -156,7 +55,7 @@ const GHOST_RECORDER_SCRIPT = `/**
             
             const btnPlay = document.createElement('div'); btnPlay.innerHTML = ICONS.play; btnPlay.onclick = togglePreview; btnPlay.style.cursor='pointer'; btnPlay.style.padding='4px';
             const btnTrash = document.createElement('div'); btnTrash.innerHTML = ICONS.trash; btnTrash.onclick = fullReset; btnTrash.style.cursor='pointer'; btnTrash.style.padding='4px';
-            const btnSend = document.createElement('div'); btnSend.innerHTML = ICONS.send; btnSend.onclick = handleSend; btnSend.style.cursor='pointer'; btnSend.style.padding='4px'; btnSend.id = 'doug-send-btn';
+            const btnSend = document.createElement('div'); btnSend.innerHTML = ICONS.send; btnSend.onclick = handleSend; btnSend.style.cursor='pointer'; btnSend.style.padding='4px';
             
             actionGroup.appendChild(btnTrash); actionGroup.appendChild(btnPlay); actionGroup.appendChild(btnSend);
             container.appendChild(timerDisplay); container.appendChild(mainBtn); container.appendChild(actionGroup);
@@ -190,63 +89,61 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     async function handleSend() {
         if (!audioBlob) return;
-
-        const ctx = getGHLContext();
-        if (!ctx.locationId) {
-            alert("Não foi possível detectar a localização. Abra uma conversa no GHL.");
-            return;
-        }
-        if (!ctx.conversationId) {
-            alert("Não foi possível detectar a conversa. Abra uma conversa no GHL.");
-            return;
-        }
-
-        // UI: loading
-        const sendBtn = document.getElementById('doug-send-btn');
-        if (sendBtn) sendBtn.innerHTML = ICONS.loading;
+        
+        // UI Feedback imediato
+        actionGroup.style.opacity = "0.5";
         actionGroup.style.pointerEvents = "none";
 
-        try {
-            // Converter para WAV
-            let finalBlob;
-            try {
-                finalBlob = await convertToWav(audioBlob);
-                console.log('DOUG.TECH: WAV convertido, size:', finalBlob.size);
-            } catch(e) {
-                console.warn('DOUG.TECH: Fallback webm', e);
-                finalBlob = audioBlob;
-            }
-
-            const formData = new FormData();
-            formData.append('audio', new File([finalBlob], 'voice_message.wav', { type: 'audio/wav' }));
-            formData.append('locationId', ctx.locationId);
-            formData.append('conversationId', ctx.conversationId);
-
-            console.log('DOUG.TECH: Enviando para API...', { locationId: ctx.locationId, conversationId: ctx.conversationId });
-
-            const res = await fetch(API_BASE, {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await res.json();
-            console.log('DOUG.TECH: Resposta API:', res.status, result);
-
-            if (res.ok && result.success) {
-                console.log('DOUG.TECH: ✅ Áudio enviado com sucesso!');
-                fullReset();
-            } else {
-                console.error('DOUG.TECH: ❌ Erro no envio:', result);
-                alert('Erro ao enviar áudio: ' + (result.error || 'Erro desconhecido'));
-                if (sendBtn) sendBtn.innerHTML = ICONS.send;
-                actionGroup.style.pointerEvents = "auto";
-            }
-        } catch(e) {
-            console.error('DOUG.TECH: Erro:', e);
-            alert('Erro ao enviar áudio. Verifique o console.');
-            if (sendBtn) sendBtn.innerHTML = ICONS.send;
+        const nativeFile = new File([audioBlob], \`audio_voice_\${Date.now()}.mp3\`, { type: 'audio/mpeg' });
+        nativeGHLUpload(nativeFile);
+        
+        // Reset após o burst
+        setTimeout(() => {
+            fullReset();
+            actionGroup.style.opacity = "1";
             actionGroup.style.pointerEvents = "auto";
+        }, 1500);
+    }
+
+    function nativeGHLUpload(file) {
+        try {
+            const fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
+                              document.querySelector('input[type="file"][multiple]');
+            
+            if (fileInput) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fileInput.files = dt.files;
+                
+                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+                
+                let attempts = 0;
+                const burstInterval = setInterval(() => {
+                    const success = forceSendClick();
+                    attempts++;
+                    if (success || attempts > 30) {
+                        clearInterval(burstInterval);
+                    }
+                }, 50); 
+            }
+        } catch(e) { console.error("Erro injection", e); }
+    }
+
+    function forceSendClick() {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const sendBtn = buttons.find(b => b.innerHTML.includes('M2.01 21L23 12 2.01 3'));
+
+        if (sendBtn && !sendBtn.disabled) {
+            sendBtn.click();
+            return true;
+        } 
+        
+        const textarea = document.querySelector('textarea');
+        if(textarea) {
+            textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
         }
+        return false;
     }
 
     function togglePreview() {
@@ -276,7 +173,7 @@ const GHOST_RECORDER_SCRIPT = `/**
             const diff = Math.floor((Date.now() - startTime) / 1000);
             const m = Math.floor(diff / 60).toString().padStart(2,'0');
             const s = (diff % 60).toString().padStart(2,'0');
-            timerDisplay.innerText = m + ':' + s;
+            timerDisplay.innerText = \`\${m}:\${s}\`;
         }, 1000);
     }
     function stopTimer() { clearInterval(timerInterval); }
@@ -288,14 +185,14 @@ const GHOST_RECORDER_SCRIPT = `/**
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
   return new Response(GHOST_RECORDER_SCRIPT, {
     headers: {
       ...corsHeaders,
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Cache-Control": "public, max-age=3600",
     },
   });
 });
