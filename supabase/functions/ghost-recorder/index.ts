@@ -5,11 +5,11 @@ const corsHeaders = {
 };
 
 const GHOST_RECORDER_SCRIPT = `/**
- * \\ud83d\\ude80 DOUG.TECH - GHOST RECORDER (GHOST INPUT EDITION)
- * Evita a abertura da janela do sistema e resolve o erro 415 com WAV PCM.
+ * \\ud83d\\ude80 DOUG.TECH - GHOST RECORDER (TYPE MASKING EDITION)
+ * Resolve o Erro 415 do LeadConnector/GHL mascarando o WAV como MP3.
  */
 (function() {
-    console.log("\\ud83d\\ude80 DOUG.TECH: Ativando Ghost Input Bypass...");
+    console.log("\\ud83d\\ude80 DOUG.TECH: Ativando Type Masking para Bypass 415...");
 
     var mediaRecorder = null, currentStream = null, audioChunks = [], audioBlob = null;
     var isRecording = false, timerInterval, startTime;
@@ -29,20 +29,18 @@ const GHOST_RECORDER_SCRIPT = `/**
             var length = audioBuffer.length * 2 + 44;
             var view = new DataView(new ArrayBuffer(length));
             var writeString = function(o, s) { for (var i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
-
             writeString(0, 'RIFF'); view.setUint32(4, length - 8, true); writeString(8, 'WAVE');
             writeString(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
             view.setUint16(22, 1, true); view.setUint32(24, 44100, true); view.setUint32(28, 44100 * 2, true);
             view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeString(36, 'data');
             view.setUint32(40, length - 44, true);
-
             var offset = 44;
             var channelData = audioBuffer.getChannelData(0);
             for (var i = 0; i < channelData.length; i++, offset += 2) {
                 var s = Math.max(-1, Math.min(1, channelData[i]));
                 view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
             }
-            return new Blob([view], { type: 'audio/wav' });
+            return new Blob([view], { type: 'audio/mpeg' });
         });
     }
 
@@ -51,8 +49,12 @@ const GHOST_RECORDER_SCRIPT = `/**
         var group = document.getElementById('doug-action-group');
         group.style.opacity = "0.5"; group.style.pointerEvents = "none";
 
-        convertToWav(audioBlob).then(function(wavBlob) {
-            var file = new File([wavBlob], 'audio_sms_' + Date.now() + '.wav', { type: 'audio/wav' });
+        console.log("\\ud83d\\ude80 DOUG.TECH: Processando \\u00e1udio para GHL...");
+        convertToWav(audioBlob).then(function(wavBlobMasked) {
+            var file = new File([wavBlobMasked], 'audio_record_' + Date.now() + '.mp3', {
+                type: 'audio/mpeg',
+                lastModified: Date.now()
+            });
 
             var realInput = document.querySelector('input[type="file"].hr-upload-file-input') ||
                             document.querySelector('input[type="file"][multiple]');
@@ -69,14 +71,11 @@ const GHOST_RECORDER_SCRIPT = `/**
                 setTimeout(function() {
                     var sendPath = document.querySelector('button svg path[d*="M2.01 21L23 12"]');
                     var sendBtn = sendPath ? sendPath.closest('button') : null;
-                    if (sendBtn) {
-                        sendBtn.click();
-                        console.log("\\ud83d\\ude80 DOUG.TECH: Enviado via Ghost Injection (No Windows Window)");
-                    }
+                    if (sendBtn) sendBtn.click();
                     fullReset();
-                }, 800);
+                }, 1200);
             } else {
-                alert("Erro: GHL n\\u00e3o est\\u00e1 pronto para receber arquivos.");
+                console.error("Input n\\u00e3o encontrado");
                 fullReset();
             }
         });
@@ -86,7 +85,6 @@ const GHOST_RECORDER_SCRIPT = `/**
         var attachPath = 'M17.5 5.256V16.5a5.5 5.5 0 11-11 0V5.667a3.667 3.667 0 017.333 0v10.779a1.833 1.833 0 11-3.666 0V6.65';
         var attachIcon = document.querySelector('path[d="' + attachPath + '"]');
         var toolbar = (attachIcon ? attachIcon.closest('.flex') : null) || document.querySelector('.message-input-actions');
-
         if (toolbar && !document.getElementById('doug-maestro-ui')) {
             var container = document.createElement('div');
             container.id = 'doug-maestro-ui';
