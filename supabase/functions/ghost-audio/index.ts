@@ -144,17 +144,54 @@ async function resolveContactId(
   return null;
 }
 
+// Upload audio to Supabase storage and return public URL
+async function uploadAudioToStorage(supabase: any, audioBase64: string, mimeType: string): Promise<string | null> {
+  try {
+    const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : "ogg";
+    const fileName = `audio_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    // Convert base64 to Uint8Array
+    const binaryString = atob(audioBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    const { error } = await supabase.storage
+      .from("ghost-audio")
+      .upload(fileName, bytes, { contentType: mimeType, upsert: false });
+
+    if (error) {
+      console.error("[ghost-audio] Storage upload failed:", error.message);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage.from("ghost-audio").getPublicUrl(fileName);
+    console.log("[ghost-audio] Audio uploaded to storage:", urlData.publicUrl);
+    return urlData.publicUrl;
+  } catch (err) {
+    console.error("[ghost-audio] Storage upload error:", err);
+    return null;
+  }
+}
+
 // Mirror the audio as an outbound message in GHL conversation
-async function mirrorAudioInGHL(contactId: string, ghlToken: string): Promise<void> {
-  const payload = {
+async function mirrorAudioInGHL(contactId: string, ghlToken: string, audioUrl: string | null): Promise<void> {
+  const payload: any = {
     type: "SMS",
     contactId,
-    message: "🎙️ Áudio enviado via WhatsApp",
     status: "delivered",
     direction: "outbound",
   };
 
-  console.log("[ghost-audio] Mirroring audio in GHL:", { contactId });
+  if (audioUrl) {
+    payload.attachments = [audioUrl];
+    payload.message = "🎙️";
+  } else {
+    payload.message = "🎙️ Áudio enviado via WhatsApp";
+  }
+
+  console.log("[ghost-audio] Mirroring audio in GHL:", { contactId, hasAudioUrl: !!audioUrl });
 
   const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
@@ -341,8 +378,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 6. Mirror the audio in GHL as outbound message
+    // 6. Upload audio to storage and mirror in GHL
     try {
+      // Upload audio to storage for GHL attachment
+      const audioUrl = await uploadAudioToStorage(supabase, audio, format || "audio/ogg");
+
       // Get user_settings for OAuth credentials
       let { data: settings } = await supabase
         .from("user_settings")
@@ -367,7 +407,7 @@ Deno.serve(async (req) => {
         const contactId = await resolveContactId(supabase, cleanPhone, locationId, ghlToken);
 
         if (contactId) {
-          await mirrorAudioInGHL(contactId, ghlToken);
+          await mirrorAudioInGHL(contactId, ghlToken, audioUrl);
         } else {
           console.log("[ghost-audio] Contact not found in GHL, skipping mirror");
         }
