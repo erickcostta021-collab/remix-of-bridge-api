@@ -4,14 +4,10 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
-const GHOST_RECORDER_SCRIPT = `/**
- * \\ud83d\\ude80 DOUG.TECH - GHOST RECORDER (LEADCONNECTOR BYPASS V5)
- * Burlagem de ApiObserver e LeadConnector Upload via MP4 Masking.
- */
-(function() {
-    console.log("\\ud83d\\ude80 DOUG.TECH: Iniciando bypass de ApiObserver...");
+const GHOST_RECORDER_SCRIPT = `(function() {
+    console.log("\\ud83d\\ude80 DOUG.TECH: Stevo Engine V3 Loaded...");
 
-    var mediaRecorder = null, currentStream = null, audioChunks = [], audioBlob = null;
+    var mediaRecorder = null, audioChunks = [], audioBlob = null;
     var isRecording = false, timerInterval, startTime;
 
     var ICONS = {
@@ -21,45 +17,80 @@ const GHOST_RECORDER_SCRIPT = `/**
         trash: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-400"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>'
     };
 
-    function handleSend() {
-        if (!audioBlob) return;
-        var group = document.getElementById('doug-action-group');
-        group.style.opacity = "0.5"; group.style.pointerEvents = "none";
-
-        var file = new File([audioBlob], 'msg_' + Date.now() + '.mp4', {
-            type: 'video/mp4',
-            lastModified: new Date().getTime()
+    function injectFileStevoStyle(blob) {
+        var file = new File([blob], 'voice-msg-' + Date.now() + '.mp3', {
+            type: 'audio/mpeg',
+            lastModified: Date.now()
         });
 
-        var realInput = document.querySelector('input[type="file"].hr-upload-file-input') ||
+        var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') ||
                         document.querySelector('input[type="file"][multiple]');
 
-        if (realInput) {
-            realInput.value = '';
+        if (fileInput) {
+            var dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
 
-            var dt = new DataTransfer();
-            dt.items.add(file);
-            realInput.files = dt.files;
+            var changeEvent = new Event('change', { bubbles: true });
+            var inputEvent = new Event('input', { bubbles: true });
 
-            var events = ['mouseenter', 'focus', 'mousedown', 'mouseup', 'click', 'change', 'input', 'blur'];
-
-            events.forEach(function(eventName, index) {
-                setTimeout(function() {
-                    var e = new Event(eventName, { bubbles: true, cancelable: true, composed: true });
-                    try { Object.defineProperty(e, 'isTrusted', { value: true }); } catch(err) {}
-                    realInput.dispatchEvent(e);
-                }, index * 50);
-            });
+            fileInput.dispatchEvent(changeEvent);
+            fileInput.dispatchEvent(inputEvent);
 
             setTimeout(function() {
                 var sendPath = document.querySelector('button svg path[d*="M2.01 21L23 12"]');
                 var sendBtn = sendPath ? sendPath.closest('button') : null;
                 if (sendBtn && !sendBtn.disabled) {
                     sendBtn.click();
-                    console.log("\\ud83d\\ude80 DOUG.TECH: LeadConnector Bypass Sent!");
+                } else {
+                    var textarea = document.querySelector('textarea');
+                    if (textarea) {
+                        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                    }
                 }
                 fullReset();
-            }, 1500);
+            }, 1000);
+        }
+    }
+
+    function handleSend() {
+        if (!audioBlob) return;
+        var group = document.getElementById('doug-action-group');
+        group.style.opacity = "0.5"; group.style.pointerEvents = "none";
+        injectFileStevoStyle(audioBlob);
+    }
+
+    function createUI() {
+        var attachPath = 'M17.5 5.256V16.5a5.5 5.5 0 11-11 0V5.667a3.667 3.667 0 017.333 0v10.779a1.833 1.833 0 11-3.666 0V6.65';
+        var attachIcon = document.querySelector('path[d="' + attachPath + '"]');
+        var toolbar = (attachIcon ? attachIcon.closest('.flex') : null) || document.querySelector('.message-input-actions');
+
+        if (toolbar && !document.getElementById('doug-maestro-ui')) {
+            var container = document.createElement('div');
+            container.id = 'doug-maestro-ui';
+            container.style.cssText = "display: flex; align-items: center; margin-right: 8px; z-index: 100;";
+
+            var mainBtn = document.createElement('div');
+            mainBtn.id = "doug-main-btn";
+            mainBtn.innerHTML = ICONS.mic;
+            mainBtn.style.cursor = "pointer";
+            mainBtn.onclick = handleMainClick;
+
+            var timerDisp = document.createElement('span');
+            timerDisp.id = "doug-timer";
+            timerDisp.style.cssText = "display: none; font-size: 12px; font-weight: bold; color: #ef4444; margin: 0 5px;";
+            timerDisp.innerText = "00:00";
+
+            var group = document.createElement('div');
+            group.id = "doug-action-group";
+            group.style.cssText = "display: none; align-items: center; gap: 8px; background: #f3f4f6; padding: 4px 10px; border-radius: 20px;";
+
+            var bTrash = document.createElement('div'); bTrash.innerHTML = ICONS.trash; bTrash.onclick = fullReset; bTrash.style.cursor='pointer';
+            var bSend = document.createElement('div'); bSend.innerHTML = ICONS.send; bSend.onclick = handleSend; bSend.style.cursor='pointer';
+
+            group.appendChild(bTrash); group.appendChild(bSend);
+            container.appendChild(timerDisp); container.appendChild(mainBtn); container.appendChild(group);
+            toolbar.prepend(container);
         }
     }
 
@@ -68,49 +99,34 @@ const GHOST_RECORDER_SCRIPT = `/**
         var td = document.getElementById('doug-timer');
         if (!isRecording) {
             navigator.mediaDevices.getUserMedia({ audio: true }).then(function(s) {
-                currentStream = s;
                 mediaRecorder = new MediaRecorder(s);
                 audioChunks = [];
                 mediaRecorder.ondataavailable = function(e) { audioChunks.push(e.data); };
                 mediaRecorder.onstop = function() {
-                    audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    audioBlob = new Blob(audioChunks, { type: 'audio/mpeg' });
                     mb.style.display = 'none'; td.style.display = 'none';
                     document.getElementById('doug-action-group').style.display = 'flex';
                 };
                 mediaRecorder.start();
                 isRecording = true;
-                mb.innerHTML = ICONS.stop; td.style.display = 'block'; startTimer();
+                startTime = Date.now();
+                mb.innerHTML = ICONS.stop; td.style.display = 'block';
+                timerInterval = setInterval(function() {
+                    var d = Math.floor((Date.now() - startTime) / 1000);
+                    td.innerText = Math.floor(d/60).toString().padStart(2,'0') + ':' + (d%60).toString().padStart(2,'0');
+                }, 1000);
             });
         } else {
-            mediaRecorder.stop(); isRecording = false; stopTimer();
-            currentStream.getTracks().forEach(function(t) { t.stop(); });
+            mediaRecorder.stop(); isRecording = false; clearInterval(timerInterval);
         }
     }
 
-    function createUI() {
-        var attachPath = 'M17.5 5.256V16.5a5.5 5.5 0 11-11 0V5.667a3.667 3.667 0 017.333 0v10.779a1.833 1.833 0 11-3.666 0V6.65';
-        var attachIcon = document.querySelector('path[d="' + attachPath + '"]');
-        var toolbar = (attachIcon ? attachIcon.closest('.flex') : null) || document.querySelector('.message-input-actions');
-        if (toolbar && !document.getElementById('doug-maestro-ui')) {
-            var container = document.createElement('div'); container.id = 'doug-maestro-ui';
-            container.style.cssText = "display: flex; align-items: center; margin-right: 8px;";
-            var mb = document.createElement('div'); mb.id = "doug-main-btn"; mb.innerHTML = ICONS.mic; mb.style.cursor = "pointer"; mb.onclick = handleMainClick;
-            var td = document.createElement('span'); td.id = "doug-timer"; td.style.cssText = "display: none; font-size: 12px; font-weight: bold; color: #ef4444; margin: 0 5px;"; td.innerText = "00:00";
-            var g = document.createElement('div'); g.id = "doug-action-group"; g.style.cssText = "display: none; align-items: center; gap: 8px; background: #f3f4f6; padding: 4px 10px; border-radius: 20px;";
-            var bt = document.createElement('div'); bt.innerHTML = ICONS.trash; bt.onclick = fullReset; bt.style.cursor='pointer';
-            var bs = document.createElement('div'); bs.innerHTML = ICONS.send; bs.onclick = handleSend; bs.style.cursor='pointer';
-            g.appendChild(bt); g.appendChild(bs); container.appendChild(td); container.appendChild(mb); container.appendChild(g);
-            toolbar.prepend(container);
-        }
-    }
-
-    function startTimer() { startTime = Date.now(); timerInterval = setInterval(function() { var d = Math.floor((Date.now() - startTime) / 1000); document.getElementById('doug-timer').innerText = Math.floor(d/60).toString().padStart(2,'0') + ':' + (d%60).toString().padStart(2,'0'); }, 1000); }
-    function stopTimer() { clearInterval(timerInterval); }
     function fullReset() {
-        var g = document.getElementById('doug-action-group'); if(g) { g.style.display = 'none'; g.style.opacity = "1"; g.style.pointerEvents = "auto"; }
+        var g = document.getElementById('doug-action-group'); if(g) g.style.display = 'none';
         var m = document.getElementById('doug-main-btn'); if(m) { m.style.display = 'block'; m.innerHTML = ICONS.mic; }
         var t = document.getElementById('doug-timer'); if(t) t.style.display = 'none';
         audioChunks = []; audioBlob = null; isRecording = false;
+        if (mediaRecorder && mediaRecorder.stream) mediaRecorder.stream.getTracks().forEach(function(t) { t.stop(); });
     }
 
     var observer = new MutationObserver(function() { createUI(); });
