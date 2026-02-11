@@ -185,24 +185,29 @@ const GHOST_RECORDER_SCRIPT = `/**
                               document.querySelector('input[type="file"][multiple]');
             
             if (fileInput) {
+                // Sequência de eventos de UI antes da injeção (como Stevo)
+                fileInput.dispatchEvent(new Event('focus', { bubbles: true, cancelable: true }));
+                fileInput.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                fileInput.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                
                 // Limpeza prévia
                 fileInput.value = '';
-                fileInput.dispatchEvent(new Event('change'));
+                fileInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
                 
                 fileInput.removeAttribute('accept');
                 const dt = new DataTransfer();
                 dt.items.add(file);
                 fileInput.files = dt.files;
                 
-                // Injeção silenciosa
-                fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                // Injeção com cancelable: true
+                fileInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true, composed: true }));
+                fileInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true, composed: true }));
                 
                 // Após 500ms, dispara Enter no textarea
                 setTimeout(() => {
                     const textarea = document.querySelector('textarea');
                     if (textarea) {
-                        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
                     }
                 }, 500);
             }
