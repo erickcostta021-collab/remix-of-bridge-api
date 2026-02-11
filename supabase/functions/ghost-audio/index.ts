@@ -5,6 +5,133 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Retry wrapper for GHL API calls
+async function fetchGHL(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status === 429 && attempt < maxRetries) {
+        const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      if (response.status >= 500 && attempt < maxRetries) {
+        const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      return response;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, Math.min(1000 * Math.pow(2, attempt), 8000)));
+      }
+    }
+  }
+  throw lastError || new Error("fetchGHL: all retries exhausted");
+}
+
+// Get valid GHL access token (refresh if needed)
+async function getValidToken(supabase: any, subaccount: any, settings: any): Promise<string> {
+  const accessToken = subaccount.ghl_access_token;
+  const refreshToken = subaccount.ghl_refresh_token;
+  const expiresAtIso = subaccount.ghl_token_expires_at;
+  if (!accessToken || !refreshToken || !expiresAtIso) return accessToken || "";
+
+  const now = new Date();
+  const expiresAt = new Date(expiresAtIso);
+  if (now < expiresAt && (expiresAt.getTime() - now.getTime()) >= 3600000) return accessToken;
+
+  const tokenParams = new URLSearchParams({
+    client_id: settings.ghl_client_id,
+    client_secret: settings.ghl_client_secret,
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    user_type: "Location",
+  });
+
+  const tokenResponse = await fetchGHL("https://services.leadconnectorhq.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body: tokenParams.toString(),
+  });
+
+  if (!tokenResponse.ok) {
+    console.error("[ghost-audio] Token refresh failed:", await tokenResponse.text());
+    return accessToken; // fallback to existing
+  }
+
+  const tokenData = await tokenResponse.json();
+  const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
+  await supabase.from("ghl_subaccounts").update({
+    ghl_access_token: tokenData.access_token,
+    ghl_refresh_token: tokenData.refresh_token,
+    ghl_token_expires_at: newExpiresAt.toISOString(),
+    ghl_subaccount_token: tokenData.access_token,
+    oauth_last_refresh: new Date().toISOString(),
+  }).eq("id", subaccount.id);
+
+  return tokenData.access_token;
+}
+
+// Search for contact by phone in GHL
+async function findContactByPhone(phone: string, locationId: string, token: string): Promise<string | null> {
+  const cleanPhone = phone.replace(/\D/g, "");
+  const searchResponse = await fetchGHL(
+    `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${cleanPhone}`,
+    { headers: { Authorization: `Bearer ${token}`, Version: "2021-07-28", Accept: "application/json" } }
+  );
+  if (searchResponse.ok) {
+    const data = await searchResponse.json();
+    if (data.contacts?.length > 0) return data.contacts[0].id;
+  }
+  // Fallback: last 10 digits
+  if (cleanPhone.length > 10) {
+    const last10 = cleanPhone.slice(-10);
+    const res2 = await fetchGHL(
+      `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${last10}`,
+      { headers: { Authorization: `Bearer ${token}`, Version: "2021-07-28", Accept: "application/json" } }
+    );
+    if (res2.ok) {
+      const data2 = await res2.json();
+      if (data2.contacts?.length > 0) return data2.contacts[0].id;
+    }
+  }
+  return null;
+}
+
+// Mirror audio as outbound message in GHL conversation
+async function mirrorOutboundInGHL(contactId: string, token: string): Promise<void> {
+  const payload = {
+    type: "SMS",
+    contactId,
+    message: "🎤",
+    status: "delivered",
+    direction: "outbound",
+  };
+
+  console.log("[ghost-audio] Mirroring outbound in GHL:", { contactId });
+
+  const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Version: "2021-04-15",
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    console.error("[ghost-audio] Failed to mirror in GHL:", responseText);
+  } else {
+    console.log("[ghost-audio] ✅ Outbound mirrored in GHL:", responseText.substring(0, 200));
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
@@ -33,7 +160,7 @@ Deno.serve(async (req) => {
     // 1. Find the subaccount for this locationId
     const { data: subaccount, error: subErr } = await supabase
       .from("ghl_subaccounts")
-      .select("id, user_id")
+      .select("id, user_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at")
       .eq("location_id", locationId)
       .limit(1);
 
@@ -180,6 +307,31 @@ Deno.serve(async (req) => {
 
         if (res.ok) {
           console.log("[ghost-audio] ✅ Audio sent successfully via", attempt.path);
+
+          // Mirror as outbound in GHL (fire-and-forget)
+          try {
+            // Get GHL token and user_settings for OAuth credentials
+            const { data: settings } = await supabase
+              .from("user_settings")
+              .select("ghl_client_id, ghl_client_secret")
+              .eq("user_id", sub.user_id)
+              .limit(1);
+
+            if (settings?.[0]?.ghl_client_id && sub.ghl_access_token) {
+              const ghlToken = await getValidToken(supabase, sub, settings[0]);
+              const contactId = await findContactByPhone(cleanPhone, locationId, ghlToken);
+              if (contactId) {
+                await mirrorOutboundInGHL(contactId, ghlToken);
+              } else {
+                console.log("[ghost-audio] Contact not found in GHL, skipping mirror");
+              }
+            } else {
+              console.log("[ghost-audio] No GHL OAuth configured, skipping mirror");
+            }
+          } catch (mirrorErr) {
+            console.error("[ghost-audio] Mirror error (non-fatal):", mirrorErr);
+          }
+
           return new Response(JSON.stringify({ success: true, path: attempt.path }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
