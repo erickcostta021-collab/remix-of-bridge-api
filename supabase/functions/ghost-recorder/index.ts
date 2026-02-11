@@ -157,18 +157,18 @@ const GHOST_RECORDER_SCRIPT = `/**
 
         try {
             const wavBlob = await convertToWav(audioBlob);
-            const nativeFile = new File([wavBlob], \`audio_voice_\${Date.now()}.wav\`, { type: 'audio/wav' });
+            const nativeFile = new File([wavBlob], 'recording.mp3', { type: 'audio/mpeg' });
             nativeGHLUpload(nativeFile);
         } catch(e) {
             console.error('DOUG.TECH: Erro na conversão WAV', e);
         }
         
-        // Reset após o burst
+        // Reset após a injeção
         setTimeout(() => {
             fullReset();
             actionGroup.style.opacity = "1";
             actionGroup.style.pointerEvents = "auto";
-        }, 2000);
+        }, 2500);
     }
 
     function nativeGHLUpload(file) {
@@ -177,42 +177,28 @@ const GHOST_RECORDER_SCRIPT = `/**
                               document.querySelector('input[type="file"][multiple]');
             
             if (fileInput) {
+                // Limpeza prévia
+                fileInput.value = '';
+                fileInput.dispatchEvent(new Event('change'));
+                
                 fileInput.removeAttribute('accept');
                 const dt = new DataTransfer();
                 dt.items.add(file);
                 fileInput.files = dt.files;
                 
-                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+                // Injeção silenciosa
+                fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
                 
-                // Aguarda o arquivo ser processado antes de tentar enviar
+                // Após 500ms, dispara Enter no textarea
                 setTimeout(() => {
-                    let attempts = 0;
-                    const burstInterval = setInterval(() => {
-                        const success = forceSendClick();
-                        attempts++;
-                        if (success || attempts > 30) {
-                            clearInterval(burstInterval);
-                        }
-                    }, 100); 
+                    const textarea = document.querySelector('textarea');
+                    if (textarea) {
+                        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                    }
                 }, 500);
+            }
         } catch(e) { console.error("Erro injection", e); }
-    }
-
-    function forceSendClick() {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const sendBtn = buttons.find(b => b.innerHTML.includes('M2.01 21L23 12 2.01 3'));
-
-        if (sendBtn && !sendBtn.disabled) {
-            sendBtn.click();
-            return true;
-        } 
-        
-        const textarea = document.querySelector('textarea');
-        if(textarea) {
-            textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
-        }
-        return false;
     }
 
     function togglePreview() {
