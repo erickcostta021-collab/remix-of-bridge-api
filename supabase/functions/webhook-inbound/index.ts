@@ -1554,9 +1554,34 @@ serve(async (req) => {
     
     if (contextInfo) {
       quotedMessageId = contextInfo.stanzaID || contextInfo.stanzaId || quotedIdFromField || "";
-      quotedText = contextInfo.quotedMessage?.conversation || 
-                   contextInfo.quotedMessage?.extendedTextMessage?.text ||
-                   contextInfo.quotedMessage?.text || "";
+      const qm = contextInfo.quotedMessage;
+      if (qm) {
+        // Try text first
+        quotedText = qm.conversation || qm.extendedTextMessage?.text || qm.text || "";
+        // If no text, detect media type and generate friendly label
+        if (!quotedText) {
+          if (qm.audioMessage) {
+            const secs = qm.audioMessage.seconds || 0;
+            const mins = Math.floor(secs / 60);
+            const remSecs = secs % 60;
+            quotedText = `Áudio ${mins}:${String(remSecs).padStart(2, "0")}`;
+          } else if (qm.imageMessage) {
+            quotedText = qm.imageMessage.caption || "Imagem";
+          } else if (qm.videoMessage) {
+            quotedText = qm.videoMessage.caption || "Vídeo";
+          } else if (qm.documentMessage) {
+            quotedText = qm.documentMessage.fileName || qm.documentMessage.title || "Documento";
+          } else if (qm.stickerMessage) {
+            quotedText = "Figurinha";
+          } else if (qm.contactMessage || qm.contactsArrayMessage) {
+            quotedText = "Contato";
+          } else if (qm.locationMessage || qm.liveLocationMessage) {
+            quotedText = "Localização";
+          } else {
+            quotedText = "Mídia";
+          }
+        }
+      }
     } else if (quotedIdFromField) {
       // Fallback: only have the ID, not the text
       quotedMessageId = quotedIdFromField;
