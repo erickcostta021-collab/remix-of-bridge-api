@@ -119,44 +119,25 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 5. Send audio via UAZAPI - try multiple approaches
+    // 5. Send audio via UAZAPI using "myaudio" type (renders as voice note)
     const token = instance.uazapi_instance_token;
-    const phoneWithJid = cleanPhone + "@s.whatsapp.net";
 
     // Convert base64 to data URI for UAZAPI
     const mimeType = format || "audio/ogg";
     const dataUri = "data:" + mimeType + ";base64," + audio;
 
     const attempts = [
-      // Attempt 1: /send/audio with base64 data URI
-      {
-        path: "/send/audio",
-        headers: { "Content-Type": "application/json", token: token },
-        body: { number: phoneWithJid, file: dataUri, readchat: "true" },
-      },
-      // Attempt 2: /send/audio with different field names
-      {
-        path: "/send/audio",
-        headers: { "Content-Type": "application/json", token: token },
-        body: { Phone: cleanPhone, Url: dataUri },
-      },
-      // Attempt 3: /chat/send/audio
-      {
-        path: "/chat/send/audio",
-        headers: { "Content-Type": "application/json", Token: token },
-        body: { Phone: cleanPhone, Url: dataUri },
-      },
-      // Attempt 4: /send/media with audio type
+      // Attempt 1: /send/media with type "myaudio" (correct format per n8n reference)
       {
         path: "/send/media",
         headers: { "Content-Type": "application/json", token: token },
-        body: { number: phoneWithJid, type: "audio", file: dataUri, readchat: "true" },
+        body: { number: cleanPhone, type: "myaudio", file: dataUri },
       },
-      // Attempt 5: /chat/send/media
+      // Attempt 2: /send/audio fallback
       {
-        path: "/chat/send/media",
-        headers: { "Content-Type": "application/json", Token: token },
-        body: { Phone: cleanPhone, Url: dataUri, Caption: "" },
+        path: "/send/audio",
+        headers: { "Content-Type": "application/json", token: token },
+        body: { number: cleanPhone, file: dataUri },
       },
     ];
 
