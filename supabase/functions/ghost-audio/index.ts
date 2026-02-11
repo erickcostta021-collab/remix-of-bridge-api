@@ -79,11 +79,40 @@ async function getValidToken(supabase: any, subaccount: any, settings: any): Pro
   return accessToken;
 }
 
-// Search for contact in GHL by phone number
-async function findContactByPhone(phone: string, locationId: string, ghlToken: string): Promise<string | null> {
-  const cleanPhone = phone.replace(/\D/g, "");
+// Look up contact ID from local preferences table first, then fallback to GHL API
+async function resolveContactId(
+  supabase: any, phone: string, locationId: string, ghlToken: string
+): Promise<string | null> {
+  const last10 = phone.replace(/\D/g, "").slice(-10);
 
-  // Try full phone
+  // 1. Try contact_instance_preferences (local DB - fast)
+  const { data: pref } = await supabase
+    .from("contact_instance_preferences")
+    .select("contact_id")
+    .eq("location_id", locationId)
+    .ilike("lead_phone", `%${last10}`)
+    .limit(1);
+
+  if (pref?.length && pref[0].contact_id) {
+    console.log("[ghost-audio] Contact resolved from preferences:", pref[0].contact_id);
+    return pref[0].contact_id;
+  }
+
+  // 2. Try ghl_contact_phone_mapping (local DB)
+  const { data: mapping } = await supabase
+    .from("ghl_contact_phone_mapping")
+    .select("contact_id")
+    .eq("location_id", locationId)
+    .ilike("original_phone", `%${last10}`)
+    .limit(1);
+
+  if (mapping?.length && mapping[0].contact_id) {
+    console.log("[ghost-audio] Contact resolved from phone mapping:", mapping[0].contact_id);
+    return mapping[0].contact_id;
+  }
+
+  // 3. Fallback: search GHL API
+  const cleanPhone = phone.replace(/\D/g, "");
   let res = await fetchGHL(
     `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${cleanPhone}`,
     { headers: { "Authorization": `Bearer ${ghlToken}`, "Version": "2021-07-28", "Accept": "application/json" } }
@@ -91,19 +120,24 @@ async function findContactByPhone(phone: string, locationId: string, ghlToken: s
 
   if (res.ok) {
     const data = await res.json();
-    if (data.contacts?.length > 0) return data.contacts[0].id;
+    if (data.contacts?.length > 0) {
+      console.log("[ghost-audio] Contact resolved from GHL API:", data.contacts[0].id);
+      return data.contacts[0].id;
+    }
   }
 
-  // Try last 10 digits
+  // Try last 10 digits on GHL API
   if (cleanPhone.length > 10) {
-    const last10 = cleanPhone.slice(-10);
     res = await fetchGHL(
       `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${last10}`,
       { headers: { "Authorization": `Bearer ${ghlToken}`, "Version": "2021-07-28", "Accept": "application/json" } }
     );
     if (res.ok) {
       const data = await res.json();
-      if (data.contacts?.length > 0) return data.contacts[0].id;
+      if (data.contacts?.length > 0) {
+        console.log("[ghost-audio] Contact resolved from GHL API (last10):", data.contacts[0].id);
+        return data.contacts[0].id;
+      }
     }
   }
 
@@ -330,7 +364,7 @@ Deno.serve(async (req) => {
         const ghlToken = await getValidToken(supabase, sub, settings[0]);
 
         // Find the contactId for this phone
-        const contactId = await findContactByPhone(cleanPhone, locationId, ghlToken);
+        const contactId = await resolveContactId(supabase, cleanPhone, locationId, ghlToken);
 
         if (contactId) {
           await mirrorAudioInGHL(contactId, ghlToken);
