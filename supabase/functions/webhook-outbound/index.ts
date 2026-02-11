@@ -272,8 +272,11 @@ function formatPhoneForUazapi(phone: string): string {
 // Helper to detect media type from URL
 function detectMediaType(url: string): string {
   const lower = url.toLowerCase();
-  if (/\.(mp3|wav|ogg|m4a|aac)/.test(lower)) return "myaudio";
-  if (/\.(mp4|mov|avi|mkv|webm)/.test(lower)) return "video";
+  if (/\.(mp3|wav|ogg|m4a|aac|opus)/.test(lower)) return "myaudio";
+  // webm can be audio or video — check for audio indicators in URL
+  if (/\.webm/.test(lower) && /audio/i.test(url)) return "myaudio";
+  if (/\.(mp4|mov|avi|mkv)/.test(lower)) return "video";
+  if (/\.webm/.test(lower)) return "video";
   if (/\.(jpg|jpeg|png|gif|webp)/.test(lower)) return "image";
   if (/\.(pdf|doc|docx|xls|xlsx|txt)/.test(lower)) return "document";
   return "file";
@@ -357,8 +360,29 @@ async function sendTextMessage(base: string, instanceToken: string, phone: strin
 // Send media message via UAZAPI (based on n8n flow)
 // Returns { sent, status, body, uazapiMessageId }
 async function sendMediaMessage(base: string, instanceToken: string, phone: string, fileUrl: string, mediaType: string, caption?: string): Promise<{ sent: boolean; status: number; body: string; uazapiMessageId: string | null }> {
-  // Based on n8n: POST {base}/send/media with header token and body { number, type, file, readchat, text (optional caption) }
-  const attempts: Array<{ path: string; headers: Record<string, string>; body: Record<string, any> }> = [
+  const isAudio = mediaType === "myaudio" || mediaType === "audio";
+  
+  // For audio, try dedicated audio endpoint first (as PTT voice note)
+  const attempts: Array<{ path: string; headers: Record<string, string>; body: Record<string, any> }> = [];
+  
+  if (isAudio) {
+    // Audio-specific endpoints first
+    attempts.push(
+      {
+        path: "/send/audio",
+        headers: { token: instanceToken },
+        body: { number: phone, audio: fileUrl, readchat: "true" },
+      },
+      {
+        path: "/send/audio",
+        headers: { token: instanceToken },
+        body: { number: phone, file: fileUrl, readchat: "true" },
+      },
+    );
+  }
+  
+  // Generic media endpoints
+  attempts.push(
     // n8n style - primary
     {
       path: "/send/media",
@@ -387,13 +411,16 @@ async function sendMediaMessage(base: string, instanceToken: string, phone: stri
       headers: { Token: instanceToken },
       body: { Phone: phone, Url: fileUrl },
     },
-    // For audio specifically
-    {
+  );
+  
+  if (!isAudio) {
+    // Non-audio fallback to /send/audio
+    attempts.push({
       path: "/send/audio",
       headers: { token: instanceToken },
       body: { number: phone, file: fileUrl, readchat: "true" },
-    },
-  ];
+    });
+  }
 
   let lastStatus = 0;
   let lastBody = "";
