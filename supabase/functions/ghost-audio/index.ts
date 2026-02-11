@@ -357,7 +357,7 @@ Deno.serve(async (req) => {
 
         lastStatus = res.status;
         lastBody = await res.text();
-        console.log("[ghost-audio] Response:", { url, status: lastStatus, body: lastBody.substring(0, 300) });
+        console.log("[ghost-audio] Response FULL:", lastBody);
 
         if (res.ok) {
           console.log("[ghost-audio] ✅ Audio sent successfully via", attempt.path);
