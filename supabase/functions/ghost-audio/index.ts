@@ -144,34 +144,39 @@ async function resolveContactId(
   return null;
 }
 
-// Upload audio to Supabase storage and return public URL
-async function uploadAudioToStorage(supabase: any, audioBase64: string, mimeType: string): Promise<string | null> {
+// Download media from UAZAPI to get public URL
+async function getPublicMediaUrl(baseUrl: string, instanceToken: string, messageId: string): Promise<string | null> {
+  const downloadUrl = `${baseUrl}/message/download`;
+  console.log("[ghost-audio] Downloading media URL:", { downloadUrl, messageId });
+
   try {
-    const ext = mimeType.includes("ogg") ? "ogg" : mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : "ogg";
-    const fileName = `audio_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const res = await fetch(downloadUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", token: instanceToken },
+      body: JSON.stringify({ id: messageId }),
+    });
 
-    const binaryString = atob(audioBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+    const responseText = await res.text();
+    console.log("[ghost-audio] Download response:", { status: res.status, body: responseText.substring(0, 300) });
+
+    if (res.ok) {
+      try {
+        const data = JSON.parse(responseText);
+        const fileUrl = data.fileURL || data.fileUrl || data.url || data.URL || data.file || null;
+        if (fileUrl) {
+          console.log("[ghost-audio] Got public media URL:", fileUrl);
+          return fileUrl;
+        }
+      } catch {
+        if (responseText.startsWith("http")) {
+          return responseText.trim();
+        }
+      }
     }
-
-    const { error } = await supabase.storage
-      .from("ghost-audio")
-      .upload(fileName, bytes, { contentType: mimeType, upsert: false });
-
-    if (error) {
-      console.error("[ghost-audio] Storage upload failed:", error.message);
-      return null;
-    }
-
-    const { data: urlData } = supabase.storage.from("ghost-audio").getPublicUrl(fileName);
-    console.log("[ghost-audio] Audio uploaded to storage:", urlData.publicUrl);
-    return urlData.publicUrl;
   } catch (err) {
-    console.error("[ghost-audio] Storage upload error:", err);
-    return null;
+    console.error("[ghost-audio] Media download error:", err);
   }
+  return null;
 }
 
 // Mirror the audio as an outbound message in GHL conversation
@@ -343,6 +348,7 @@ Deno.serve(async (req) => {
     let lastStatus = 0;
     let lastBody = "";
     let audioSent = false;
+    let uazapiMessageId: string | null = null;
 
     for (const attempt of attempts) {
       const url = baseUrl + attempt.path;
@@ -357,11 +363,17 @@ Deno.serve(async (req) => {
 
         lastStatus = res.status;
         lastBody = await res.text();
-        console.log("[ghost-audio] Response FULL:", lastBody);
+        console.log("[ghost-audio] Response:", { status: lastStatus, body: lastBody.substring(0, 500) });
 
         if (res.ok) {
           console.log("[ghost-audio] ✅ Audio sent successfully via", attempt.path);
           audioSent = true;
+          // Extract messageid from response
+          try {
+            const parsed = JSON.parse(lastBody);
+            uazapiMessageId = parsed.messageid || parsed.messageId || parsed.id?.split(":")?.[1] || null;
+            console.log("[ghost-audio] Extracted messageid:", uazapiMessageId);
+          } catch { /* ignore */ }
           break;
         }
       } catch (e) {
@@ -377,9 +389,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 6. Upload audio to storage and mirror in GHL
+    // 6. Get public URL from UAZAPI and mirror in GHL
     try {
-      const audioUrl = await uploadAudioToStorage(supabase, audio, format || "audio/ogg");
+      let audioUrl: string | null = null;
+      if (uazapiMessageId) {
+        audioUrl = await getPublicMediaUrl(baseUrl, token, uazapiMessageId);
+      }
+
       // Get user_settings for OAuth credentials
       let { data: settings } = await supabase
         .from("user_settings")
@@ -400,7 +416,6 @@ Deno.serve(async (req) => {
       if (settings?.[0]?.ghl_client_id && sub.ghl_access_token) {
         const ghlToken = await getValidToken(supabase, sub, settings[0]);
 
-        // Find the contactId for this phone
         const contactId = await resolveContactId(supabase, cleanPhone, locationId, ghlToken);
 
         if (contactId) {
