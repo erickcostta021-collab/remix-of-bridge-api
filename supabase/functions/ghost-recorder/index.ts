@@ -20,6 +20,67 @@ const GHOST_RECORDER_SCRIPT = `/**
     let timerInterval;
     let startTime;
 
+    function audioBufferToWav(buffer) {
+        const numChannels = buffer.numberOfChannels;
+        const sampleRate = buffer.sampleRate;
+        const format = 1; // PCM
+        const bitsPerSample = 16;
+        const bytesPerSample = bitsPerSample / 8;
+        const blockAlign = numChannels * bytesPerSample;
+        const data = numChannels === 1 ? buffer.getChannelData(0) : interleave(buffer);
+        const dataLength = data.length * bytesPerSample;
+        const headerLength = 44;
+        const totalLength = headerLength + dataLength;
+        const arrayBuffer = new ArrayBuffer(totalLength);
+        const view = new DataView(arrayBuffer);
+
+        function writeString(offset, str) { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); }
+
+        writeString(0, 'RIFF');
+        view.setUint32(4, totalLength - 8, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, format, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * blockAlign, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bitsPerSample, true);
+        writeString(36, 'data');
+        view.setUint32(40, dataLength, true);
+
+        let offset = 44;
+        for (let i = 0; i < data.length; i++, offset += 2) {
+            const s = Math.max(-1, Math.min(1, data[i]));
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        }
+        return new Blob([arrayBuffer], { type: 'audio/wav' });
+    }
+
+    function interleave(buffer) {
+        const len = buffer.length;
+        const channels = buffer.numberOfChannels;
+        const result = new Float32Array(len * channels);
+        let idx = 0;
+        for (let i = 0; i < len; i++) {
+            for (let ch = 0; ch < channels; ch++) {
+                result[idx++] = buffer.getChannelData(ch)[i];
+            }
+        }
+        return result;
+    }
+
+    async function convertToWav(webmBlob) {
+        const arrayBuffer = await webmBlob.arrayBuffer();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        audioCtx.close();
+        const wavBlob = audioBufferToWav(audioBuffer);
+        console.log('DOUG.TECH: Tamanho do WAV: ' + wavBlob.size);
+        return wavBlob;
+    }
+
     const ICONS = {
         mic: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-500 hover:text-gray-700"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>\`,
         stop: \`<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-red-500 animate-pulse"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>\`,
@@ -94,15 +155,20 @@ const GHOST_RECORDER_SCRIPT = `/**
         actionGroup.style.opacity = "0.5";
         actionGroup.style.pointerEvents = "none";
 
-        const nativeFile = new File([audioBlob], \`audio_voice_\${Date.now()}.mp3\`, { type: 'audio/mpeg' });
-        nativeGHLUpload(nativeFile);
+        try {
+            const wavBlob = await convertToWav(audioBlob);
+            const nativeFile = new File([wavBlob], \`audio_voice_\${Date.now()}.wav\`, { type: 'audio/wav' });
+            nativeGHLUpload(nativeFile);
+        } catch(e) {
+            console.error('DOUG.TECH: Erro na conversão WAV', e);
+        }
         
         // Reset após o burst
         setTimeout(() => {
             fullReset();
             actionGroup.style.opacity = "1";
             actionGroup.style.pointerEvents = "auto";
-        }, 1500);
+        }, 2000);
     }
 
     function nativeGHLUpload(file) {
@@ -111,6 +177,7 @@ const GHOST_RECORDER_SCRIPT = `/**
                               document.querySelector('input[type="file"][multiple]');
             
             if (fileInput) {
+                fileInput.removeAttribute('accept');
                 const dt = new DataTransfer();
                 dt.items.add(file);
                 fileInput.files = dt.files;
@@ -118,15 +185,17 @@ const GHOST_RECORDER_SCRIPT = `/**
                 fileInput.dispatchEvent(new Event('change', { bubbles: true }));
                 fileInput.dispatchEvent(new Event('input', { bubbles: true }));
                 
-                let attempts = 0;
-                const burstInterval = setInterval(() => {
-                    const success = forceSendClick();
-                    attempts++;
-                    if (success || attempts > 30) {
-                        clearInterval(burstInterval);
-                    }
-                }, 50); 
-            }
+                // Aguarda o arquivo ser processado antes de tentar enviar
+                setTimeout(() => {
+                    let attempts = 0;
+                    const burstInterval = setInterval(() => {
+                        const success = forceSendClick();
+                        attempts++;
+                        if (success || attempts > 30) {
+                            clearInterval(burstInterval);
+                        }
+                    }, 100); 
+                }, 500);
         } catch(e) { console.error("Erro injection", e); }
     }
 
