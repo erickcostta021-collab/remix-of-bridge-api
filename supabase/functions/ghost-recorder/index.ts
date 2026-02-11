@@ -1,15 +1,203 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
+// =====================================================================
+// POST HANDLER: Receive audio + context, send directly to UAZAPI
+// =====================================================================
+
+async function handleAudioSend(req: Request): Promise<Response> {
+  try {
+    const body = await req.json();
+    const { audio, locationId, phone, instanceId } = body;
+
+    if (!audio || !locationId || !phone) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: audio, locationId, phone" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("[ghost-recorder] POST received:", { locationId, phone: phone.slice(0, 8) + "...", audioLength: audio.length, instanceId });
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Resolve instance
+    let resolvedInstanceId = instanceId;
+
+    if (!resolvedInstanceId) {
+      // Try contact_instance_preferences
+      const normalizedPhone = phone.replace(/\D/g, "");
+      const last10 = normalizedPhone.slice(-10);
+      
+      const { data: pref } = await supabase
+        .from("contact_instance_preferences")
+        .select("instance_id")
+        .eq("location_id", locationId)
+        .or(`lead_phone.eq.${normalizedPhone},lead_phone.like.%${last10}%`)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+
+      if (pref?.[0]) {
+        resolvedInstanceId = pref[0].instance_id;
+      }
+    }
+
+    if (!resolvedInstanceId) {
+      // Fallback: first connected instance for this location's subaccount
+      const { data: sub } = await supabase
+        .from("ghl_subaccounts")
+        .select("id")
+        .eq("location_id", locationId)
+        .not("ghl_access_token", "is", null)
+        .limit(1);
+
+      if (sub?.[0]) {
+        const { data: inst } = await supabase
+          .from("instances")
+          .select("id")
+          .eq("subaccount_id", sub[0].id)
+          .eq("instance_status", "connected")
+          .limit(1);
+        
+        if (inst?.[0]) resolvedInstanceId = inst[0].id;
+      }
+    }
+
+    if (!resolvedInstanceId) {
+      console.error("[ghost-recorder] No instance found for location:", locationId);
+      return new Response(
+        JSON.stringify({ error: "No instance found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Get instance details
+    const { data: instance } = await supabase
+      .from("instances")
+      .select("uazapi_base_url, uazapi_instance_token, instance_name")
+      .eq("id", resolvedInstanceId)
+      .single();
+
+    if (!instance?.uazapi_base_url || !instance?.uazapi_instance_token) {
+      console.error("[ghost-recorder] Instance missing UAZAPI config:", resolvedInstanceId);
+      return new Response(
+        JSON.stringify({ error: "Instance not configured" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const base = instance.uazapi_base_url;
+    const token = instance.uazapi_instance_token;
+    const cleanPhone = phone.replace(/\D/g, "");
+
+    console.log("[ghost-recorder] Sending audio via UAZAPI:", { 
+      instance: instance.instance_name, 
+      base, 
+      phone: cleanPhone.slice(0, 8) + "..." 
+    });
+
+    // Try multiple UAZAPI endpoints/payload formats
+    const dataUri = `data:audio/ogg;base64,${audio}`;
+    
+    const attempts = [
+      // Attempt 1: /send/audio with audio field (base64)
+      {
+        path: "/send/audio",
+        body: { number: cleanPhone, audio: dataUri, readchat: "true" },
+      },
+      // Attempt 2: /send/audio with file field (base64)
+      {
+        path: "/send/audio",
+        body: { number: cleanPhone, file: dataUri, readchat: "true" },
+      },
+      // Attempt 3: /send/media with type myaudio
+      {
+        path: "/send/media",
+        body: { number: cleanPhone, type: "myaudio", file: dataUri, readchat: "true" },
+      },
+      // Attempt 4: /send/media with type audio
+      {
+        path: "/send/media",
+        body: { number: cleanPhone, type: "audio", file: dataUri, readchat: "true" },
+      },
+      // Attempt 5: /send/media without type
+      {
+        path: "/send/media",
+        body: { number: cleanPhone, file: dataUri, readchat: "true" },
+      },
+    ];
+
+    let lastStatus = 0;
+    let lastBody = "";
+
+    for (const attempt of attempts) {
+      const url = `${base}${attempt.path}`;
+      console.log("[ghost-recorder] Trying:", { url, bodyKeys: Object.keys(attempt.body) });
+
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", token },
+          body: JSON.stringify(attempt.body),
+        });
+
+        lastStatus = res.status;
+        lastBody = await res.text();
+        console.log("[ghost-recorder] Response:", { url, status: lastStatus, body: lastBody.substring(0, 300) });
+
+        if (res.ok) {
+          let messageId = null;
+          try {
+            const parsed = JSON.parse(lastBody);
+            messageId = parsed?.messageid || parsed?.messageId || parsed?.id || parsed?.key?.id || null;
+          } catch { /* ignore */ }
+
+          return new Response(
+            JSON.stringify({ success: true, messageId, instance: instance.instance_name }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } catch (e) {
+        console.error("[ghost-recorder] Fetch error:", e);
+        lastBody = String(e);
+      }
+    }
+
+    console.error("[ghost-recorder] All attempts failed:", { lastStatus, lastBody: lastBody.substring(0, 300) });
+    return new Response(
+      JSON.stringify({ error: "Failed to send audio", status: lastStatus, detail: lastBody.substring(0, 200) }),
+      { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
+  } catch (e) {
+    console.error("[ghost-recorder] POST handler error:", e);
+    return new Response(
+      JSON.stringify({ error: "Internal error", detail: String(e) }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+}
+
+// =====================================================================
+// GHOST RECORDER SCRIPT (served via GET)
+// =====================================================================
+
 const GHOST_RECORDER_SCRIPT = `/**
- * DOUG.TECH - GHOST RECORDER v3
+ * DOUG.TECH - GHOST RECORDER v4
+ * Direct UAZAPI audio send (bypasses GHL file input)
  */
 (function() {
-    console.log("DOUG.TECH: Ghost Recorder v3 carregado");
+    console.log("DOUG.TECH: Ghost Recorder v4 carregado");
 
+    var SEND_URL = 'https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1/ghost-recorder';
     var mediaRecorder = null;
     var currentStream = null;
     var audioChunks = [];
@@ -31,7 +219,6 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     var container, mainBtn, actionGroup, timerDisplay;
 
-    // Detect best supported recording format — prefer opus codecs for WhatsApp PTT
     function getPreferredMimeType() {
         var candidates = [
             'audio/ogg;codecs=opus',
@@ -47,8 +234,32 @@ const GHOST_RECORDER_SCRIPT = `/**
                 return candidates[i];
             }
         }
-        console.log("DOUG.TECH: No preferred mimeType supported, using default");
         return '';
+    }
+
+    function extractLocationId() {
+        var match = window.location.pathname.match(/location\\/([^\\/]+)/);
+        return match ? match[1] : null;
+    }
+
+    function extractPhone() {
+        var input = document.querySelector('input.hr-input-phone');
+        if (input && input.value) return cleanPhone(input.value);
+        var activeCard = document.querySelector('[data-is-active="true"][phone]');
+        if (activeCard) return cleanPhone(activeCard.getAttribute('phone'));
+        return null;
+    }
+
+    function cleanPhone(raw) {
+        if (!raw) return null;
+        var clean = raw.replace(/\\D/g, '');
+        if (clean.length === 11 && !clean.startsWith('55')) return '55' + clean;
+        return clean.length >= 10 ? clean : null;
+    }
+
+    function getSelectedInstanceId() {
+        var select = document.getElementById('bridge-instance-selector');
+        return select ? select.value : null;
     }
 
     function createUI() {
@@ -102,93 +313,14 @@ const GHOST_RECORDER_SCRIPT = `/**
             if (mediaRecorder) mediaRecorder.stop();
             isRecording = false; stopTimer();
             if (currentStream) currentStream.getTracks().forEach(function(t) { t.stop(); });
-            mediaRecorder.onstop = async function() {
-                var rawBlob = new Blob(audioChunks, { type: recordedMimeType });
-                console.log("DOUG.TECH: Raw blob size:", rawBlob.size, "type:", rawBlob.type);
-
-                // For WhatsApp voice notes, always use ogg container
-                // WebM+Opus and OGG+Opus share the same codec, so we can re-wrap
-                if (recordedMimeType.indexOf('opus') !== -1 || recordedMimeType.indexOf('ogg') !== -1 || recordedMimeType.indexOf('webm') !== -1) {
-                    // Re-wrap as ogg to ensure WhatsApp treats it as voice note (PTT)
-                    audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
-                    console.log("DOUG.TECH: Wrapped as audio/ogg for PTT voice note");
-                } else {
-                    // For mp4/aac/mpeg fallback, still try to use as-is
-                    audioBlob = rawBlob;
-                    console.log("DOUG.TECH: Using native format:", recordedMimeType);
-                }
+            mediaRecorder.onstop = function() {
+                audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
+                console.log("DOUG.TECH: Audio blob ready, size:", audioBlob.size);
                 var audioUrl = URL.createObjectURL(audioBlob);
                 audioPlayer = new Audio(audioUrl);
                 mainBtn.style.display = 'none'; timerDisplay.style.display = 'none'; actionGroup.style.display = 'flex';
             };
         }
-    }
-
-    function convertToWav(blob) {
-        return new Promise(function(resolve, reject) {
-            var reader = new FileReader();
-            reader.onload = function() {
-                var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                audioCtx.decodeAudioData(reader.result).then(function(buffer) {
-                    var sampleRate = Math.min(buffer.sampleRate, 16000);
-                    var rawData = buffer.getChannelData(0);
-                    
-                    // Resample if needed
-                    var data = rawData;
-                    if (buffer.sampleRate !== sampleRate) {
-                        var ratio = buffer.sampleRate / sampleRate;
-                        var newLen = Math.floor(rawData.length / ratio);
-                        data = new Float32Array(newLen);
-                        for (var i = 0; i < newLen; i++) {
-                            data[i] = rawData[Math.floor(i * ratio)];
-                        }
-                    }
-                    
-                    var wavBuf = encodeWav(data, sampleRate, 1);
-                    resolve(new Blob([wavBuf], { type: 'audio/wav' }));
-                    audioCtx.close();
-                }).catch(function(err) {
-                    reject(err);
-                });
-            };
-            reader.onerror = reject;
-            reader.readAsArrayBuffer(blob);
-        });
-    }
-
-    function encodeWav(samples, sampleRate, numChannels) {
-        var bytesPerSample = 2;
-        var blockAlign = numChannels * bytesPerSample;
-        var dataSize = samples.length * bytesPerSample;
-        var bufferSize = 44 + dataSize;
-        var buffer = new ArrayBuffer(bufferSize);
-        var view = new DataView(buffer);
-
-        function w(offset, str) {
-            for (var i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-        }
-
-        w(0, 'RIFF');
-        view.setUint32(4, bufferSize - 8, true);
-        w(8, 'WAVE');
-        w(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * blockAlign, true);
-        view.setUint16(32, blockAlign, true);
-        view.setUint16(34, bytesPerSample * 8, true);
-        w(36, 'data');
-        view.setUint32(40, dataSize, true);
-
-        var offset = 44;
-        for (var i = 0; i < samples.length; i++) {
-            var s = Math.max(-1, Math.min(1, samples[i]));
-            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-            offset += 2;
-        }
-        return buffer;
     }
 
     async function handleSend() {
@@ -197,78 +329,68 @@ const GHOST_RECORDER_SCRIPT = `/**
         actionGroup.style.opacity = "0.5";
         actionGroup.style.pointerEvents = "none";
 
-        var fileExt, fileMime;
-        var blobType = audioBlob.type || '';
-        if (blobType.indexOf('ogg') !== -1 || blobType.indexOf('opus') !== -1) { fileExt = 'ogg'; fileMime = 'audio/ogg'; }
-        else if (blobType.indexOf('mp4') !== -1) { fileExt = 'mp4'; fileMime = 'audio/mp4'; }
-        else if (blobType.indexOf('aac') !== -1) { fileExt = 'aac'; fileMime = 'audio/aac'; }
-        else if (blobType.indexOf('wav') !== -1) { fileExt = 'wav'; fileMime = 'audio/wav'; }
-        else if (blobType.indexOf('mpeg') !== -1) { fileExt = 'mp3'; fileMime = 'audio/mpeg'; }
-        else { fileExt = 'ogg'; fileMime = 'audio/ogg'; }
+        var locationId = extractLocationId();
+        var phone = extractPhone();
+        var instanceId = getSelectedInstanceId();
 
-        console.log("DOUG.TECH: Sending as", fileMime, "ext:", fileExt, "size:", audioBlob.size);
-        
-        var nativeFile = new File([audioBlob], 'audio_' + Date.now() + '.' + fileExt, { type: fileMime });
-        nativeGHLUpload(nativeFile);
-        
-        setTimeout(function() {
+        console.log("DOUG.TECH: Sending audio directly via edge function:", {
+            locationId: locationId,
+            phone: phone ? phone.slice(0, 8) + '...' : null,
+            instanceId: instanceId,
+            blobSize: audioBlob.size
+        });
+
+        if (!locationId || !phone) {
+            alert("Não foi possível detectar a conversa. Recarregue a página.");
+            actionGroup.style.opacity = "1";
+            actionGroup.style.pointerEvents = "auto";
+            return;
+        }
+
+        try {
+            // Convert blob to base64
+            var reader = new FileReader();
+            reader.onload = async function() {
+                var base64 = reader.result.split(',')[1]; // Remove data:...;base64, prefix
+                console.log("DOUG.TECH: Base64 ready, length:", base64.length);
+
+                try {
+                    var res = await fetch(SEND_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            audio: base64,
+                            locationId: locationId,
+                            phone: phone,
+                            instanceId: instanceId
+                        })
+                    });
+
+                    var data = await res.json();
+                    console.log("DOUG.TECH: Send response:", data);
+
+                    if (res.ok && data.success) {
+                        console.log("DOUG.TECH: ✅ Audio sent successfully via", data.instance);
+                    } else {
+                        console.error("DOUG.TECH: ❌ Send failed:", data);
+                        alert("Erro ao enviar áudio: " + (data.error || "Erro desconhecido"));
+                    }
+                } catch (err) {
+                    console.error("DOUG.TECH: ❌ Network error:", err);
+                    alert("Erro de rede ao enviar áudio.");
+                }
+
+                fullReset();
+                actionGroup.style.opacity = "1";
+                actionGroup.style.pointerEvents = "auto";
+            };
+            reader.readAsDataURL(audioBlob);
+        } catch (err) {
+            console.error("DOUG.TECH: Error converting audio:", err);
             fullReset();
             actionGroup.style.opacity = "1";
             actionGroup.style.pointerEvents = "auto";
-        }, 2000);
-    }
-
-    function nativeGHLUpload(file) {
-        try {
-            var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
-                            document.querySelector('input[type="file"][multiple]') ||
-                            document.querySelector('input[type="file"]');
-            
-            if (fileInput) {
-                fileInput.removeAttribute('accept');
-
-                var dt = new DataTransfer();
-                dt.items.add(file);
-                
-                var nativeFileSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
-                nativeFileSetter.call(fileInput, dt.files);
-                
-                fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                
-                try {
-                    var dropEvent = new DragEvent('drop', { bubbles: true, composed: true, dataTransfer: dt });
-                    fileInput.dispatchEvent(dropEvent);
-                } catch(dropErr) {}
-                
-                var attempts = 0;
-                var burstInterval = setInterval(function() {
-                    var success = forceSendClick();
-                    attempts++;
-                    if (success || attempts > 40) {
-                        clearInterval(burstInterval);
-                    }
-                }, 100); 
-            } else {
-                console.warn("DOUG.TECH: File input not found");
-            }
-        } catch(e) { console.error("DOUG.TECH: Erro injection", e); }
-    }
-
-    function forceSendClick() {
-        var buttons = Array.from(document.querySelectorAll('button'));
-        var sendBtn = buttons.find(function(b) { return b.innerHTML.indexOf('M2.01 21L23 12 2.01 3') !== -1; });
-
-        if (sendBtn && !sendBtn.disabled) {
-            sendBtn.click();
-            return true;
-        } 
-        
-        var textarea = document.querySelector('textarea');
-        if(textarea) {
-            textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
         }
-        return false;
     }
 
     function togglePreview() {
@@ -308,11 +430,21 @@ const GHOST_RECORDER_SCRIPT = `/**
     setTimeout(createUI, 1500);
 })();`;
 
+// =====================================================================
+// MAIN HANDLER
+// =====================================================================
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // POST: Handle audio send
+  if (req.method === "POST") {
+    return handleAudioSend(req);
+  }
+
+  // GET: Serve the Ghost Recorder script
   return new Response(GHOST_RECORDER_SCRIPT, {
     headers: {
       ...corsHeaders,
