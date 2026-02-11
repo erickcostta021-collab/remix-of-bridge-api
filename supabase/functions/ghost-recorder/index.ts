@@ -5,14 +5,14 @@ const corsHeaders = {
 };
 
 const GHOST_RECORDER_SCRIPT = `/**
- * 🚀 DOUG.TECH - GHOST RECORDER (SMS OPTIMIZED)
- * Baseado na interface original do usuário com injeção de alta fidelidade.
+ * 🚀 DOUG.TECH - GHOST RECORDER (ANTI-415 STEALTH MODE)
+ * Mimetismo profundo de arquivos do sistema para burlar o validador do GHL.
  */
 (function() {
-    console.log("🚀 DOUG.TECH: Modo Injeção SMS Ativado...");
+    console.log("🚀 DOUG.TECH: Iniciando Stealth Injection...");
 
-    let mediaRecorder = null, currentStream = null, audioChunks = [], audioBlob = null, audioPlayer = null;
-    let isRecording = false, timerInterval, startTime;
+    var mediaRecorder = null, currentStream = null, audioChunks = [], audioBlob = null, audioPlayer = null;
+    var isRecording = false, timerInterval, startTime;
 
     var ICONS = {
         mic: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-500 hover:text-gray-700"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>',
@@ -23,35 +23,35 @@ const GHOST_RECORDER_SCRIPT = `/**
         send: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-green-500 hover:text-green-600"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>'
     };
 
-    var container, mainBtn, actionGroup, timerDisplay;
-
     function createUI() {
-        var toolbar = document.querySelector('.message-input-actions') || 
-                        document.querySelector('.toolbar-container') ||
-                        document.querySelector('.flex.flex-row.gap-2.items-center.pl-2');
         var attachPath = document.querySelector('path[d*="M17.5 5.256V16.5"]');
-        if (!toolbar && attachPath) toolbar = attachPath.closest('.flex');
+        var toolbar = (attachPath ? attachPath.closest('.flex') : null) || 
+                        document.querySelector('.message-input-actions') || 
+                        document.querySelector('.toolbar-container');
 
         if (toolbar && !document.getElementById('doug-maestro-ui')) {
-            container = document.createElement('div');
+            var container = document.createElement('div');
             container.id = 'doug-maestro-ui';
-            container.style.cssText = "display: flex; align-items: center; margin-right: 8px; z-index: 10;";
+            container.style.cssText = "display: flex; align-items: center; margin-right: 8px; z-index: 100;";
 
-            mainBtn = document.createElement('div');
+            var mainBtn = document.createElement('div');
+            mainBtn.id = "doug-main-btn";
             mainBtn.innerHTML = ICONS.mic;
-            mainBtn.style.cssText = "cursor: pointer; padding: 6px; border-radius: 50%; transition: all 0.2s;";
+            mainBtn.style.cssText = "cursor: pointer; padding: 6px; border-radius: 50%;";
             mainBtn.onclick = handleMainClick;
 
-            timerDisplay = document.createElement('span');
+            var timerDisplay = document.createElement('span');
+            timerDisplay.id = "doug-timer";
             timerDisplay.innerText = "00:00";
             timerDisplay.style.cssText = "display: none; font-size: 13px; font-weight: 600; color: #ef4444; margin: 0 8px;";
 
-            actionGroup = document.createElement('div');
+            var actionGroup = document.createElement('div');
+            actionGroup.id = "doug-action-group";
             actionGroup.style.cssText = "display: none; align-items: center; gap: 5px; background: #f3f4f6; padding: 4px; border-radius: 20px;";
             
-            var btnPlay = document.createElement('div'); btnPlay.innerHTML = ICONS.play; btnPlay.onclick = togglePreview; btnPlay.style.cursor='pointer'; btnPlay.style.padding='4px';
-            var btnTrash = document.createElement('div'); btnTrash.innerHTML = ICONS.trash; btnTrash.onclick = fullReset; btnTrash.style.cursor='pointer'; btnTrash.style.padding='4px';
-            var btnSend = document.createElement('div'); btnSend.innerHTML = ICONS.send; btnSend.onclick = handleSend; btnSend.style.cursor='pointer'; btnSend.style.padding='4px';
+            var btnPlay = document.createElement('div'); btnPlay.innerHTML = ICONS.play; btnPlay.onclick = togglePreview; btnPlay.style.cursor='pointer';
+            var btnTrash = document.createElement('div'); btnTrash.innerHTML = ICONS.trash; btnTrash.onclick = fullReset; btnTrash.style.cursor='pointer';
+            var btnSend = document.createElement('div'); btnSend.innerHTML = ICONS.send; btnSend.onclick = handleSend; btnSend.style.cursor='pointer';
             
             actionGroup.appendChild(btnTrash); actionGroup.appendChild(btnPlay); actionGroup.appendChild(btnSend);
             container.appendChild(timerDisplay); container.appendChild(mainBtn); container.appendChild(actionGroup);
@@ -59,99 +59,101 @@ const GHOST_RECORDER_SCRIPT = `/**
         }
     }
 
-    async function handleMainClick() {
+    async function handleSend() {
+        if (!audioBlob) return;
+        var group = document.getElementById('doug-action-group');
+        group.style.opacity = "0.5"; group.style.pointerEvents = "none";
+
+        var file = new File([audioBlob], 'VOICE_' + Date.now() + '.mp3', { 
+            type: 'audio/mpeg',
+            lastModified: new Date().getTime() 
+        });
+        
+        Object.defineProperty(file, 'webkitRelativePath', { value: '' });
+
+        injectAndSend(file);
+    }
+
+    function injectAndSend(file) {
+        var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
+                          document.querySelector('input[type="file"][multiple]');
+
+        if (!fileInput) return console.error("DOUG.TECH: Input não encontrado");
+
+        fileInput.value = '';
+        fileInput.focus();
+
+        var dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+
+        var eConfig = { bubbles: true, cancelable: true, composed: true };
+        
+        fileInput.dispatchEvent(new Event('focus', eConfig));
+        
+        setTimeout(function() {
+            fileInput.dispatchEvent(new Event('change', eConfig));
+            fileInput.dispatchEvent(new Event('input', eConfig));
+            
+            setTimeout(function() {
+                fileInput.dispatchEvent(new Event('blur', eConfig));
+                
+                var attempts = 0;
+                var sendInterval = setInterval(function() {
+                    var sendPath = document.querySelector('button svg path[d*="M2.01 21L23 12"]');
+                    var sendBtn = sendPath ? sendPath.closest('button') : null;
+                    if (sendBtn && !sendBtn.disabled) {
+                        sendBtn.click();
+                        clearInterval(sendInterval);
+                        fullReset();
+                    }
+                    if (++attempts > 15) {
+                        clearInterval(sendInterval);
+                        var textarea = document.querySelector('textarea');
+                        if(textarea) textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                        fullReset();
+                    }
+                }, 400);
+            }, 200);
+        }, 100);
+    }
+
+    function handleMainClick() {
+        var mainBtn = document.getElementById('doug-main-btn');
+        var timerDisplay = document.getElementById('doug-timer');
         if (!isRecording) {
-            try {
-                currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(currentStream);
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+                currentStream = stream;
+                mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
-                mediaRecorder.ondataavailable = function(e) { if (e.data.size > 0) audioChunks.push(e.data); };
+                mediaRecorder.ondataavailable = function(e) { audioChunks.push(e.data); };
                 mediaRecorder.start();
                 isRecording = true;
                 mainBtn.innerHTML = ICONS.stop; timerDisplay.style.display = 'block'; startTimer();
-            } catch (err) { alert("Microfone bloqueado."); fullReset(); }
+            });
         } else {
-            if (mediaRecorder) mediaRecorder.stop();
+            mediaRecorder.stop();
             isRecording = false; stopTimer();
-            if (currentStream) currentStream.getTracks().forEach(function(t) { t.stop(); });
+            currentStream.getTracks().forEach(function(t) { t.stop(); });
             mediaRecorder.onstop = function() {
                 audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                var audioUrl = URL.createObjectURL(audioBlob);
-                audioPlayer = new Audio(audioUrl);
-                mainBtn.style.display = 'none'; timerDisplay.style.display = 'none'; actionGroup.style.display = 'flex';
+                audioPlayer = new Audio(URL.createObjectURL(audioBlob));
+                mainBtn.style.display = 'none'; timerDisplay.style.display = 'none'; 
+                document.getElementById('doug-action-group').style.display = 'flex';
             };
         }
     }
-
-    async function handleSend() {
-        if (!audioBlob) return;
-        actionGroup.style.opacity = "0.5";
-        actionGroup.style.pointerEvents = "none";
-
-        var nativeFile = new File([audioBlob], 'audio_' + Date.now() + '.mp3', { type: 'audio/mpeg' });
-        nativeGHLUpload(nativeFile);
-        
-        setTimeout(function() {
-            fullReset();
-            actionGroup.style.opacity = "1";
-            actionGroup.style.pointerEvents = "auto";
-        }, 2000);
-    }
-
-    function nativeGHLUpload(file) {
-        try {
-            var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') || 
-                              document.querySelector('input[type="file"][multiple]');
-            var attachBtn = document.querySelector('path[d*="M17.5 5.256V16.5"]');
-            if (attachBtn) attachBtn = attachBtn.closest('svg');
-            if (attachBtn) attachBtn = attachBtn.parentElement;
-
-            if (fileInput) {
-                if (attachBtn) attachBtn.click();
-
-                setTimeout(function() {
-                    var dt = new DataTransfer();
-                    dt.items.add(file);
-                    fileInput.files = dt.files;
-                    
-                    var eventConfig = { bubbles: true, cancelable: true, composed: true };
-                    fileInput.dispatchEvent(new Event('change', eventConfig));
-                    fileInput.dispatchEvent(new Event('input', eventConfig));
-                    
-                    var attempts = 0;
-                    var burstInterval = setInterval(function() {
-                        var success = forceSendClick();
-                        attempts++;
-                        if (success || attempts > 20) clearInterval(burstInterval);
-                    }, 1500);
-                }, 300);
-            }
-        } catch(e) { console.error("Erro injection", e); }
-    }
-
-    function forceSendClick() {
-        var sendPath = document.querySelector('button svg path[d*="M2.01 21L23 12"]');
-        var sendBtn = sendPath ? sendPath.closest('button') : null;
-        if (sendBtn && !sendBtn.disabled) {
-            sendBtn.click();
-            return true;
-        } 
-        var textarea = document.querySelector('textarea');
-        if(textarea) {
-            textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
-        }
-        return false;
-    }
-
-    function togglePreview() { if(!audioPlayer) return; audioPlayer.paused ? audioPlayer.play() : audioPlayer.pause(); }
-    function fullReset() {
-        if(audioPlayer) { audioPlayer.pause(); audioPlayer = null; }
-        if(currentStream) { currentStream.getTracks().forEach(function(t) { t.stop(); }); currentStream = null; }
-        mediaRecorder = null; audioChunks = []; audioBlob = null; isRecording = false; stopTimer();
-        if(mainBtn) { mainBtn.innerHTML = ICONS.mic; mainBtn.style.display = 'block'; actionGroup.style.display = 'none'; timerDisplay.style.display = 'none'; timerDisplay.innerText = "00:00"; }
-    }
-    function startTimer() { startTime = Date.now(); timerInterval = setInterval(function() { var diff = Math.floor((Date.now() - startTime) / 1000); var m = Math.floor(diff / 60).toString().padStart(2,'0'); var s = (diff % 60).toString().padStart(2,'0'); timerDisplay.innerText = m + ':' + s; }, 1000); }
+    function startTimer() { startTime = Date.now(); timerInterval = setInterval(function() { var diff = Math.floor((Date.now() - startTime) / 1000); document.getElementById('doug-timer').innerText = Math.floor(diff/60).toString().padStart(2,'0') + ':' + (diff%60).toString().padStart(2,'0'); }, 1000); }
     function stopTimer() { clearInterval(timerInterval); }
+    function togglePreview() { if(audioPlayer) audioPlayer.paused ? audioPlayer.play() : audioPlayer.pause(); }
+    function fullReset() {
+        var group = document.getElementById('doug-action-group');
+        if(group) { group.style.display = 'none'; group.style.opacity = "1"; group.style.pointerEvents = "auto"; }
+        document.getElementById('doug-main-btn').style.display = 'block';
+        document.getElementById('doug-main-btn').innerHTML = ICONS.mic;
+        document.getElementById('doug-timer').style.display = 'none';
+        audioChunks = []; audioBlob = null;
+    }
 
     var observer = new MutationObserver(function() { if (!document.getElementById('doug-maestro-ui')) createUI(); });
     observer.observe(document.body, { childList: true, subtree: true });
