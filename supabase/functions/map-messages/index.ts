@@ -796,11 +796,14 @@ serve(async (req) => {
         );
       }
 
-      // Parse the response to get the new message ID
+      // Parse the response to get the new message ID and quoted message info
       let newMessageId = null;
+      let uazapiQuotedMessage: Record<string, unknown> | null = null;
       try {
         const responseData = JSON.parse(result.body);
         newMessageId = responseData.key?.id || responseData.messageId || responseData.id;
+        // Extract quotedMessage from UAZAPI response for media type detection
+        uazapiQuotedMessage = responseData.content?.contextInfo?.quotedMessage || null;
       } catch (e) {
         console.log("⚠️ Could not parse reply response for message ID");
       }
@@ -825,6 +828,21 @@ serve(async (req) => {
           originalText = 'Contato';
         } else if (mType.includes('location')) {
           originalText = 'Localização';
+        } else if (mType === 'media' && uazapiQuotedMessage) {
+          // Fallback: detect from UAZAPI response quotedMessage for legacy "media" entries
+          if (uazapiQuotedMessage.audioMessage) {
+            originalText = 'Áudio';
+          } else if (uazapiQuotedMessage.imageMessage) {
+            originalText = 'Imagem';
+          } else if (uazapiQuotedMessage.videoMessage) {
+            originalText = 'Vídeo';
+          } else if (uazapiQuotedMessage.documentMessage) {
+            originalText = 'Documento';
+          } else if (uazapiQuotedMessage.stickerMessage) {
+            originalText = 'Figurinha';
+          } else {
+            originalText = 'Mídia';
+          }
         } else {
           originalText = 'Mídia';
         }
