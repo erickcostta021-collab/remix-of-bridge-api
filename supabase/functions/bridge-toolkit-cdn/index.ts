@@ -226,7 +226,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     };
 
     // Show reply banner in input area
-    const showReplyBanner = async (msgText, ghlId, locationId, contactPhone) => {
+    const showReplyBanner = async (msgText, ghlId, locationId) => {
         clearEditContext(); // Clear edit if switching to reply
         const existingBanner = document.getElementById('bridge-reply-banner');
         if (existingBanner) existingBanner.remove();
@@ -272,7 +272,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
             replyContext = null;
         };
         
-        replyContext = { ghlId, text: msgText, locationId, contactPhone: contactPhone || '' };
+        replyContext = { ghlId, text: msgText, locationId };
         inputArea.focus();
     };
     
@@ -404,7 +404,7 @@ const BRIDGE_TOOLKIT_SCRIPT = `
     const sendReply = async (replyText) => {
         if (!replyContext) return null;
         
-        const { ghlId, locationId, contactPhone } = replyContext;
+        const { ghlId, locationId } = replyContext;
         console.log(\`↩️ Sending reply to \${ghlId} with text: \${replyText.substring(0, 50)}...\`);
         
         try {
@@ -421,7 +421,6 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                     ghl_id: ghlId, 
                     text: replyText,
                     location_id: locationId,
-                    contact_phone: contactPhone || undefined,
                     ghl_user_id: getGhlUserId()
                 })
             });
@@ -909,33 +908,12 @@ const BRIDGE_TOOLKIT_SCRIPT = `
                     const urlMatch = window.location.href.match(/location[_/]?([a-zA-Z0-9]+)/i);
                     const locationId = urlMatch ? urlMatch[1] : null;
                     
-                    // Extract contact phone from URL (GHL pattern: /contacts/detail/CONTACT_ID or phone in URL)
-                    let contactPhone = '';
-                    try {
-                        // Try to get phone from the conversation header or contact details in DOM
-                        const phoneEl = document.querySelector('[data-contact-phone]');
-                        if (phoneEl) contactPhone = phoneEl.getAttribute('data-contact-phone') || '';
-                        // Fallback: extract from URL path segments
-                        if (!contactPhone) {
-                            const hrefParts = window.location.href.split('/');
-                            const convIdx = hrefParts.findIndex(p => p === 'conversations' || p === 'conversation');
-                            if (convIdx >= 0) {
-                                // Try to find phone element in sidebar or header
-                                const phoneEls = document.querySelectorAll('a[href^="tel:"], span[class*="phone"], div[class*="phone"]');
-                                phoneEls.forEach(el => {
-                                    const t = (el.textContent || el.getAttribute('href') || '').replace(/\\D/g, '');
-                                    if (t.length >= 10 && !contactPhone) contactPhone = t;
-                                });
-                            }
-                        }
-                    } catch(e) { console.log("Could not extract phone:", e); }
-                    
                     if (!locationId) {
                         showToast("Não foi possível identificar a subconta", true);
                         return;
                     }
                     
-                    await showReplyBanner(msgText, ghlId, locationId, contactPhone);
+                    await showReplyBanner(msgText, ghlId, locationId);
                     showToast("Digite sua resposta e envie normalmente");
                     return;
                 }
