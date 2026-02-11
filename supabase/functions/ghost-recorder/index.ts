@@ -5,10 +5,12 @@ const corsHeaders = {
 };
 
 const GHOST_RECORDER_SCRIPT = `(function() {
-    console.log("\\ud83d\\ude80 Ghost Recorder: Iniciando Motor Stevo...");
+    console.log("\\ud83d\\ude80 Ghost Recorder: Iniciando...");
 
     var mediaRecorder = null, currentStream = null, audioChunks = [], audioBlob = null;
     var isRecording = false, timerInterval, startTime;
+
+    var BRIDGE_API = "https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1";
 
     var ICONS = {
         mic: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-500"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>',
@@ -17,55 +19,64 @@ const GHOST_RECORDER_SCRIPT = `(function() {
         send: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-green-500"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>'
     };
 
-    function injectAudioToGHL(blob) {
-        return blob.arrayBuffer().then(function(buffer) {
-            var cleanBlob = new Blob([buffer], { type: 'audio/mpeg' });
-            var file = new File([cleanBlob], 'voice-msg-' + Date.now() + '.mp3', {
-                type: 'audio/mpeg',
-                lastModified: Date.now()
-            });
+    function extractContextData() {
+        var url = window.location.pathname;
+        var locMatch = url.match(/\\/location\\/([^\\/]+)/);
+        var convMatch = url.match(/\\/conversations\\/[^\\/]+\\/([^\\/]+)/);
+        var contMatch = url.match(/\\/contacts\\/detail\\/([^\\/]+)/);
+        var locationId = locMatch ? locMatch[1] : null;
+        var conversationId = convMatch ? convMatch[1] : null;
+        var contactId = contMatch ? contMatch[1] : null;
+        var phoneEl = document.querySelector('[data-test="phone-number"]') || 
+                      document.querySelector('a[href^="tel:"]');
+        var phone = phoneEl ? (phoneEl.textContent || '').trim() : null;
+        return { locationId: locationId, conversationId: conversationId, contactId: contactId, phone: phone };
+    }
 
-            var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') ||
-                            document.querySelector('input[type="file"][multiple]');
+    function getBestMimeType() {
+        var types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+        for (var i = 0; i < types.length; i++) {
+            if (MediaRecorder.isTypeSupported(types[i])) return types[i];
+        }
+        return 'audio/webm';
+    }
 
-            if (fileInput) {
-                var dt = new DataTransfer();
-                dt.items.add(file);
-                fileInput.files = dt.files;
-
-                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                fileInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-                setTimeout(function() {
-                    var sendPath = document.querySelector('button svg path[d*="M2.01 21L23 12"]');
-                    var sendBtn = sendPath ? sendPath.closest('button') : null;
-                    if (sendBtn && !sendBtn.disabled) {
-                        sendBtn.click();
-                        console.log("\\u2705 Enviado via GHL Bypass");
-                    } else {
-                        var textarea = document.querySelector('textarea');
-                        if (textarea) textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-                    }
-                    fullReset();
-                }, 1000);
-                return true;
-            }
-            return false;
+    function blobToBase64(blob) {
+        return new Promise(function(resolve) {
+            var reader = new FileReader();
+            reader.onloadend = function() { resolve(reader.result.split(',')[1]); };
+            reader.readAsDataURL(blob);
         });
     }
 
-    function handleSend() {
-        if (!audioBlob) return;
-        var group = document.getElementById('ghost-action-group');
-        group.style.opacity = "0.5";
-        group.style.pointerEvents = "none";
+    function sendToServer(ab) {
+        return blobToBase64(ab).then(function(base64Audio) {
+            var ctx = extractContextData();
+            var endpoint = BRIDGE_API + "/webhook-inbound";
 
-        injectAudioToGHL(audioBlob).then(function(success) {
-            if (!success) {
-                alert("Erro: N\\u00e3o foi poss\\u00edvel injetar o \\u00e1udio no GHL.");
-                group.style.opacity = "1";
-                group.style.pointerEvents = "auto";
-            }
+            var payload = {
+                audio: base64Audio,
+                format: ab.type,
+                phone: ctx.phone,
+                locationId: ctx.locationId,
+                timestamp: new Date().toISOString()
+            };
+            if (ctx.conversationId) payload.conversationId = ctx.conversationId;
+            if (ctx.contactId) payload.contactId = ctx.contactId;
+
+            return fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(function(response) {
+                if (!response.ok) throw new Error('Envio falhou: ' + response.status);
+                console.log("\\u2705 \\u00c1udio enviado com sucesso!");
+                return true;
+            });
+        }).catch(function(error) {
+            console.error("\\u274c Erro ao enviar:", error);
+            alert("Erro ao enviar \\u00e1udio. Tente novamente.");
+            return false;
         });
     }
 
@@ -100,6 +111,7 @@ const GHOST_RECORDER_SCRIPT = `(function() {
             group.appendChild(bTrash); group.appendChild(bSend);
             container.appendChild(timerDisp); container.appendChild(mainBtn); container.appendChild(group);
             toolbar.prepend(container);
+            console.log("\\u2705 Interface criada");
         }
     }
 
@@ -109,27 +121,51 @@ const GHOST_RECORDER_SCRIPT = `(function() {
         if (!isRecording) {
             navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
                 currentStream = stream;
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                var mimeType = getBestMimeType();
+                mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
                 audioChunks = [];
                 mediaRecorder.ondataavailable = function(e) { audioChunks.push(e.data); };
                 mediaRecorder.onstop = function() {
-                    audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    audioBlob = new Blob(audioChunks, { type: mimeType });
                     mb.style.display = 'none'; td.style.display = 'none';
                     document.getElementById('ghost-action-group').style.display = 'flex';
+                    console.log("\\ud83c\\udf99\\ufe0f Grava\\u00e7\\u00e3o finalizada: " + (audioBlob.size / 1024).toFixed(2) + "KB");
                 };
                 mediaRecorder.start();
                 isRecording = true;
-                startTime = Date.now();
                 mb.innerHTML = ICONS.stop; td.style.display = 'block';
+                startTime = Date.now();
                 timerInterval = setInterval(function() {
                     var elapsed = Math.floor((Date.now() - startTime) / 1000);
-                    td.innerText = Math.floor(elapsed/60).toString().padStart(2,'0') + ':' + (elapsed%60).toString().padStart(2,'0');
+                    var mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                    var secs = (elapsed % 60).toString().padStart(2, '0');
+                    document.getElementById('ghost-timer').innerText = mins + ':' + secs;
                 }, 1000);
-            }).catch(function() { alert("Erro ao acessar microfone."); });
+                console.log("\\ud83d\\udd34 Gravando...");
+            }).catch(function(error) {
+                console.error("\\u274c Erro ao acessar microfone:", error);
+                alert("Erro ao acessar microfone. Permiss\\u00e3o negada?");
+            });
         } else {
             mediaRecorder.stop(); isRecording = false; clearInterval(timerInterval);
             currentStream.getTracks().forEach(function(t) { t.stop(); });
         }
+    }
+
+    function handleSend() {
+        if (!audioBlob) return;
+        var group = document.getElementById('ghost-action-group');
+        group.style.opacity = "0.5";
+        group.style.pointerEvents = "none";
+
+        sendToServer(audioBlob).then(function(success) {
+            if (success) {
+                fullReset();
+            } else {
+                group.style.opacity = "1";
+                group.style.pointerEvents = "auto";
+            }
+        });
     }
 
     function fullReset() {
@@ -137,13 +173,14 @@ const GHOST_RECORDER_SCRIPT = `(function() {
         var m = document.getElementById('ghost-main-btn'); if (m) { m.style.display = 'block'; m.innerHTML = ICONS.mic; }
         var t = document.getElementById('ghost-timer'); if (t) t.style.display = 'none';
         audioChunks = []; audioBlob = null; isRecording = false;
-        var group = document.getElementById('ghost-action-group');
-        if (group) { group.style.opacity = "1"; group.style.pointerEvents = "auto"; }
     }
 
     var observer = new MutationObserver(function() { if (!document.getElementById('ghost-recorder-ui')) createUI(); });
     observer.observe(document.body, { childList: true, subtree: true });
     setTimeout(createUI, 2000);
+    setTimeout(createUI, 5000);
+
+    console.log("\\u2705 Ghost Recorder carregado");
 })();`;
 
 Deno.serve(async (req) => {
