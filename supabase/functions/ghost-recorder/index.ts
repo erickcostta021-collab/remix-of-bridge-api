@@ -31,15 +31,15 @@ const GHOST_RECORDER_SCRIPT = `/**
 
     var container, mainBtn, actionGroup, timerDisplay;
 
-    // Detect best supported recording format
+    // Detect best supported recording format — prefer opus codecs for WhatsApp PTT
     function getPreferredMimeType() {
         var candidates = [
-            'audio/mp4',
-            'audio/aac',
-            'audio/mpeg',
+            'audio/ogg;codecs=opus',
             'audio/webm;codecs=opus',
             'audio/webm',
-            'audio/ogg;codecs=opus'
+            'audio/mp4',
+            'audio/aac',
+            'audio/mpeg'
         ];
         for (var i = 0; i < candidates.length; i++) {
             if (MediaRecorder.isTypeSupported(candidates[i])) {
@@ -106,18 +106,16 @@ const GHOST_RECORDER_SCRIPT = `/**
                 var rawBlob = new Blob(audioChunks, { type: recordedMimeType });
                 console.log("DOUG.TECH: Raw blob size:", rawBlob.size, "type:", rawBlob.type);
 
-                // If recorded in mp4/aac, use directly; otherwise convert to WAV
-                if (recordedMimeType.indexOf('mp4') !== -1 || recordedMimeType.indexOf('aac') !== -1 || recordedMimeType.indexOf('mpeg') !== -1) {
-                    audioBlob = rawBlob;
-                    console.log("DOUG.TECH: Using native mp4/aac recording");
+                // For WhatsApp voice notes, always use ogg container
+                // WebM+Opus and OGG+Opus share the same codec, so we can re-wrap
+                if (recordedMimeType.indexOf('opus') !== -1 || recordedMimeType.indexOf('ogg') !== -1 || recordedMimeType.indexOf('webm') !== -1) {
+                    // Re-wrap as ogg to ensure WhatsApp treats it as voice note (PTT)
+                    audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
+                    console.log("DOUG.TECH: Wrapped as audio/ogg for PTT voice note");
                 } else {
-                    try {
-                        audioBlob = await convertToWav(rawBlob);
-                        console.log("DOUG.TECH: Converted to WAV, size:", audioBlob.size);
-                    } catch(e) {
-                        console.warn("DOUG.TECH: WAV conversion failed:", e);
-                        audioBlob = rawBlob;
-                    }
+                    // For mp4/aac/mpeg fallback, still try to use as-is
+                    audioBlob = rawBlob;
+                    console.log("DOUG.TECH: Using native format:", recordedMimeType);
                 }
                 var audioUrl = URL.createObjectURL(audioBlob);
                 audioPlayer = new Audio(audioUrl);
@@ -201,11 +199,12 @@ const GHOST_RECORDER_SCRIPT = `/**
 
         var fileExt, fileMime;
         var blobType = audioBlob.type || '';
-        if (blobType.indexOf('mp4') !== -1) { fileExt = 'mp4'; fileMime = 'audio/mp4'; }
+        if (blobType.indexOf('ogg') !== -1 || blobType.indexOf('opus') !== -1) { fileExt = 'ogg'; fileMime = 'audio/ogg'; }
+        else if (blobType.indexOf('mp4') !== -1) { fileExt = 'mp4'; fileMime = 'audio/mp4'; }
         else if (blobType.indexOf('aac') !== -1) { fileExt = 'aac'; fileMime = 'audio/aac'; }
         else if (blobType.indexOf('wav') !== -1) { fileExt = 'wav'; fileMime = 'audio/wav'; }
         else if (blobType.indexOf('mpeg') !== -1) { fileExt = 'mp3'; fileMime = 'audio/mpeg'; }
-        else { fileExt = 'webm'; fileMime = 'audio/webm'; }
+        else { fileExt = 'ogg'; fileMime = 'audio/ogg'; }
 
         console.log("DOUG.TECH: Sending as", fileMime, "ext:", fileExt, "size:", audioBlob.size);
         
