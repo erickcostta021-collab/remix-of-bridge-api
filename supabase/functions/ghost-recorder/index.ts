@@ -5,12 +5,10 @@ const corsHeaders = {
 };
 
 const GHOST_RECORDER_SCRIPT = `(function() {
-    console.log("\\ud83d\\ude80 Ghost Recorder: Iniciando...");
+    console.log("\\ud83d\\ude80 Ghost Recorder: Iniciando Stevo Engine V4...");
 
     var mediaRecorder = null, currentStream = null, audioChunks = [], audioBlob = null;
     var isRecording = false, timerInterval, startTime;
-
-    var BRIDGE_API = "https://jsupvprudyxyiyxwqxuq.supabase.co/functions/v1";
 
     var ICONS = {
         mic: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-500"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>',
@@ -19,64 +17,182 @@ const GHOST_RECORDER_SCRIPT = `(function() {
         send: '<svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-green-500"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>'
     };
 
-    function extractContextData() {
-        var url = window.location.pathname;
-        var locMatch = url.match(/\\/location\\/([^\\/]+)/);
-        var convMatch = url.match(/\\/conversations\\/[^\\/]+\\/([^\\/]+)/);
-        var contMatch = url.match(/\\/contacts\\/detail\\/([^\\/]+)/);
-        var locationId = locMatch ? locMatch[1] : null;
-        var conversationId = convMatch ? convMatch[1] : null;
-        var contactId = contMatch ? contMatch[1] : null;
-        var phoneEl = document.querySelector('[data-test="phone-number"]') || 
-                      document.querySelector('a[href^="tel:"]');
-        var phone = phoneEl ? (phoneEl.textContent || '').trim() : null;
-        return { locationId: locationId, conversationId: conversationId, contactId: contactId, phone: phone };
-    }
-
-    function getBestMimeType() {
-        var types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
-        for (var i = 0; i < types.length; i++) {
-            if (MediaRecorder.isTypeSupported(types[i])) return types[i];
-        }
-        return 'audio/webm';
-    }
-
-    function blobToBase64(blob) {
-        return new Promise(function(resolve) {
+    // Convert WebM blob to WAV PCM 16-bit for maximum compatibility
+    function convertToWav(blob) {
+        return new Promise(function(resolve, reject) {
+            var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             var reader = new FileReader();
-            reader.onloadend = function() { resolve(reader.result.split(',')[1]); };
-            reader.readAsDataURL(blob);
+            reader.onloadend = function() {
+                audioCtx.decodeAudioData(reader.result, function(buffer) {
+                    var numChannels = 1;
+                    var sampleRate = buffer.sampleRate;
+                    var samples = buffer.getChannelData(0);
+                    var numSamples = samples.length;
+                    var dataLength = numSamples * 2;
+                    var bufferOut = new ArrayBuffer(44 + dataLength);
+                    var view = new DataView(bufferOut);
+
+                    function writeString(offset, str) {
+                        for (var i = 0; i < str.length; i++) {
+                            view.setUint8(offset + i, str.charCodeAt(i));
+                        }
+                    }
+
+                    writeString(0, 'RIFF');
+                    view.setUint32(4, 36 + dataLength, true);
+                    writeString(8, 'WAVE');
+                    writeString(12, 'fmt ');
+                    view.setUint32(16, 16, true);
+                    view.setUint16(20, 1, true);
+                    view.setUint16(22, numChannels, true);
+                    view.setUint32(24, sampleRate, true);
+                    view.setUint32(28, sampleRate * numChannels * 2, true);
+                    view.setUint16(32, numChannels * 2, true);
+                    view.setUint16(34, 16, true);
+                    writeString(36, 'data');
+                    view.setUint32(40, dataLength, true);
+
+                    var offset = 44;
+                    for (var i = 0; i < numSamples; i++) {
+                        var s = Math.max(-1, Math.min(1, samples[i]));
+                        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                        offset += 2;
+                    }
+
+                    var wavBlob = new Blob([bufferOut], { type: 'audio/wav' });
+                    audioCtx.close();
+                    resolve(wavBlob);
+                }, function(err) {
+                    audioCtx.close();
+                    reject(err);
+                });
+            };
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(blob);
         });
     }
 
-    function sendToServer(ab) {
-        return blobToBase64(ab).then(function(base64Audio) {
-            var ctx = extractContextData();
-            var endpoint = BRIDGE_API + "/webhook-inbound";
-
-            var payload = {
-                audio: base64Audio,
-                format: ab.type,
-                phone: ctx.phone,
-                locationId: ctx.locationId,
-                timestamp: new Date().toISOString()
-            };
-            if (ctx.conversationId) payload.conversationId = ctx.conversationId;
-            if (ctx.contactId) payload.contactId = ctx.contactId;
-
-            return fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            }).then(function(response) {
-                if (!response.ok) throw new Error('Envio falhou: ' + response.status);
-                console.log("\\u2705 \\u00c1udio enviado com sucesso!");
-                return true;
+    // Inject audio into GHL via DataTransfer bypass
+    function injectAudioToGHL(wavBlob) {
+        return wavBlob.arrayBuffer().then(function(buffer) {
+            // Mask as video/mp4 to bypass GHL validation (Erro 415)
+            var maskedBlob = new Blob([buffer], { type: 'video/mp4' });
+            var file = new File([maskedBlob], 'voice-msg-' + Date.now() + '.mp4', {
+                type: 'video/mp4',
+                lastModified: Date.now()
             });
-        }).catch(function(error) {
-            console.error("\\u274c Erro ao enviar:", error);
+
+            var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') ||
+                            document.querySelector('input[type="file"][multiple]');
+
+            if (!fileInput) {
+                console.error("\\u274c File input n\\u00e3o encontrado");
+                // Fallback: try to find any file input
+                fileInput = document.querySelector('input[type="file"]');
+                if (!fileInput) return false;
+            }
+
+            // Bypass OS file selector with stopImmediatePropagation
+            var clickHandler = function(e) {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+            };
+            fileInput.addEventListener('click', clickHandler, true);
+
+            var dt = new DataTransfer();
+            dt.items.add(file);
+            fileInput.files = dt.files;
+
+            // Remove bypass handler
+            fileInput.removeEventListener('click', clickHandler, true);
+
+            // Simulate events to trigger GHL internal state
+            fileInput.dispatchEvent(new Event('focus', { bubbles: true }));
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+            console.log("\\ud83d\\udce4 Arquivo injetado no input");
+
+            setTimeout(function() {
+                // Try to click send button via SVG path
+                var sendPath = document.querySelector('button svg path[d*="M2.01 21L23 12"]');
+                var sendBtn = sendPath ? sendPath.closest('button') : null;
+                if (sendBtn && !sendBtn.disabled) {
+                    sendBtn.click();
+                    console.log("\\u2705 Enviado via bot\\u00e3o send");
+                } else {
+                    // Fallback: Enter key on textarea
+                    var textarea = document.querySelector('textarea');
+                    if (textarea) {
+                        textarea.focus();
+                        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                        console.log("\\u2705 Enviado via Enter fallback");
+                    } else {
+                        console.warn("\\u26a0\\ufe0f Nenhum m\\u00e9todo de envio encontrado");
+                    }
+                }
+                fullReset();
+            }, 1500);
+
+            return true;
+        });
+    }
+
+    function handleSend() {
+        if (!audioBlob) return;
+        var group = document.getElementById('ghost-action-group');
+        group.style.opacity = "0.5";
+        group.style.pointerEvents = "none";
+
+        console.log("\\u23f3 Convertendo \\u00e1udio para WAV...");
+
+        convertToWav(audioBlob).then(function(wavBlob) {
+            console.log("\\u2705 WAV gerado: " + (wavBlob.size / 1024).toFixed(2) + "KB");
+            return injectAudioToGHL(wavBlob);
+        }).then(function(success) {
+            if (!success) {
+                // Fallback: try with masked MP3 directly (no WAV conversion)
+                console.log("\\u26a0\\ufe0f WAV falhou, tentando MP3 direto...");
+                return audioBlob.arrayBuffer().then(function(buffer) {
+                    var mp3Blob = new Blob([buffer], { type: 'audio/mpeg' });
+                    var file = new File([mp3Blob], 'voice-msg-' + Date.now() + '.mp3', {
+                        type: 'audio/mpeg',
+                        lastModified: Date.now()
+                    });
+
+                    var fileInput = document.querySelector('input[type="file"].hr-upload-file-input') ||
+                                    document.querySelector('input[type="file"][multiple]') ||
+                                    document.querySelector('input[type="file"]');
+                    if (!fileInput) {
+                        alert("Erro: Input de arquivo n\\u00e3o encontrado no GHL.");
+                        group.style.opacity = "1";
+                        group.style.pointerEvents = "auto";
+                        return;
+                    }
+
+                    var dt = new DataTransfer();
+                    dt.items.add(file);
+                    fileInput.files = dt.files;
+                    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+                    setTimeout(function() {
+                        var sendPath = document.querySelector('button svg path[d*="M2.01 21L23 12"]');
+                        var sendBtn = sendPath ? sendPath.closest('button') : null;
+                        if (sendBtn && !sendBtn.disabled) sendBtn.click();
+                        else {
+                            var textarea = document.querySelector('textarea');
+                            if (textarea) textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                        }
+                        fullReset();
+                    }, 1500);
+                });
+            }
+        }).catch(function(err) {
+            console.error("\\u274c Erro no envio:", err);
             alert("Erro ao enviar \\u00e1udio. Tente novamente.");
-            return false;
+            group.style.opacity = "1";
+            group.style.pointerEvents = "auto";
         });
     }
 
@@ -111,7 +227,7 @@ const GHOST_RECORDER_SCRIPT = `(function() {
             group.appendChild(bTrash); group.appendChild(bSend);
             container.appendChild(timerDisp); container.appendChild(mainBtn); container.appendChild(group);
             toolbar.prepend(container);
-            console.log("\\u2705 Interface criada");
+            console.log("\\u2705 Interface Ghost Recorder criada");
         }
     }
 
@@ -121,7 +237,8 @@ const GHOST_RECORDER_SCRIPT = `(function() {
         if (!isRecording) {
             navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
                 currentStream = stream;
-                var mimeType = getBestMimeType();
+                var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 
+                               MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
                 mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
                 audioChunks = [];
                 mediaRecorder.ondataavailable = function(e) { audioChunks.push(e.data); };
@@ -129,7 +246,7 @@ const GHOST_RECORDER_SCRIPT = `(function() {
                     audioBlob = new Blob(audioChunks, { type: mimeType });
                     mb.style.display = 'none'; td.style.display = 'none';
                     document.getElementById('ghost-action-group').style.display = 'flex';
-                    console.log("\\ud83c\\udf99\\ufe0f Grava\\u00e7\\u00e3o finalizada: " + (audioBlob.size / 1024).toFixed(2) + "KB");
+                    console.log("\\ud83c\\udf99\\ufe0f Grava\\u00e7\\u00e3o: " + (audioBlob.size / 1024).toFixed(2) + "KB");
                 };
                 mediaRecorder.start();
                 isRecording = true;
@@ -137,39 +254,18 @@ const GHOST_RECORDER_SCRIPT = `(function() {
                 startTime = Date.now();
                 timerInterval = setInterval(function() {
                     var elapsed = Math.floor((Date.now() - startTime) / 1000);
-                    var mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
-                    var secs = (elapsed % 60).toString().padStart(2, '0');
-                    document.getElementById('ghost-timer').innerText = mins + ':' + secs;
+                    td.innerText = Math.floor(elapsed / 60).toString().padStart(2, '0') + ':' + (elapsed % 60).toString().padStart(2, '0');
                 }, 1000);
                 console.log("\\ud83d\\udd34 Gravando...");
-            }).catch(function(error) {
-                console.error("\\u274c Erro ao acessar microfone:", error);
-                alert("Erro ao acessar microfone. Permiss\\u00e3o negada?");
-            });
+            }).catch(function() { alert("Erro ao acessar microfone."); });
         } else {
             mediaRecorder.stop(); isRecording = false; clearInterval(timerInterval);
             currentStream.getTracks().forEach(function(t) { t.stop(); });
         }
     }
 
-    function handleSend() {
-        if (!audioBlob) return;
-        var group = document.getElementById('ghost-action-group');
-        group.style.opacity = "0.5";
-        group.style.pointerEvents = "none";
-
-        sendToServer(audioBlob).then(function(success) {
-            if (success) {
-                fullReset();
-            } else {
-                group.style.opacity = "1";
-                group.style.pointerEvents = "auto";
-            }
-        });
-    }
-
     function fullReset() {
-        var g = document.getElementById('ghost-action-group'); if (g) g.style.display = 'none';
+        var g = document.getElementById('ghost-action-group'); if (g) { g.style.display = 'none'; g.style.opacity = '1'; g.style.pointerEvents = 'auto'; }
         var m = document.getElementById('ghost-main-btn'); if (m) { m.style.display = 'block'; m.innerHTML = ICONS.mic; }
         var t = document.getElementById('ghost-timer'); if (t) t.style.display = 'none';
         audioChunks = []; audioBlob = null; isRecording = false;
@@ -180,7 +276,7 @@ const GHOST_RECORDER_SCRIPT = `(function() {
     setTimeout(createUI, 2000);
     setTimeout(createUI, 5000);
 
-    console.log("\\u2705 Ghost Recorder carregado");
+    console.log("\\u2705 Ghost Recorder V4 carregado");
 })();`;
 
 Deno.serve(async (req) => {
