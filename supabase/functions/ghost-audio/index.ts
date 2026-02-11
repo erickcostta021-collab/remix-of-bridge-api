@@ -180,7 +180,7 @@ async function getPublicMediaUrl(baseUrl: string, instanceToken: string, message
 }
 
 // Mirror the audio as an outbound message in GHL conversation
-async function mirrorAudioInGHL(contactId: string, ghlToken: string, audioUrl: string | null): Promise<void> {
+async function mirrorAudioInGHL(contactId: string, ghlToken: string, audioUrl: string | null): Promise<string | null> {
   const payload: any = {
     type: "SMS",
     contactId,
@@ -211,9 +211,14 @@ async function mirrorAudioInGHL(contactId: string, ghlToken: string, audioUrl: s
   const responseText = await response.text();
   if (!response.ok) {
     console.error("[ghost-audio] Failed to mirror in GHL:", responseText);
-  } else {
-    console.log("[ghost-audio] ✅ Audio mirrored in GHL as outbound:", responseText.substring(0, 200));
+    return null;
   }
+  
+  console.log("[ghost-audio] ✅ Audio mirrored in GHL as outbound:", responseText.substring(0, 200));
+  try {
+    const data = JSON.parse(responseText);
+    return data.messageId || null;
+  } catch { return null; }
 }
 
 Deno.serve(async (req) => {
@@ -389,7 +394,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 6. Get public URL from UAZAPI and mirror in GHL
+    // 6. Register UAZAPI message for dedup (prevent webhook-inbound FileDownloaded from re-mirroring)
+    if (uazapiMessageId) {
+      // Match webhook-inbound dedup format: uazapi:{instanceToken}:{messageId}
+      await supabase.from("ghl_processed_messages").upsert(
+        { message_id: `uazapi:${token}:${uazapiMessageId}` },
+        { onConflict: "message_id" }
+      );
+      console.log("[ghost-audio] Registered UAZAPI dedup:", `uazapi:${token}:${uazapiMessageId}`);
+    }
+
+    // 7. Get public URL from UAZAPI and mirror in GHL
     try {
       let audioUrl: string | null = null;
       if (uazapiMessageId) {
@@ -415,11 +430,19 @@ Deno.serve(async (req) => {
 
       if (settings?.[0]?.ghl_client_id && sub.ghl_access_token) {
         const ghlToken = await getValidToken(supabase, sub, settings[0]);
-
         const contactId = await resolveContactId(supabase, cleanPhone, locationId, ghlToken);
 
         if (contactId) {
-          await mirrorAudioInGHL(contactId, ghlToken, audioUrl);
+          const ghlMessageId = await mirrorAudioInGHL(contactId, ghlToken, audioUrl);
+
+          // Register GHL messageId for dedup (prevent webhook-outbound from re-sending via UAZAPI)
+          if (ghlMessageId) {
+            await supabase.from("ghl_processed_messages").upsert(
+              { message_id: `ghl:${ghlMessageId}` },
+              { onConflict: "message_id" }
+            );
+            console.log("[ghost-audio] Registered GHL dedup:", ghlMessageId);
+          }
         } else {
           console.log("[ghost-audio] Contact not found in GHL, skipping mirror");
         }
