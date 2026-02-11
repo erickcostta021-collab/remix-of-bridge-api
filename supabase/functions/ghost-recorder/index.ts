@@ -84,15 +84,39 @@ const GHOST_RECORDER_SCRIPT = `/**
     // Extrai locationId e conversationId da URL do GHL
     function getGHLContext() {
         const url = window.location.href;
-        // URL pattern: /v2/location/{locationId}/conversations/{conversationId}
-        const locMatch = url.match(/\\/location\\/([a-zA-Z0-9]+)/);
-        const convMatch = url.match(/\\/conversations\\/([a-zA-Z0-9]+)/);
-        // Alt: query params or hash
+        const hash = window.location.hash;
         const params = new URLSearchParams(window.location.search);
-        
+
+        // Location: /v2/location/{locationId}/...
+        const locMatch = url.match(/\\/location\\/([a-zA-Z0-9]+)/);
+
+        // Conversation ID: try multiple patterns
+        // Pattern 1: /conversations/{conversationId} (skip known sub-paths)
+        const knownPaths = ['manual', 'conversations', 'all', 'unread', 'starred', 'recent'];
+        let conversationId = null;
+        const convSegments = url.match(/\\/conversations\\/([a-zA-Z0-9]+)/g);
+        if (convSegments) {
+            for (const seg of convSegments) {
+                const id = seg.match(/\\/conversations\\/([a-zA-Z0-9]+)/)[1];
+                if (!knownPaths.includes(id.toLowerCase())) {
+                    conversationId = id;
+                    break;
+                }
+            }
+        }
+        // Pattern 2: hash fragment
+        if (!conversationId && hash) {
+            const hashMatch = hash.match(/([a-zA-Z0-9]{10,})/);
+            if (hashMatch) conversationId = hashMatch[1];
+        }
+        // Pattern 3: query param
+        if (!conversationId) conversationId = params.get('conversationId');
+
+        console.log('DOUG.TECH: URL context:', { url: url.substring(0, 120), conversationId, locationId: locMatch ? locMatch[1] : null });
+
         return {
             locationId: locMatch ? locMatch[1] : params.get('locationId'),
-            conversationId: convMatch ? convMatch[1] : params.get('conversationId')
+            conversationId: conversationId
         };
     }
 
