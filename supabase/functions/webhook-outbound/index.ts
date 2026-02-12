@@ -2335,6 +2335,55 @@ serve(async (req: Request) => {
           instanceName: (instance as any).instance_name,
           strippedMessage: messageText.substring(0, 50),
         });
+
+        // Update contact_instance_preferences so the switcher reflects the new instance
+        if (contactId && locationId) {
+          try {
+            const { data: existingPref } = await supabase
+              .from("contact_instance_preferences")
+              .select("id")
+              .eq("contact_id", contactId)
+              .eq("location_id", locationId)
+              .maybeSingle();
+
+            if (existingPref) {
+              await supabase
+                .from("contact_instance_preferences")
+                .update({ instance_id: instance.id, updated_at: new Date().toISOString() })
+                .eq("id", existingPref.id);
+            } else {
+              await supabase
+                .from("contact_instance_preferences")
+                .insert({
+                  contact_id: contactId,
+                  location_id: locationId,
+                  instance_id: instance.id,
+                  lead_phone: targetPhone?.replace(/\D/g, "") || null,
+                });
+            }
+            console.log("[Outbound] ✅ Preference updated for override instance");
+          } catch (prefErr) {
+            console.error("[Outbound] ❌ Error updating preference for override:", prefErr);
+          }
+        }
+
+        // Broadcast instance_switch so the bridge-switcher dropdown updates in real time
+        try {
+          await supabase.channel("ghl_updates").send({
+            type: "broadcast",
+            event: "instance_switch",
+            payload: {
+              location_id: locationId,
+              lead_phone: targetPhone,
+              new_instance_id: instance.id,
+              new_instance_name: (instance as any).instance_name,
+              previous_instance_name: "override",
+            },
+          });
+          console.log("[Outbound] ✅ Instance override broadcasted to frontend");
+        } catch (broadcastErr) {
+          console.error("[Outbound] ❌ Error broadcasting override:", broadcastErr);
+        }
       } else {
         console.log("[Outbound] ⚠️ No instance found with phone:", overridePhone);
         // Send feedback as InternalComment
