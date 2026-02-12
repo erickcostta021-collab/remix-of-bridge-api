@@ -2326,6 +2326,7 @@ serve(async (req: Request) => {
       });
 
       if (matchedInstance) {
+        const previousInstanceName = (instance as any).instance_name || "desconhecida";
         instance = matchedInstance;
         overrideInstanceUsed = true;
         // Strip the #PHONE: prefix from the message
@@ -2401,7 +2402,7 @@ serve(async (req: Request) => {
                 body: JSON.stringify({
                   type: "InternalComment",
                   contactId,
-                  message: `🔀 Instância alterada para: ${(instance as any).instance_name}`,
+                  message: `🔄 Instância alterada: ${previousInstanceName} → ${(instance as any).instance_name}`,
                 }),
               });
               console.log("[Outbound] ✅ Override InternalComment sent");
