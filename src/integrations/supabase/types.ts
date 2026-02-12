@@ -165,6 +165,7 @@ export type Database = {
           ignore_groups: boolean | null
           instance_name: string
           instance_status: Database["public"]["Enums"]["instance_status"]
+          is_official_api: boolean
           phone: string | null
           profile_pic_url: string | null
           subaccount_id: string | null
@@ -181,6 +182,7 @@ export type Database = {
           ignore_groups?: boolean | null
           instance_name: string
           instance_status?: Database["public"]["Enums"]["instance_status"]
+          is_official_api?: boolean
           phone?: string | null
           profile_pic_url?: string | null
           subaccount_id?: string | null
@@ -197,6 +199,7 @@ export type Database = {
           ignore_groups?: boolean | null
           instance_name?: string
           instance_status?: Database["public"]["Enums"]["instance_status"]
+          is_official_api?: boolean
           phone?: string | null
           profile_pic_url?: string | null
           subaccount_id?: string | null

@@ -69,6 +69,7 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
     connectInstance,
     disconnectInstance,
     updateInstanceGHLUser,
+    updateInstanceOfficialApi,
     reconfigureWebhook,
     unlinkInstance
   } = useInstances();
@@ -385,6 +386,13 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
                       </span>
                     </div>
                   )}
+                  
+                  {/* Official API badge */}
+                  {instance.is_official_api && (
+                    <Badge variant="outline" className="mt-1 bg-blue-500/10 text-blue-400 border-blue-500/30 text-[10px]">
+                      API Oficial
+                    </Badge>
+                  )}
                 </div>
               </div>
               
@@ -406,6 +414,15 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
                   <DropdownMenuItem onClick={() => setAssignUserDialogOpen(true)}>
                     <UserPlus className="h-4 w-4 mr-2" />
                     Atribuir Usuário GHL
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => updateInstanceOfficialApi.mutate({ 
+                      instanceId: instance.id, 
+                      isOfficialApi: !instance.is_official_api 
+                    })}
+                  >
+                    <Smartphone className="h-4 w-4 mr-2" />
+                    {instance.is_official_api ? "Desativar API Oficial" : "Ativar API Oficial"}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
