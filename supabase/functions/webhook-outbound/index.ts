@@ -2026,7 +2026,7 @@ serve(async (req: Request) => {
     const eventType = String(body.type ?? "");
     const direction = String(body.direction ?? "");
     const source = String(body.source ?? "");
-    const messageText: string = String(body.message ?? body.body ?? "");
+    let messageText: string = String(body.message ?? body.body ?? "");
     const phoneRaw: string = String(body.phone ?? body.to ?? "");
     const attachments: string[] = Array.isArray(body.attachments) ? body.attachments : [];
     
@@ -2136,7 +2136,7 @@ serve(async (req: Request) => {
     // Buscar todas as instâncias da subconta
     const { data: instances, error: instErr } = await supabase
       .from("instances")
-      .select("id, instance_name, uazapi_instance_token, uazapi_base_url")
+      .select("id, instance_name, uazapi_instance_token, uazapi_base_url, phone")
       .eq("subaccount_id", subaccount.id)
       .order("created_at", { ascending: true });
 
@@ -2305,6 +2305,63 @@ serve(async (req: Request) => {
         }
       } catch (e) {
         console.error("[Outbound] Failed to resolve preference by contactId:", e);
+      }
+    }
+
+    // =======================================================================
+    // INSTANCE OVERRIDE: #PHONE: prefix switches the sending instance
+    // Format: #5521980014713: mensagem aqui
+    // =======================================================================
+    let overrideInstanceUsed = false;
+    const instanceOverrideMatch = messageText.match(/^#(\d{10,15}):\s*/);
+    if (instanceOverrideMatch) {
+      const overridePhone = instanceOverrideMatch[1];
+      console.log("[Outbound] 🔀 Instance override detected:", { overridePhone });
+
+      // Find instance by phone number (last 10 digits match)
+      const overrideLast10 = overridePhone.slice(-10);
+      const matchedInstance = instances.find((inst: any) => {
+        const instPhone = (inst.phone || "").replace(/\D/g, "");
+        return instPhone.length >= 10 && instPhone.slice(-10) === overrideLast10;
+      });
+
+      if (matchedInstance) {
+        instance = matchedInstance;
+        overrideInstanceUsed = true;
+        // Strip the #PHONE: prefix from the message
+        messageText = messageText.replace(instanceOverrideMatch[0], "").trim();
+        console.log("[Outbound] ✅ Instance overridden to:", {
+          instanceId: instance.id,
+          instanceName: (instance as any).instance_name,
+          strippedMessage: messageText.substring(0, 50),
+        });
+      } else {
+        console.log("[Outbound] ⚠️ No instance found with phone:", overridePhone);
+        // Send feedback as InternalComment
+        if (contactId && settings?.ghl_client_id && settings?.ghl_client_secret) {
+          try {
+            const feedbackToken = await getValidToken(supabase, subaccount, settings);
+            if (feedbackToken) {
+              await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${feedbackToken}`,
+                  Version: "2021-04-15",
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({
+                  type: "InternalComment",
+                  contactId,
+                  message: `❌ Nenhuma instância encontrada com o número ${overridePhone}`,
+                }),
+              });
+            }
+          } catch (e) {
+            console.error("[Outbound] Error sending override feedback:", e);
+          }
+        }
+        return; // Don't send the message
       }
     }
 
