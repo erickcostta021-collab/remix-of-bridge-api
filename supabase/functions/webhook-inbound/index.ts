@@ -459,7 +459,7 @@ async function assignContactToUser(contactId: string, userId: string, token: str
 
 // Helper to send text message to GHL (inbound = from lead)
 // Returns the GHL messageId if available
-async function sendMessageToGHL(contactId: string, message: string, token: string): Promise<string | null> {
+async function sendMessageToGHL(contactId: string, message: string, token: string, channelType: string = "SMS"): Promise<string | null> {
   const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
     headers: {
@@ -469,7 +469,7 @@ async function sendMessageToGHL(contactId: string, message: string, token: strin
       "Accept": "application/json",
     },
     body: JSON.stringify({
-      type: "SMS",
+      type: channelType,
       contactId,
       message,
     }),
@@ -576,7 +576,7 @@ async function getOrCreateConversation(contactId: string, locationId: string, to
 
 // Helper to send media message to GHL with attachments (inbound = from lead)
 // Returns the GHL messageId if available
-async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token: string, caption?: string): Promise<string | null> {
+async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token: string, caption?: string, channelType: string = "SMS"): Promise<string | null> {
   const response = await fetchGHL("https://services.leadconnectorhq.com/conversations/messages/inbound", {
     method: "POST",
     headers: {
@@ -586,9 +586,9 @@ async function sendMediaToGHL(contactId: string, attachmentUrls: string[], token
       "Accept": "application/json",
     },
     body: JSON.stringify({
-      type: "SMS",
+      type: channelType,
       contactId,
-      message: caption || "", // Empty string instead of [Media]
+      message: caption || "",
       attachments: attachmentUrls,
     }),
   });
@@ -939,7 +939,7 @@ serve(async (req) => {
         } catch { /* ignore */ }
       } else {
         // Inbound media from lead
-        const ghlMsgId = await sendMediaToGHL(fdContact.id, [fileUrl], fdToken, fdFormattedCaption || undefined);
+        const ghlMsgId = await sendMediaToGHL(fdContact.id, [fileUrl], fdToken, fdFormattedCaption || undefined, fdInstance.is_official_api ? "WhatsApp" : "SMS");
 
         if (ghlMsgId && fdMessageId) {
           await fdSupabase.from("message_map").upsert({
@@ -1202,7 +1202,7 @@ serve(async (req) => {
                     "Accept": "application/json",
                   },
                   body: JSON.stringify({
-                    type: "SMS",
+                    type: instanceData.is_official_api ? "WhatsApp" : "SMS",
                     contactId: mapping.contact_id,
                     message: formattedEditMessage,
                   }),
@@ -2667,7 +2667,7 @@ serve(async (req) => {
       if (isMediaMessage && publicMediaUrl) {
         const mediaCaption = formattedCaption || (memberPrefix ? memberPrefix.trim() : undefined);
         console.log("Sending inbound media to GHL:", { publicMediaUrl, mediaCaption, memberName, memberPhone });
-        const ghlMessageId = await sendMediaToGHL(contact.id, [publicMediaUrl], token, mediaCaption);
+        const ghlMessageId = await sendMediaToGHL(contact.id, [publicMediaUrl], token, mediaCaption, instance.is_official_api ? "WhatsApp" : "SMS");
         
         // Save message mapping for inbound media
         if (ghlMessageId && uazapiMsgId) {
@@ -2685,7 +2685,7 @@ serve(async (req) => {
         }
       } else {
         console.log("Sending inbound text to GHL:", { formattedMessage: formattedMessage?.substring(0, 50) });
-        const ghlMessageId = await sendMessageToGHL(contact.id, formattedMessage, token);
+        const ghlMessageId = await sendMessageToGHL(contact.id, formattedMessage, token, instance.is_official_api ? "WhatsApp" : "SMS");
         
         // Save message mapping for inbound text
         if (ghlMessageId && uazapiMsgId) {

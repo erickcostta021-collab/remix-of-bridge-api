@@ -20,6 +20,7 @@ export interface Instance {
   phone: string | null;
   profile_pic_url: string | null;
   uazapi_base_url: string | null;
+  is_official_api: boolean;
 }
 
 export interface UazapiInstance {

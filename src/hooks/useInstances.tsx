@@ -235,6 +235,7 @@ export function useInstances(subaccountId?: string) {
           phone: data.phone,
           profile_pic_url: data.profile_pic_url,
           uazapi_base_url: data.uazapi_base_url,
+          is_official_api: data.is_official_api,
         };
         syncInstanceStatus.mutate(instanceForSync);
       }
@@ -422,6 +423,23 @@ export function useInstances(subaccountId?: string) {
     },
   });
 
+  const updateInstanceOfficialApi = useMutation({
+    mutationFn: async ({ instanceId, isOfficialApi }: { instanceId: string; isOfficialApi: boolean }) => {
+      const { error } = await supabase
+        .from("instances")
+        .update({ is_official_api: isOfficialApi })
+        .eq("id", instanceId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      toast.success("Configuração de API Oficial atualizada!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao atualizar: " + error.message);
+    },
+  });
+
   // ── Return (same interface as before) ───────────────────────────────
   return {
     instances: instances || [],
@@ -437,6 +455,7 @@ export function useInstances(subaccountId?: string) {
     syncAllInstancesStatus,
     updateInstanceWebhook,
     updateInstanceGHLUser,
+    updateInstanceOfficialApi,
     reconfigureWebhook,
     fetchUazapiInstances,
     instanceLimit,
