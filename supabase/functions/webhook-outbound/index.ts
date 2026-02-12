@@ -2309,27 +2309,47 @@ serve(async (req: Request) => {
     }
 
     // =======================================================================
-    // INSTANCE OVERRIDE: #PHONE: prefix switches the sending instance
-    // Format: #5521980014713: mensagem aqui
+    // INSTANCE OVERRIDE: #PHONE: or #NAME: prefix switches the sending instance
+    // Format phone: #5521980014713: mensagem aqui
+    // Format name:  #Nome da Instância: mensagem aqui
     // =======================================================================
     let overrideInstanceUsed = false;
-    const instanceOverrideMatch = messageText.match(/^#(\d{10,15}):\s*/);
-    if (instanceOverrideMatch) {
-      const overridePhone = instanceOverrideMatch[1];
-      console.log("[Outbound] 🔀 Instance override detected:", { overridePhone });
+    let matchedInstance: any = null;
+    let overrideIdentifier = "";
 
-      // Find instance by phone number (last 10 digits match)
+    // Priority 1: Phone override (#DIGITS:)
+    const phoneOverrideMatch = messageText.match(/^#(\d{10,15}):\s*/);
+    // Priority 2: Name override (#NAME:) - matches any non-digit text before ':'
+    const nameOverrideMatch = !phoneOverrideMatch ? messageText.match(/^#([^:\d][^:]{0,49}):\s*/) : null;
+
+    if (phoneOverrideMatch) {
+      const overridePhone = phoneOverrideMatch[1];
+      overrideIdentifier = overridePhone;
+      console.log("[Outbound] 🔀 Instance override by phone:", { overridePhone });
+
       const overrideLast10 = overridePhone.slice(-10);
-      const matchedInstance = instances.find((inst: any) => {
+      matchedInstance = instances.find((inst: any) => {
         const instPhone = (inst.phone || "").replace(/\D/g, "");
         return instPhone.length >= 10 && instPhone.slice(-10) === overrideLast10;
       });
+    } else if (nameOverrideMatch) {
+      const overrideName = nameOverrideMatch[1].trim();
+      overrideIdentifier = overrideName;
+      console.log("[Outbound] 🔀 Instance override by name:", { overrideName });
 
-      if (matchedInstance) {
+      // Case-insensitive match on instance_name
+      const lowerName = overrideName.toLowerCase();
+      matchedInstance = instances.find((inst: any) =>
+        (inst.instance_name || "").toLowerCase() === lowerName
+      );
+    }
+
+    const instanceOverrideMatch = phoneOverrideMatch || nameOverrideMatch;
+    if (instanceOverrideMatch && matchedInstance) {
         const previousInstanceName = (instance as any).instance_name || "desconhecida";
         instance = matchedInstance;
         overrideInstanceUsed = true;
-        // Strip the #PHONE: prefix from the message
+        // Strip the override prefix from the message
         messageText = messageText.replace(instanceOverrideMatch[0], "").trim();
         console.log("[Outbound] ✅ Instance overridden to:", {
           instanceId: instance.id,
@@ -2411,9 +2431,8 @@ serve(async (req: Request) => {
             console.error("[Outbound] ❌ Error sending override InternalComment:", icErr);
           }
         }
-      } else {
-        console.log("[Outbound] ⚠️ No instance found with phone:", overridePhone);
-        // Send feedback as InternalComment
+    } else if (instanceOverrideMatch && !matchedInstance) {
+        console.log("[Outbound] ⚠️ No instance found for override:", overrideIdentifier);
         if (contactId && settings?.ghl_client_id && settings?.ghl_client_secret) {
           try {
             const feedbackToken = await getValidToken(supabase, subaccount, settings);
@@ -2429,7 +2448,7 @@ serve(async (req: Request) => {
                 body: JSON.stringify({
                   type: "InternalComment",
                   contactId,
-                  message: `❌ Nenhuma instância encontrada com o número ${overridePhone}`,
+                  message: `❌ Nenhuma instância encontrada com: ${overrideIdentifier}`,
                 }),
               });
             }
@@ -2438,7 +2457,6 @@ serve(async (req: Request) => {
           }
         }
         return; // Don't send the message
-      }
     }
 
     // =======================================================================
