@@ -2133,10 +2133,22 @@ serve(async (req: Request) => {
       return; // Already responded
     }
 
+    // Check if subaccount has skip_outbound enabled
+    const { data: subaccountFull } = await supabase
+      .from("ghl_subaccounts")
+      .select("skip_outbound")
+      .eq("id", subaccount.id)
+      .single();
+
+    if (subaccountFull?.skip_outbound && !isHashCommand) {
+      console.log("⏭️ [SKIP] skip_outbound enabled for subaccount, skipping UAZAPI send:", { locationId });
+      return;
+    }
+
     // Buscar todas as instâncias da subconta
     const { data: instances, error: instErr } = await supabase
       .from("instances")
-      .select("id, instance_name, uazapi_instance_token, uazapi_base_url")
+      .select("id, instance_name, uazapi_instance_token, uazapi_base_url, is_official_api")
       .eq("subaccount_id", subaccount.id)
       .order("created_at", { ascending: true });
 
@@ -2363,6 +2375,20 @@ serve(async (req: Request) => {
         console.error("[Outbound] ❌ Erro ao atualizar preferência:", prefError);
         // Não falhar o envio por causa disso
       }
+    }
+
+    // =======================================================================
+    // CHECK: If instance has is_official_api enabled, skip UAZAPI send
+    // The official GHL WhatsApp provider already delivers the message.
+    // Only allow # commands through.
+    // =======================================================================
+    if ((instance as any).is_official_api && !isHashCommand) {
+      console.log("⏭️ [SKIP] is_official_api enabled, skipping UAZAPI send:", { 
+        instanceId: instance.id, 
+        instanceName: instance.instance_name,
+        phone: targetPhone 
+      });
+      return;
     }
 
     // Check if we have content to send
