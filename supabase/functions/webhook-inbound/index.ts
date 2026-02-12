@@ -939,20 +939,25 @@ serve(async (req) => {
         } catch { /* ignore */ }
       } else {
         // Inbound media from lead
-        const ghlMsgId = await sendMediaToGHL(fdContact.id, [fileUrl], fdToken, fdFormattedCaption || undefined, fdInstance.is_official_api ? "WhatsApp" : "SMS");
+        // If official API mode is active, skip forwarding - the official provider already delivers inbound messages
+        if (fdInstance.is_official_api) {
+          console.log("⏭️ Skipping inbound media forwarding (official API mode active):", { messageId: fdMessageId });
+        } else {
+          const ghlMsgId = await sendMediaToGHL(fdContact.id, [fileUrl], fdToken, fdFormattedCaption || undefined);
 
-        if (ghlMsgId && fdMessageId) {
-          await fdSupabase.from("message_map").upsert({
-            ghl_message_id: ghlMsgId,
-            uazapi_message_id: fdMessageId,
-            location_id: fdSubaccount.location_id,
-            contact_id: fdContact.id,
-            message_text: fdCaption || "",
-            message_type: fdMimeType.startsWith("audio") ? "media:audio" : fdMimeType.startsWith("image") ? "media:image" : fdMimeType.startsWith("video") ? "media:video" : fdMimeType.startsWith("application") ? "media:document" : "media",
-            from_me: false,
-            original_timestamp: new Date().toISOString(),
-          }, { onConflict: "ghl_message_id" });
-          console.log("FileDownloaded inbound mapping saved:", { ghl: ghlMsgId, uazapi: fdMessageId });
+          if (ghlMsgId && fdMessageId) {
+            await fdSupabase.from("message_map").upsert({
+              ghl_message_id: ghlMsgId,
+              uazapi_message_id: fdMessageId,
+              location_id: fdSubaccount.location_id,
+              contact_id: fdContact.id,
+              message_text: fdCaption || "",
+              message_type: fdMimeType.startsWith("audio") ? "media:audio" : fdMimeType.startsWith("image") ? "media:image" : fdMimeType.startsWith("video") ? "media:video" : fdMimeType.startsWith("application") ? "media:document" : "media",
+              from_me: false,
+              original_timestamp: new Date().toISOString(),
+            }, { onConflict: "ghl_message_id" });
+            console.log("FileDownloaded inbound mapping saved:", { ghl: ghlMsgId, uazapi: fdMessageId });
+          }
         }
       }
 
@@ -1202,7 +1207,7 @@ serve(async (req) => {
                     "Accept": "application/json",
                   },
                   body: JSON.stringify({
-                    type: instanceData.is_official_api ? "WhatsApp" : "SMS",
+                    type: "SMS",
                     contactId: mapping.contact_id,
                     message: formattedEditMessage,
                   }),
@@ -2595,115 +2600,123 @@ serve(async (req) => {
       console.log(`✅ Outbound message synced to GHL (${source}): ${phoneNumber} -> ${contact.id}`);
     } else {
       // This is a message FROM the lead - send as inbound
-      // For group messages, format with member identification prefix with line break for clear reading
-      // Format: (5521980014713)-👤[ Érick ]:
-      const memberPrefix = isGroupChat && memberName ? `(${memberPhone})-👤[ ${memberName} ]:\n` : "";
       
-      let formattedMessage = textMessage;
-      let formattedCaption = textMessage || undefined;
-      
-      // If this is a REPLY, try to get the original message from database and add context
-      if (quotedMessageId || quotedText) {
-        let originalText = quotedText;
-        let originalGhlId = "";
-        
-        // Try to find the original message in our mapping for richer context
-        if (quotedMessageId) {
-          const { data: originalMapping } = await supabase
-            .from("message_map")
-            .select("message_text, ghl_message_id")
-            .eq("uazapi_message_id", quotedMessageId)
-            .maybeSingle();
-          
-          if (originalMapping?.message_text) {
-            originalText = originalMapping.message_text;
-          }
-          if (originalMapping?.ghl_message_id) {
-            originalGhlId = originalMapping.ghl_message_id;
-          }
-        }
-        
-        // Add reply context prefix
-        if (originalText) {
-          const replyPrefix = `↩️ Respondendo a: "${originalText.substring(0, 100)}${originalText.length > 100 ? '...' : ''}"\n\n`;
-          formattedMessage = replyPrefix + (formattedMessage || "");
-          if (formattedCaption) {
-            formattedCaption = replyPrefix + formattedCaption;
-          }
-          
-          // Broadcast reply event for UI update - include the GHL ID of the original message
-          if (originalGhlId) {
-            await supabase.channel("ghl_updates").send({
-              type: "broadcast",
-              event: "msg_update",
-              payload: {
-                type: "reply",
-                ghl_id: originalGhlId,  // ID of the message being replied to
-                replyData: { text: originalText.substring(0, 200) },
-                location_id: subaccount.location_id,
-              },
-            });
-            console.log("✅ Reply event broadcasted:", { originalGhlId, quotedText: originalText?.substring(0, 30) });
-          } else {
-            console.log("⚠️ Reply detected but original message not mapped:", { quotedMessageId, quotedText: quotedText?.substring(0, 30) });
-          }
-        }
-      }
-      
-      // Apply member prefix to text messages
-      if (memberPrefix && formattedMessage) {
-        formattedMessage = `${memberPrefix}${formattedMessage}`;
-      }
-      
-      // Apply member prefix to captions
-      if (memberPrefix && formattedCaption) {
-        formattedCaption = `${memberPrefix}${formattedCaption}`;
-      }
-      
-      // For group media without caption, still add member identification
-      // Also capture and save message mapping for edit/react/delete
-      const uazapiMsgId = messageData.messageid || messageData.id || "";
-      
-      if (isMediaMessage && publicMediaUrl) {
-        const mediaCaption = formattedCaption || (memberPrefix ? memberPrefix.trim() : undefined);
-        console.log("Sending inbound media to GHL:", { publicMediaUrl, mediaCaption, memberName, memberPhone });
-        const ghlMessageId = await sendMediaToGHL(contact.id, [publicMediaUrl], token, mediaCaption, instance.is_official_api ? "WhatsApp" : "SMS");
-        
-        // Save message mapping for inbound media
-        if (ghlMessageId && uazapiMsgId) {
-          await supabase.from("message_map").upsert({
-            ghl_message_id: ghlMessageId,
-            uazapi_message_id: uazapiMsgId,
-            location_id: subaccount.location_id,
-            contact_id: contact.id,
-            message_text: mediaCaption || "",
-            message_type: `media:${(mediaType || "").toLowerCase().replace("message", "")}` || "media",
-            from_me: false,
-            original_timestamp: new Date().toISOString(),
-          }, { onConflict: "ghl_message_id" });
-          console.log("Inbound message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
-        }
+      // === OFFICIAL API MODE: Skip inbound forwarding ===
+      // When is_official_api is active, the official WhatsApp provider in GHL already delivers
+      // inbound messages. Forwarding them again would create duplicates.
+      if (instance.is_official_api) {
+        console.log(`⏭️ Skipping inbound forwarding (official API mode): ${phoneNumber} -> ${contact.id}`);
       } else {
-        console.log("Sending inbound text to GHL:", { formattedMessage: formattedMessage?.substring(0, 50) });
-        const ghlMessageId = await sendMessageToGHL(contact.id, formattedMessage, token, instance.is_official_api ? "WhatsApp" : "SMS");
+        // For group messages, format with member identification prefix with line break for clear reading
+        // Format: (5521980014713)-👤[ Érick ]:
+        const memberPrefix = isGroupChat && memberName ? `(${memberPhone})-👤[ ${memberName} ]:\n` : "";
         
-        // Save message mapping for inbound text
-        if (ghlMessageId && uazapiMsgId) {
-          await supabase.from("message_map").upsert({
-            ghl_message_id: ghlMessageId,
-            uazapi_message_id: uazapiMsgId,
-            location_id: subaccount.location_id,
-            contact_id: contact.id,
-            message_text: textMessage || "",
-            message_type: "text",
-            from_me: false,
-            original_timestamp: new Date().toISOString(),
-          }, { onConflict: "ghl_message_id" });
-          console.log("Inbound message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+        let formattedMessage = textMessage;
+        let formattedCaption = textMessage || undefined;
+        
+        // If this is a REPLY, try to get the original message from database and add context
+        if (quotedMessageId || quotedText) {
+          let originalText = quotedText;
+          let originalGhlId = "";
+          
+          // Try to find the original message in our mapping for richer context
+          if (quotedMessageId) {
+            const { data: originalMapping } = await supabase
+              .from("message_map")
+              .select("message_text, ghl_message_id")
+              .eq("uazapi_message_id", quotedMessageId)
+              .maybeSingle();
+            
+            if (originalMapping?.message_text) {
+              originalText = originalMapping.message_text;
+            }
+            if (originalMapping?.ghl_message_id) {
+              originalGhlId = originalMapping.ghl_message_id;
+            }
+          }
+          
+          // Add reply context prefix
+          if (originalText) {
+            const replyPrefix = `↩️ Respondendo a: "${originalText.substring(0, 100)}${originalText.length > 100 ? '...' : ''}"\n\n`;
+            formattedMessage = replyPrefix + (formattedMessage || "");
+            if (formattedCaption) {
+              formattedCaption = replyPrefix + formattedCaption;
+            }
+            
+            // Broadcast reply event for UI update - include the GHL ID of the original message
+            if (originalGhlId) {
+              await supabase.channel("ghl_updates").send({
+                type: "broadcast",
+                event: "msg_update",
+                payload: {
+                  type: "reply",
+                  ghl_id: originalGhlId,  // ID of the message being replied to
+                  replyData: { text: originalText.substring(0, 200) },
+                  location_id: subaccount.location_id,
+                },
+              });
+              console.log("✅ Reply event broadcasted:", { originalGhlId, quotedText: originalText?.substring(0, 30) });
+            } else {
+              console.log("⚠️ Reply detected but original message not mapped:", { quotedMessageId, quotedText: quotedText?.substring(0, 30) });
+            }
+          }
         }
+        
+        // Apply member prefix to text messages
+        if (memberPrefix && formattedMessage) {
+          formattedMessage = `${memberPrefix}${formattedMessage}`;
+        }
+        
+        // Apply member prefix to captions
+        if (memberPrefix && formattedCaption) {
+          formattedCaption = `${memberPrefix}${formattedCaption}`;
+        }
+        
+        // For group media without caption, still add member identification
+        // Also capture and save message mapping for edit/react/delete
+        const uazapiMsgId = messageData.messageid || messageData.id || "";
+        
+        if (isMediaMessage && publicMediaUrl) {
+          const mediaCaption = formattedCaption || (memberPrefix ? memberPrefix.trim() : undefined);
+          console.log("Sending inbound media to GHL:", { publicMediaUrl, mediaCaption, memberName, memberPhone });
+          const ghlMessageId = await sendMediaToGHL(contact.id, [publicMediaUrl], token, mediaCaption);
+          
+          // Save message mapping for inbound media
+          if (ghlMessageId && uazapiMsgId) {
+            await supabase.from("message_map").upsert({
+              ghl_message_id: ghlMessageId,
+              uazapi_message_id: uazapiMsgId,
+              location_id: subaccount.location_id,
+              contact_id: contact.id,
+              message_text: mediaCaption || "",
+              message_type: `media:${(mediaType || "").toLowerCase().replace("message", "")}` || "media",
+              from_me: false,
+              original_timestamp: new Date().toISOString(),
+            }, { onConflict: "ghl_message_id" });
+            console.log("Inbound message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+          }
+        } else {
+          console.log("Sending inbound text to GHL:", { formattedMessage: formattedMessage?.substring(0, 50) });
+          const ghlMessageId = await sendMessageToGHL(contact.id, formattedMessage, token);
+          
+          // Save message mapping for inbound text
+          if (ghlMessageId && uazapiMsgId) {
+            await supabase.from("message_map").upsert({
+              ghl_message_id: ghlMessageId,
+              uazapi_message_id: uazapiMsgId,
+              location_id: subaccount.location_id,
+              contact_id: contact.id,
+              message_text: textMessage || "",
+              message_type: "text",
+              from_me: false,
+              original_timestamp: new Date().toISOString(),
+            }, { onConflict: "ghl_message_id" });
+            console.log("Inbound message mapping saved:", { ghl: ghlMessageId, uazapi: uazapiMsgId });
+          }
+        }
+        
+        console.log(`✅ Inbound message forwarded to GHL: ${phoneNumber} -> ${contact.id}`);
       }
-      
-      console.log(`✅ Inbound message forwarded to GHL: ${phoneNumber} -> ${contact.id}`);
     }
 
     return new Response(
