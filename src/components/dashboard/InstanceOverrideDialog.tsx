@@ -25,7 +25,7 @@ const overrideCommands = [
   {
     command: "#TELEFONE:",
     description: "Troca a instância de envio pelo número de telefone",
-    format: "#5521980014713: mensagem aqui",
+    format: "#5500900000000: mensagem aqui",
     context: "Contato",
     notes: "Use o número completo com DDI+DDD. A troca é persistida para o contato.",
   },
