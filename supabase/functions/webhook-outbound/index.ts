@@ -2384,6 +2384,32 @@ serve(async (req: Request) => {
         } catch (broadcastErr) {
           console.error("[Outbound] ❌ Error broadcasting override:", broadcastErr);
         }
+
+        // Send InternalComment confirming the switch
+        if (contactId && settings?.ghl_client_id && settings?.ghl_client_secret) {
+          try {
+            const switchToken = await getValidToken(supabase, subaccount, settings);
+            if (switchToken) {
+              await fetchGHL("https://services.leadconnectorhq.com/conversations/messages", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${switchToken}`,
+                  Version: "2021-04-15",
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({
+                  type: "InternalComment",
+                  contactId,
+                  message: `🔀 Instância alterada para: ${(instance as any).instance_name}`,
+                }),
+              });
+              console.log("[Outbound] ✅ Override InternalComment sent");
+            }
+          } catch (icErr) {
+            console.error("[Outbound] ❌ Error sending override InternalComment:", icErr);
+          }
+        }
       } else {
         console.log("[Outbound] ⚠️ No instance found with phone:", overridePhone);
         // Send feedback as InternalComment
