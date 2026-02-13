@@ -82,10 +82,11 @@ Deno.serve(async (req) => {
       subject: "🔑 Redefinição de senha — Bridge API",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; border-radius: 12px; overflow: hidden;">
-          <div style="width: 100%; text-align: center;">
-            <img src="https://jsupvprudyxyiyxwqxuq.supabase.co/storage/v1/object/public/email-assets/email-banner.png" alt="Bridge API" style="width: 100%; display: block;" />
-          </div>
           <div style="padding: 30px 24px;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h1 style="color: #22c55e; margin: 0; font-size: 24px;">Bridge API</h1>
+              <p style="color: #52525b; margin-top: 4px; font-size: 13px;">Instance Manager</p>
+            </div>
             <h2 style="color: #ffffff; text-align: center; margin-top: 0;">Redefinir sua senha</h2>
             
             <p style="color: #a1a1aa; text-align: center;">Recebemos uma solicitação para redefinir a senha da sua conta. Clique no botão abaixo para criar uma nova senha:</p>
