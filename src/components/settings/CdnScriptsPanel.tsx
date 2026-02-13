@@ -256,7 +256,7 @@ export function CdnScriptsPanel() {
           <div className="space-y-6">
             {Object.entries(grouped).map(([slug, versions], index) => (
               <div key={slug} className="space-y-2">
-                {index > 0 && <Separator className="mb-4" />}
+                {index > 0 && <Separator className="mb-2 bg-border/60" />}
                 <div className="flex items-center gap-2">
                   <h4 className="text-sm font-semibold text-foreground">/{slug}</h4>
                   <button
