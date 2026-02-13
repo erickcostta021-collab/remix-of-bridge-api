@@ -9,7 +9,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy, Shield, Download } from "lucide-react";
 
@@ -254,9 +253,8 @@ export function CdnScriptsPanel() {
           </p>
         ) : (
           <div className="space-y-6">
-            {Object.entries(grouped).map(([slug, versions], index) => (
+            {Object.entries(grouped).map(([slug, versions]) => (
               <div key={slug} className="space-y-2">
-                {index > 0 && <Separator className="mb-2 bg-border/60" />}
                 <div className="flex items-center gap-2">
                   <h4 className="text-sm font-semibold text-foreground">/{slug}</h4>
                   <button
