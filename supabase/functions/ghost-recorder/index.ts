@@ -174,15 +174,37 @@ const GHOST_RECORDER_SCRIPT = `(function() {
         if (!isPlaying && progressRAF) { cancelAnimationFrame(progressRAF); progressRAF = null; }
     }
 
-    function seekAudio(e) {
+    var isSeeking = false;
+
+    function seekFromEvent(e) {
         if (!previewAudio || !previewAudio.duration) return;
         var bar = document.getElementById('ghost-progress-wrap');
         if (!bar) return;
+        var clientX = e.touches ? e.touches[0].clientX : e.clientX;
         var rect = bar.getBoundingClientRect();
-        var ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        var ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
         previewAudio.currentTime = ratio * previewAudio.duration;
         var fill = document.getElementById('ghost-progress-fill');
         if (fill) fill.style.width = (ratio * 100) + '%';
+        var dur = document.getElementById('ghost-dur');
+        if (dur) dur.textContent = formatTime(previewAudio.currentTime);
+    }
+
+    function onSeekStart(e) {
+        isSeeking = true;
+        seekFromEvent(e);
+        document.addEventListener('mousemove', onSeekMove);
+        document.addEventListener('mouseup', onSeekEnd);
+        document.addEventListener('touchmove', onSeekMove);
+        document.addEventListener('touchend', onSeekEnd);
+    }
+    function onSeekMove(e) { if (isSeeking) seekFromEvent(e); }
+    function onSeekEnd() {
+        isSeeking = false;
+        document.removeEventListener('mousemove', onSeekMove);
+        document.removeEventListener('mouseup', onSeekEnd);
+        document.removeEventListener('touchmove', onSeekMove);
+        document.removeEventListener('touchend', onSeekEnd);
     }
 
     // ── Send Button States ──
@@ -256,7 +278,8 @@ const GHOST_RECORDER_SCRIPT = `(function() {
             var progressWrap = document.createElement('div');
             progressWrap.id = 'ghost-progress-wrap';
             progressWrap.className = 'ghost-progress-wrap';
-            progressWrap.onclick = seekAudio;
+            progressWrap.onmousedown = onSeekStart;
+            progressWrap.ontouchstart = onSeekStart;
 
             var progressFill = document.createElement('div');
             progressFill.id = 'ghost-progress-fill';
@@ -345,11 +368,12 @@ const GHOST_RECORDER_SCRIPT = `(function() {
 
     function fullReset() {
         destroyPreview();
-        sendState = 'idle';
+        setSendState('idle');
         var g = document.getElementById('ghost-action-group'); if (g) { g.style.display = 'none'; g.style.opacity = '1'; g.style.pointerEvents = 'auto'; }
         var m = document.getElementById('ghost-main-btn'); if (m) { m.style.display = 'block'; m.innerHTML = ICONS.mic; }
         var t = document.getElementById('ghost-timer'); if (t) t.style.display = 'none';
         var fill = document.getElementById('ghost-progress-fill'); if (fill) fill.style.width = '0%';
+        var dur = document.getElementById('ghost-dur'); if (dur) dur.textContent = '00:00';
         audioChunks = []; audioBlob = null; isRecording = false;
     }
 
