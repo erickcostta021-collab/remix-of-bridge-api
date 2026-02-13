@@ -84,25 +84,25 @@ const handler = async (req: Request): Promise<Response> => {
       to: [email],
       subject: `🔐 Seu código de verificação: ${code}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #22c55e; margin: 0;">Bridge API</h1>
-            <p style="color: #666; margin-top: 5px;">Instance Manager</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; border-radius: 12px; overflow: hidden;">
+          <div style="width: 100%; text-align: center;">
+            <img src="https://jsupvprudyxyiyxwqxuq.supabase.co/storage/v1/object/public/email-assets/email-banner.png" alt="Bridge API" style="width: 100%; display: block;" />
           </div>
-          
-          <h2 style="color: #333; text-align: center;">Confirme seu cadastro</h2>
-          
-          <p style="color: #555; text-align: center;">Use o código abaixo para verificar seu e-mail e finalizar a criação da sua conta:</p>
-          
-          <div style="background: #22c55e; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
-            <h2 style="margin: 0; font-size: 36px; letter-spacing: 6px; font-family: monospace;">${code}</h2>
+          <div style="padding: 30px 24px;">
+            <h2 style="color: #ffffff; text-align: center; margin-top: 0;">Confirme seu cadastro</h2>
+            
+            <p style="color: #a1a1aa; text-align: center;">Use o código abaixo para verificar seu e-mail e finalizar a criação da sua conta:</p>
+            
+            <div style="background: #22c55e; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 24px 0;">
+              <h2 style="margin: 0; font-size: 36px; letter-spacing: 6px; font-family: monospace;">${code}</h2>
+            </div>
+            
+            <p style="color: #71717a; font-size: 14px; text-align: center;">Este código expira em 24 horas.</p>
+            <p style="color: #71717a; font-size: 14px; text-align: center;">Se você não solicitou este código, ignore este e-mail.</p>
+            
+            <hr style="border: none; border-top: 1px solid #27272a; margin: 24px 0;" />
+            <p style="color: #52525b; font-size: 12px; text-align: center;">Bridge API — Instance Manager Hub</p>
           </div>
-          
-          <p style="color: #666; font-size: 14px; text-align: center;">Este código expira em 24 horas.</p>
-          <p style="color: #666; font-size: 14px; text-align: center;">Se você não solicitou este código, ignore este e-mail.</p>
-          
-          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-          <p style="color: #999; font-size: 12px; text-align: center;">Bridge API — Instance Manager Hub</p>
         </div>
       `,
     });

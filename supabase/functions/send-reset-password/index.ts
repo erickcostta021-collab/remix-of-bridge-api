@@ -81,28 +81,28 @@ Deno.serve(async (req) => {
       to: [trimmed],
       subject: "🔑 Redefinição de senha — Bridge API",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #22c55e; margin: 0;">Bridge API</h1>
-            <p style="color: #666; margin-top: 5px;">Instance Manager</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; border-radius: 12px; overflow: hidden;">
+          <div style="width: 100%; text-align: center;">
+            <img src="https://jsupvprudyxyiyxwqxuq.supabase.co/storage/v1/object/public/email-assets/email-banner.png" alt="Bridge API" style="width: 100%; display: block;" />
           </div>
-          
-          <h2 style="color: #333; text-align: center;">Redefinir sua senha</h2>
-          
-          <p style="color: #555; text-align: center;">Recebemos uma solicitação para redefinir a senha da sua conta. Clique no botão abaixo para criar uma nova senha:</p>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${actionLink}" 
-               style="display: inline-block; background: #22c55e; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-              Redefinir Senha
-            </a>
+          <div style="padding: 30px 24px;">
+            <h2 style="color: #ffffff; text-align: center; margin-top: 0;">Redefinir sua senha</h2>
+            
+            <p style="color: #a1a1aa; text-align: center;">Recebemos uma solicitação para redefinir a senha da sua conta. Clique no botão abaixo para criar uma nova senha:</p>
+            
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${actionLink}" 
+                 style="display: inline-block; background: #22c55e; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+                Redefinir Senha
+              </a>
+            </div>
+            
+            <p style="color: #71717a; font-size: 14px; text-align: center;">Este link expira em 1 hora.</p>
+            <p style="color: #71717a; font-size: 14px; text-align: center;">Se você não solicitou esta redefinição, ignore este e-mail.</p>
+            
+            <hr style="border: none; border-top: 1px solid #27272a; margin: 24px 0;" />
+            <p style="color: #52525b; font-size: 12px; text-align: center;">Bridge API — Instance Manager Hub</p>
           </div>
-          
-          <p style="color: #666; font-size: 14px; text-align: center;">Este link expira em 1 hora.</p>
-          <p style="color: #666; font-size: 14px; text-align: center;">Se você não solicitou esta redefinição, ignore este e-mail.</p>
-          
-          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-          <p style="color: #999; font-size: 12px; text-align: center;">Bridge API — Instance Manager Hub</p>
         </div>
       `,
     });
