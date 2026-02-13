@@ -291,20 +291,22 @@ export function CdnScriptsPanel() {
                       <TableRow key={s.id}>
                         <TableCell className="font-mono text-sm">{s.version}</TableCell>
                         <TableCell>
-                          {s.is_active ? (
-                            <Badge variant="default" className="bg-green-600">
-                              <CheckCircle2 className="h-3 w-3 mr-1" /> Ativa
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">
-                              <Circle className="h-3 w-3 mr-1" /> Inativa
-                            </Badge>
-                          )}
-                          {s.is_obfuscated && (
-                            <Badge variant="outline" className="ml-1 border-amber-500 text-amber-500">
-                              <ShieldCheck className="h-3 w-3 mr-1" /> Ofuscado
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {s.is_active ? (
+                              <Badge variant="default" className="bg-green-600">
+                                <CheckCircle2 className="h-3 w-3 mr-1" /> Ativa
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">
+                                <Circle className="h-3 w-3 mr-1" /> Inativa
+                              </Badge>
+                            )}
+                            {s.is_obfuscated && (
+                              <Badge variant="outline" className="border-amber-500 text-amber-500">
+                                <ShieldCheck className="h-3 w-3 mr-1" /> Ofuscado
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {new Date(s.updated_at).toLocaleDateString("pt-BR")}
