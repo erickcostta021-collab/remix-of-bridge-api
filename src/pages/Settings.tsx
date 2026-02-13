@@ -14,6 +14,7 @@ import { Save, Loader2, Eye, EyeOff, Info, CheckCircle2, Wand2, Copy, Check, Loc
 import { toast } from "sonner";
 import { RegisteredUsersPanel } from "@/components/settings/RegisteredUsersPanel";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
+import { CdnScriptsPanel } from "@/components/settings/CdnScriptsPanel";
 
 const ADMIN_EMAILS = ["erickcostta021@gmail.com", "erickcostta.br@gmail.com"];
 
@@ -114,10 +115,11 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue={isAdmin ? "oauth" : "integrations"} className="w-full">
-          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-3" : "grid-cols-1"}`}>
+          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-4" : "grid-cols-1"}`}>
             {isAdmin && <TabsTrigger value="oauth">OAuth GHL</TabsTrigger>}
             <TabsTrigger value="integrations">Integrações</TabsTrigger>
             {isAdmin && <TabsTrigger value="users">Usuários</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="cdn">CDN</TabsTrigger>}
           </TabsList>
 
           {isAdmin && (
@@ -382,6 +384,12 @@ export default function Settings() {
           {isAdmin && (
             <TabsContent value="users" className="space-y-6 mt-6">
               <RegisteredUsersPanel />
+            </TabsContent>
+          )}
+
+          {isAdmin && (
+            <TabsContent value="cdn" className="space-y-6 mt-6">
+              <CdnScriptsPanel />
             </TabsContent>
           )}
         </Tabs>

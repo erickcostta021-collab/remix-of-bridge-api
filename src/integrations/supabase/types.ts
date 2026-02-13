@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      cdn_scripts: {
+        Row: {
+          content: string
+          content_type: string
+          created_at: string
+          id: string
+          is_active: boolean
+          slug: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          content: string
+          content_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          slug: string
+          updated_at?: string
+          version: string
+        }
+        Update: {
+          content?: string
+          content_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          slug?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
       contact_instance_preferences: {
         Row: {
           contact_id: string
