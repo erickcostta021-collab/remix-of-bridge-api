@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy, Shield } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy, Shield, Download } from "lucide-react";
 
 function getScriptUrl(slug: string): string {
   const lower = slug.toLowerCase();
@@ -283,6 +283,21 @@ export function CdnScriptsPanel() {
                           {new Date(s.updated_at).toLocaleDateString("pt-BR")}
                         </TableCell>
                         <TableCell className="text-right space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const blob = new Blob([s.content], { type: s.content_type });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `${s.slug}-${s.version}.js`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            }}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
                             Editar
                           </Button>
