@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useSettings } from "@/hooks/useSettings";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { PlansDialog } from "@/components/dashboard/PlansDialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,7 +15,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Menu, KeyRound, LogOut, CreditCard, User, Wallet } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Menu, KeyRound, LogOut, CreditCard, User, Wallet, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import circleLogo from "@/assets/bridge-circle-logo.png";
@@ -23,8 +25,23 @@ export function DashboardHeader() {
   const { signOut } = useAuth();
   const { profile } = useProfile();
   const { hasActiveSubscription } = useSubscription();
+  const { getOAuthUrl } = useSettings();
   const { toggle } = useSidebarState();
   const navigate = useNavigate();
+
+  const oauthUrl = getOAuthUrl();
+
+  const handleInstallApp = () => {
+    if (!oauthUrl) return;
+    try {
+      const url = new URL(oauthUrl);
+      const state = url.searchParams.get("state");
+      if (state) localStorage.setItem("ghl_oauth_state", state);
+    } catch {
+      // ignore
+    }
+    window.open(oauthUrl, "_blank");
+  };
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return "U";
@@ -103,8 +120,31 @@ export function DashboardHeader() {
         </div>
       </div>
 
-      {/* Right: plans + avatar */}
-      <div className="flex items-center gap-3">
+      {/* Right: connect + plans + avatar */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {oauthUrl && (
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={hasActiveSubscription ? handleInstallApp : undefined}
+                  disabled={!hasActiveSubscription}
+                  className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary/50 transition-all duration-300"
+                >
+                  <ExternalLink className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Conectar Subconta</span>
+                </Button>
+              </TooltipTrigger>
+              {!hasActiveSubscription && (
+                <TooltipContent>
+                  <p>Assine um plano para conectar subcontas</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        )}
         <PlansDialog>
           <Button
             size="sm"
