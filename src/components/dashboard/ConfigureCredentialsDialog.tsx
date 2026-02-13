@@ -84,7 +84,7 @@ export function ConfigureCredentialsDialog({ open, onOpenChange }: Props) {
               className="bg-secondary border-border"
             />
             <p className="text-xs text-muted-foreground">
-              Encontre em: GHL → Settings → Company → API Keys
+              Encontre em: GHL → Conta nível agência → Configurações → Integrações Privado
             </p>
           </div>
         </div>
