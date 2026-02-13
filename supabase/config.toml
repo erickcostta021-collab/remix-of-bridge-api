@@ -70,3 +70,6 @@ verify_jwt = false
 
 [functions.cdn-router]
 verify_jwt = false
+
+[functions.obfuscate-script]
+verify_jwt = false

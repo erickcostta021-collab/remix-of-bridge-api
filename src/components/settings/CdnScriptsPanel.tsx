@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy, Shield } from "lucide-react";
 
 function getScriptUrl(slug: string): string {
   const lower = slug.toLowerCase();
@@ -98,6 +98,32 @@ export function CdnScriptsPanel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cdn-scripts"] });
       toast.success("Script removido!");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const obfuscateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Não autenticado");
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/obfuscate-script`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ script_id: id }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erro ao ofuscar");
+      return json;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["cdn-scripts"] });
+      toast.success(`Ofuscado! ${data.original_size} → ${data.obfuscated_size} bytes`);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -259,6 +285,22 @@ export function CdnScriptsPanel() {
                         <TableCell className="text-right space-x-1">
                           <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
                             Editar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm("Ofuscar este script? O código original será substituído."))
+                                obfuscateMutation.mutate(s.id);
+                            }}
+                            disabled={obfuscateMutation.isPending}
+                          >
+                            {obfuscateMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Shield className="h-4 w-4 mr-1" />
+                            )}
+                            Ofuscar
                           </Button>
                           {!s.is_active && (
                             <Button
