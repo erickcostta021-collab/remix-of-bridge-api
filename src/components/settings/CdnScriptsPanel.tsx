@@ -14,9 +14,8 @@ import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy } from "lucide-
 
 function getScriptUrl(slug: string): string {
   const lower = slug.toLowerCase();
-  if (lower.includes("switch")) return `https://switch.bridgeapi.chat/${slug}`;
   if (lower.includes("toolkit")) return `https://toolkit.bridgeapi.chat/${slug}`;
-  if (lower.includes("recorder") || lower.includes("ghost")) return `https://recorder.bridgeapi.chat/${slug}`;
+  if (lower.includes("recorder") || lower.includes("ghost") || lower.includes("bundle")) return `https://recorder.bridgeapi.chat/${slug}`;
   return `https://switch.bridgeapi.chat/${slug}`;
 }
 
