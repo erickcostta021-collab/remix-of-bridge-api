@@ -198,8 +198,8 @@ export function Sidebar() {
                         : "text-sidebar-foreground/30 cursor-not-allowed"
                     )}
                   >
-                    <ExternalLink className="h-4 w-4 flex-shrink-0" />
-                    <span className="whitespace-nowrap">Instalar App</span>
+                    <span className="h-4 w-4 flex-shrink-0 flex items-center justify-center text-xs font-bold text-primary">1</span>
+                    <span className="whitespace-nowrap">Conectar subconta GHL</span>
                   </button>
                 )}
                 <button
@@ -209,7 +209,7 @@ export function Sidebar() {
                     "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                   )}
                 >
-                  <KeyRound className="h-4 w-4 flex-shrink-0" />
+                  <span className="h-4 w-4 flex-shrink-0 flex items-center justify-center text-xs font-bold text-primary">2</span>
                   <span className="whitespace-nowrap">Configurar Credenciais</span>
                 </button>
                 <button
@@ -219,7 +219,7 @@ export function Sidebar() {
                     "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                   )}
                 >
-                  <Code className="h-4 w-4 flex-shrink-0" />
+                  <span className="h-4 w-4 flex-shrink-0 flex items-center justify-center text-xs font-bold text-primary">3</span>
                   <span className="whitespace-nowrap">Scripts</span>
                 </button>
               </div>
