@@ -22,6 +22,7 @@ export type Database = {
           id: string
           is_active: boolean
           slug: string
+          subdomain: string | null
           updated_at: string
           version: string
         }
@@ -32,6 +33,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           slug: string
+          subdomain?: string | null
           updated_at?: string
           version: string
         }
@@ -42,6 +44,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           slug?: string
+          subdomain?: string | null
           updated_at?: string
           version?: string
         }
