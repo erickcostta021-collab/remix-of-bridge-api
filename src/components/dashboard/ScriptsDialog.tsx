@@ -11,10 +11,10 @@ const SCRIPT_SIMPLE = `<script src="https://toolkit.bridgeapi.chat/message-toolk
 const SCRIPT_FILTERED = `<script>
   const allowedSubaccounts = [
     // Adicione os IDs das subcontas permitidas para execução dos scripts
-    "LocationID aqui dentro", // Conta 1
-    "LocationID aqui dentro", // Conta 2
-    "LocationID aqui dentro", // Conta 3
-    "LocationID aqui dentro"  // Conta 4
+    "Coloque seu LocationID aqui dentro", // Subconta 1
+    "Coloque seu LocationID aqui dentro", // Subconta 2
+    "Coloque seu LocationID aqui dentro", // Subconta 3
+    "Coloque seu LocationID aqui dentro"  // Subconta 4
   ];
 
   const scriptsToLoad = [
