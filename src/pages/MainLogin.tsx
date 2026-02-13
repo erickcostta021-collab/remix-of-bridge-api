@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { CANONICAL_APP_ORIGIN } from "@/lib/canonicalOrigin";
+
 import {
   Dialog,
   DialogContent,
@@ -129,24 +129,18 @@ const MainLogin = () => {
 
     setForgotLoading(true);
     try {
-      // Check if email exists before sending recovery
-      const { data: checkData, error: checkError } = await supabase.functions.invoke(
-        "check-email-exists",
-        { body: { email: trimmedEmail } }
-      );
+      const { data, error } = await supabase.functions.invoke("send-reset-password", {
+        body: { email: trimmedEmail },
+      });
 
-      if (checkError) throw checkError;
+      if (error) throw error;
 
-      if (!checkData?.exists) {
-        toast.error("Este email não está cadastrado no sistema");
+      if (data?.error) {
+        toast.error(data.error);
         setForgotLoading(false);
         return;
       }
 
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: `${CANONICAL_APP_ORIGIN}/reset-password`,
-      });
-      if (error) throw error;
       setForgotSent(true);
       toast.success("Email de recuperação enviado!");
     } catch (error: any) {
