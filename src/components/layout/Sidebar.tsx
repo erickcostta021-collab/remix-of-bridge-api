@@ -23,10 +23,12 @@ import {
   Activity,
   Rocket,
   Repeat,
+  Code,
 } from "lucide-react";
 import { CustomizeSmsDialog } from "@/components/dashboard/CustomizeSmsDialog";
 import { WhatsAppThemeDialog } from "@/components/dashboard/WhatsAppThemeDialog";
 import { SendButtonsDialog } from "@/components/dashboard/SendButtonsDialog";
+import { ScriptsDialog } from "@/components/dashboard/ScriptsDialog";
 
 import { useSidebarState } from "@/hooks/useSidebarState";
 
@@ -46,6 +48,7 @@ export function Sidebar() {
   const [whatsappThemeOpen, setWhatsappThemeOpen] = useState(false);
   const [sendButtonsOpen, setSendButtonsOpen] = useState(false);
   const [instanceOverrideOpen, setInstanceOverrideOpen] = useState(false);
+  const [scriptsOpen, setScriptsOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -196,6 +199,16 @@ export function Sidebar() {
                     <span className="whitespace-nowrap">Instalar App</span>
                   </button>
                 )}
+                <button
+                  onClick={() => setScriptsOpen(true)}
+                  className={cn(
+                    "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
+                    "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                >
+                  <Code className="h-4 w-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">Scripts</span>
+                </button>
               </div>
             )}
           </div>
@@ -344,6 +357,9 @@ export function Sidebar() {
 
       {/* Instance Override Dialog */}
       <InstanceOverrideDialog open={instanceOverrideOpen} onOpenChange={setInstanceOverrideOpen} />
+
+      {/* Scripts Dialog */}
+      <ScriptsDialog open={scriptsOpen} onOpenChange={setScriptsOpen} />
     </>
   );
 }
