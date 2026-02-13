@@ -24,8 +24,10 @@ import {
   Rocket,
   Repeat,
   Code,
+  KeyRound,
 } from "lucide-react";
 import { CustomizeSmsDialog } from "@/components/dashboard/CustomizeSmsDialog";
+import { ConfigureCredentialsDialog } from "@/components/dashboard/ConfigureCredentialsDialog";
 import { WhatsAppThemeDialog } from "@/components/dashboard/WhatsAppThemeDialog";
 import { SendButtonsDialog } from "@/components/dashboard/SendButtonsDialog";
 import { ScriptsDialog } from "@/components/dashboard/ScriptsDialog";
@@ -49,6 +51,7 @@ export function Sidebar() {
   const [sendButtonsOpen, setSendButtonsOpen] = useState(false);
   const [instanceOverrideOpen, setInstanceOverrideOpen] = useState(false);
   const [scriptsOpen, setScriptsOpen] = useState(false);
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -199,6 +202,16 @@ export function Sidebar() {
                     <span className="whitespace-nowrap">Instalar App</span>
                   </button>
                 )}
+                <button
+                  onClick={() => setCredentialsOpen(true)}
+                  className={cn(
+                    "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 w-full text-left text-sm",
+                    "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                >
+                  <KeyRound className="h-4 w-4 flex-shrink-0" />
+                  <span className="whitespace-nowrap">Configurar Credenciais</span>
+                </button>
                 <button
                   onClick={() => setScriptsOpen(true)}
                   className={cn(
@@ -360,6 +373,9 @@ export function Sidebar() {
 
       {/* Scripts Dialog */}
       <ScriptsDialog open={scriptsOpen} onOpenChange={setScriptsOpen} />
+
+      {/* Configure Credentials Dialog */}
+      <ConfigureCredentialsDialog open={credentialsOpen} onOpenChange={setCredentialsOpen} />
     </>
   );
 }
