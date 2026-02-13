@@ -10,7 +10,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy } from "lucide-react";
+
+function getScriptUrl(slug: string): string {
+  const lower = slug.toLowerCase();
+  if (lower.includes("switch")) return `https://switch.bridgeapi.chat/${slug}`;
+  if (lower.includes("toolkit")) return `https://toolkit.bridgeapi.chat/${slug}`;
+  if (lower.includes("recorder") || lower.includes("ghost")) return `https://recorder.bridgeapi.chat/${slug}`;
+  return `https://switch.bridgeapi.chat/${slug}`;
+}
 
 interface CdnScript {
   id: string;
@@ -154,7 +162,7 @@ export function CdnScriptsPanel() {
                     className="bg-secondary border-border"
                   />
                   <p className="text-xs text-muted-foreground">
-                    URL: switch.bridgeapi.chat/<strong>{form.slug || "slug"}</strong>
+                    URL: <strong>{form.slug ? getScriptUrl(form.slug) : "switch.bridgeapi.chat/slug"}</strong>
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -208,9 +216,20 @@ export function CdnScriptsPanel() {
           <div className="space-y-6">
             {Object.entries(grouped).map(([slug, versions]) => (
               <div key={slug} className="space-y-2">
-                <h4 className="text-sm font-semibold text-foreground">
-                  /{slug}
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold text-foreground">/{slug}</h4>
+                  <button
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => {
+                      const url = getScriptUrl(slug);
+                      navigator.clipboard.writeText(url);
+                      toast.success("URL copiada!");
+                    }}
+                  >
+                    <Copy className="h-3 w-3" />
+                    {getScriptUrl(slug)}
+                  </button>
+                </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
