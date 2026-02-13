@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy, Shield, Download } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy, Shield, Download, ShieldCheck } from "lucide-react";
 
 function getScriptUrl(slug: string, subdomain?: string | null): string {
   if (subdomain) return `https://${subdomain}/${slug}`;
@@ -28,6 +28,7 @@ interface CdnScript {
   content_type: string;
   subdomain: string | null;
   is_active: boolean;
+  is_obfuscated: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +61,7 @@ export function CdnScriptsPanel() {
           content: script.content,
           content_type: script.content_type,
           subdomain: script.subdomain || null,
+          is_obfuscated: false,
         }).eq("id", script.id);
         if (error) throw error;
       } else {
@@ -292,6 +294,11 @@ export function CdnScriptsPanel() {
                               <Circle className="h-3 w-3 mr-1" /> Inativa
                             </Badge>
                           )}
+                          {s.is_obfuscated && (
+                            <Badge variant="outline" className="ml-1 border-amber-500 text-amber-500">
+                              <ShieldCheck className="h-3 w-3 mr-1" /> Ofuscado
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {new Date(s.updated_at).toLocaleDateString("pt-BR")}
@@ -315,22 +322,29 @@ export function CdnScriptsPanel() {
                           <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
                             Editar
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              if (confirm("Ofuscar este script? O código original será substituído."))
-                                obfuscateMutation.mutate(s.id);
-                            }}
-                            disabled={obfuscateMutation.isPending}
-                          >
-                            {obfuscateMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Shield className="h-4 w-4 mr-1" />
-                            )}
-                            Ofuscar
-                          </Button>
+                          {s.is_obfuscated ? (
+                            <Button variant="outline" size="sm" disabled className="opacity-50">
+                              <ShieldCheck className="h-4 w-4 mr-1" />
+                              Ofuscado
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm("Ofuscar este script? O código original será substituído."))
+                                  obfuscateMutation.mutate(s.id);
+                              }}
+                              disabled={obfuscateMutation.isPending}
+                            >
+                              {obfuscateMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Shield className="h-4 w-4 mr-1" />
+                              )}
+                              Ofuscar
+                            </Button>
+                          )}
                           {!s.is_active && (
                             <Button
                               variant="outline"

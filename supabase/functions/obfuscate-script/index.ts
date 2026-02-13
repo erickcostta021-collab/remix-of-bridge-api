@@ -60,13 +60,20 @@ Deno.serve(async (req) => {
 
     const { data: script, error: fetchError } = await serviceClient
       .from("cdn_scripts")
-      .select("id, content, slug, version")
+      .select("id, content, slug, version, is_obfuscated")
       .eq("id", script_id)
       .single();
 
     if (fetchError || !script) {
       return new Response(JSON.stringify({ error: "Script not found" }), {
         status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (script.is_obfuscated) {
+      return new Response(JSON.stringify({ error: "Script já está ofuscado. Substitua o conteúdo original antes de ofuscar novamente." }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -110,7 +117,7 @@ Deno.serve(async (req) => {
     // Update the script content
     const { error: updateError } = await serviceClient
       .from("cdn_scripts")
-      .update({ content: obfuscatedCode })
+      .update({ content: obfuscatedCode, is_obfuscated: true })
       .eq("id", script_id);
 
     if (updateError) {
