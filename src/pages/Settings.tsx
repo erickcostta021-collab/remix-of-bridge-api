@@ -250,7 +250,7 @@ export default function Settings() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Encontre seu token em: GHL → Settings → Company → API Keys
+                    Encontre seu token em: GHL → Conta nível agência → Configurações → Integrações Privado
                   </p>
                 </div>
               </CardContent>
