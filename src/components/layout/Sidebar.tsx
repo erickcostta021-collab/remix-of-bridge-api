@@ -199,6 +199,7 @@ export function Sidebar() {
                     )}
                   >
                     <span className="h-4 w-4 flex-shrink-0 flex items-center justify-center text-xs font-bold text-primary">1</span>
+                    <ExternalLink className="h-4 w-4 flex-shrink-0" />
                     <span className="whitespace-nowrap">Conectar subconta GHL</span>
                   </button>
                 )}
@@ -210,6 +211,7 @@ export function Sidebar() {
                   )}
                 >
                   <span className="h-4 w-4 flex-shrink-0 flex items-center justify-center text-xs font-bold text-primary">2</span>
+                  <KeyRound className="h-4 w-4 flex-shrink-0" />
                   <span className="whitespace-nowrap">Configurar Credenciais</span>
                 </button>
                 <button
@@ -220,6 +222,7 @@ export function Sidebar() {
                   )}
                 >
                   <span className="h-4 w-4 flex-shrink-0 flex items-center justify-center text-xs font-bold text-primary">3</span>
+                  <Code className="h-4 w-4 flex-shrink-0" />
                   <span className="whitespace-nowrap">Scripts</span>
                 </button>
               </div>
