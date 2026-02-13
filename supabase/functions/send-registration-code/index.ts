@@ -80,7 +80,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Enviar código de verificação para o próprio usuário
     const emailResponse = await resend.emails.send({
-      from: "Bridge API <onboarding@resend.dev>",
+      from: "Bridge API <noreply@bridgeapi.chat>",
       to: [email],
       subject: `🔐 Seu código de verificação: ${code}`,
       html: `
