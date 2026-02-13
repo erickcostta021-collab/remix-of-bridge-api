@@ -12,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { Plus, Trash2, CheckCircle2, Circle, Loader2, Code, Copy, Shield, Download } from "lucide-react";
 
-function getScriptUrl(slug: string): string {
+function getScriptUrl(slug: string, subdomain?: string | null): string {
+  if (subdomain) return `https://${subdomain}/${slug}`;
   const lower = slug.toLowerCase();
   if (lower.includes("toolkit")) return `https://toolkit.bridgeapi.chat/${slug}`;
   if (lower.includes("recorder") || lower.includes("ghost") || lower.includes("bundle")) return `https://recorder.bridgeapi.chat/${slug}`;
@@ -25,6 +26,7 @@ interface CdnScript {
   version: string;
   content: string;
   content_type: string;
+  subdomain: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -34,7 +36,7 @@ export function CdnScriptsPanel() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editScript, setEditScript] = useState<CdnScript | null>(null);
-  const [form, setForm] = useState({ slug: "", version: "", content: "", content_type: "application/javascript" });
+  const [form, setForm] = useState({ slug: "", version: "", content: "", content_type: "application/javascript", subdomain: "" });
 
   const { data: scripts, isLoading } = useQuery({
     queryKey: ["cdn-scripts"],
@@ -57,6 +59,7 @@ export function CdnScriptsPanel() {
           version: script.version,
           content: script.content,
           content_type: script.content_type,
+          subdomain: script.subdomain || null,
         }).eq("id", script.id);
         if (error) throw error;
       } else {
@@ -65,6 +68,7 @@ export function CdnScriptsPanel() {
           version: script.version!,
           content: script.content!,
           content_type: script.content_type!,
+          subdomain: (script as any).subdomain || null,
           is_active: true,
         });
         if (error) throw error;
@@ -129,14 +133,14 @@ export function CdnScriptsPanel() {
   });
 
   const resetForm = () => {
-    setForm({ slug: "", version: "", content: "", content_type: "application/javascript" });
+    setForm({ slug: "", version: "", content: "", content_type: "application/javascript", subdomain: "" });
     setEditScript(null);
     setDialogOpen(false);
   };
 
   const openEdit = (script: CdnScript) => {
     setEditScript(script);
-    setForm({ slug: script.slug, version: script.version, content: script.content, content_type: script.content_type });
+    setForm({ slug: script.slug, version: script.version, content: script.content, content_type: script.content_type, subdomain: script.subdomain || "" });
     setDialogOpen(true);
   };
 
@@ -145,7 +149,7 @@ export function CdnScriptsPanel() {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
-    upsertMutation.mutate({ ...form, id: editScript?.id });
+    upsertMutation.mutate({ ...form, subdomain: form.subdomain || null, id: editScript?.id });
   };
 
   // Group scripts by slug
@@ -187,10 +191,20 @@ export function CdnScriptsPanel() {
                     className="bg-secondary border-border"
                   />
                   <p className="text-xs text-muted-foreground">
-                    URL: <strong>{form.slug ? getScriptUrl(form.slug) : "switch.bridgeapi.chat/slug"}</strong>
+                    URL: <strong>{form.slug ? getScriptUrl(form.slug, form.subdomain || null) : "subdominio.bridgeapi.chat/slug"}</strong>
                   </p>
                 </div>
                 <div className="space-y-2">
+                  <Label>Subdomínio</Label>
+                  <Input
+                    placeholder="presence.bridgeapi.chat"
+                    value={form.subdomain}
+                    onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
+                    className="bg-secondary border-border"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Deixe vazio para detectar automaticamente pelo slug
+                  </p>
                   <Label>Versão</Label>
                   <Input
                     placeholder="v6.15"
@@ -246,13 +260,13 @@ export function CdnScriptsPanel() {
                   <button
                     className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                     onClick={() => {
-                      const url = getScriptUrl(slug);
+                      const url = getScriptUrl(slug, versions[0]?.subdomain);
                       navigator.clipboard.writeText(url);
                       toast.success("URL copiada!");
                     }}
                   >
                     <Copy className="h-3 w-3" />
-                    {getScriptUrl(slug)}
+                    {getScriptUrl(slug, versions[0]?.subdomain)}
                   </button>
                 </div>
                 <Table>
