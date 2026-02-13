@@ -37,6 +37,7 @@ export function CdnScriptsPanel() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editScript, setEditScript] = useState<CdnScript | null>(null);
+  const [obfuscatingId, setObfuscatingId] = useState<string | null>(null);
   const [form, setForm] = useState({ slug: "", version: "", content: "", content_type: "application/javascript", subdomain: "" });
 
   const { data: scripts, isLoading } = useQuery({
@@ -110,6 +111,7 @@ export function CdnScriptsPanel() {
 
   const obfuscateMutation = useMutation({
     mutationFn: async (id: string) => {
+      setObfuscatingId(id);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Não autenticado");
       const res = await fetch(
@@ -130,8 +132,12 @@ export function CdnScriptsPanel() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["cdn-scripts"] });
       toast.success(`Ofuscado! ${data.original_size} → ${data.obfuscated_size} bytes`);
+      setObfuscatingId(null);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      toast.error(err.message);
+      setObfuscatingId(null);
+    },
   });
 
   const resetForm = () => {
@@ -335,9 +341,9 @@ export function CdnScriptsPanel() {
                                 if (confirm("Ofuscar este script? O código original será substituído."))
                                   obfuscateMutation.mutate(s.id);
                               }}
-                              disabled={obfuscateMutation.isPending}
+                              disabled={obfuscatingId === s.id}
                             >
-                              {obfuscateMutation.isPending ? (
+                              {obfuscatingId === s.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 <Shield className="h-4 w-4 mr-1" />
