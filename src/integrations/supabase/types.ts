@@ -422,6 +422,24 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_settings: {
         Row: {
           created_at: string
@@ -540,6 +558,13 @@ export type Database = {
       }
       get_effective_user_id: { Args: { p_user_id: string }; Returns: string }
       get_token_owner: { Args: { p_agency_token: string }; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       is_admin: { Args: never; Returns: boolean }
       upsert_subaccounts: {
         Args: { p_locations: Json; p_user_id: string }
@@ -547,6 +572,7 @@ export type Database = {
       }
     }
     Enums: {
+      app_role: "admin" | "moderator" | "user"
       instance_status: "connected" | "connecting" | "disconnected"
     }
     CompositeTypes: {
@@ -675,6 +701,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "moderator", "user"],
       instance_status: ["connected", "connecting", "disconnected"],
     },
   },
