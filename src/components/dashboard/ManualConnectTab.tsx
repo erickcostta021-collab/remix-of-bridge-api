@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettings } from "@/hooks/useSettings";
 import { useQueryClient } from "@tanstack/react-query";
+import { reconfigureWebhookOnApi } from "@/hooks/instances/instanceApi";
 
 interface ManualConnectTabProps {
   subaccountId: string;
@@ -124,18 +125,33 @@ export function ManualConnectTab({
       }
 
       // Manual instances store their own base URL — do NOT sync to user_settings
+      const webhookUrl = settings?.global_webhook_url || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-inbound`;
+      
       const { error } = await supabase.from("instances").insert({
         user_id: user.id,
         subaccount_id: subaccountId,
         instance_name: trimmedName,
         uazapi_instance_token: trimmedToken,
         instance_status: "disconnected",
-        webhook_url: settings?.global_webhook_url || null,
+        webhook_url: webhookUrl,
         ignore_groups: false,
         uazapi_base_url: trimmedUrl, // Per-instance base URL
       });
 
       if (error) throw error;
+
+      // Configure webhook on UAZAPI so inbound messages are forwarded to our endpoint
+      try {
+        const tempInstance = {
+          uazapi_instance_token: trimmedToken,
+          uazapi_base_url: trimmedUrl,
+        } as any;
+        await reconfigureWebhookOnApi(tempInstance, webhookUrl, false);
+        console.log("✅ Webhook configured on UAZAPI successfully");
+      } catch (webhookErr: any) {
+        console.error("Failed to configure webhook on UAZAPI:", webhookErr);
+        toast.warning("Instância conectada, mas o webhook não foi configurado automaticamente na UAZAPI. Configure manualmente o webhook apontando para: " + webhookUrl);
+      }
 
       queryClient.invalidateQueries({ queryKey: ["instances"] });
       queryClient.invalidateQueries({ queryKey: ["instance-count-linked"] });
