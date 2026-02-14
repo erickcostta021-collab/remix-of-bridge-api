@@ -28,6 +28,8 @@ interface EmbedAssignUserDialogProps {
   embedToken: string;
   locationId: string;
   ghlAccessToken: string | null;
+  tokenExpiresAt?: string | null;
+  subaccountUserId?: string;
   onAssigned: (userId: string | null, userName: string | null) => void;
 }
 
@@ -40,6 +42,8 @@ export function EmbedAssignUserDialog({
   embedToken,
   locationId,
   ghlAccessToken,
+  tokenExpiresAt,
+  subaccountUserId,
   onAssigned,
 }: EmbedAssignUserDialogProps) {
   const [ghlUsers, setGhlUsers] = useState<GHLUser[]>([]);
@@ -55,12 +59,38 @@ export function EmbedAssignUserDialog({
 
     setLoadingUsers(true);
     try {
+      let token = ghlAccessToken;
+
+      // Auto-refresh token if expired
+      if (tokenExpiresAt) {
+        const expiresAt = new Date(tokenExpiresAt);
+        const now = new Date();
+        if (now.getTime() >= expiresAt.getTime() - 5 * 60 * 1000) {
+          try {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const refreshRes = await fetch(`${supabaseUrl}/functions/v1/refresh-token`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ locationId, userId: subaccountUserId }),
+            });
+            if (refreshRes.ok) {
+              const refreshData = await refreshRes.json();
+              if (refreshData.access_token) {
+                token = refreshData.access_token;
+              }
+            }
+          } catch (e) {
+            console.error("Token refresh failed:", e);
+          }
+        }
+      }
+
       const response = await fetch(
         `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
         {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${ghlAccessToken}`,
+            "Authorization": `Bearer ${token}`,
             "Version": "2021-07-28",
             "Content-Type": "application/json",
           },
