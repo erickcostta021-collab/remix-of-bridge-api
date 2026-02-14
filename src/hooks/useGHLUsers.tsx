@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface GHLUser {
   id: string;
@@ -10,12 +11,86 @@ export interface GHLUser {
   role?: string;
 }
 
+async function refreshGHLToken(locationId: string, userId: string): Promise<string | null> {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const response = await fetch(`${supabaseUrl}/functions/v1/refresh-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locationId, userId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error("Token refresh failed:", errorData);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.access_token || null;
+  } catch (error) {
+    console.error("Token refresh error:", error);
+    return null;
+  }
+}
+
 export function useGHLUsers() {
   const [loading, setLoading] = useState(false);
 
-  // Fetch users using the subaccount's OAuth access token (automatic from OAuth flow)
-  const fetchLocationUsers = async (locationId: string, accessToken?: string | null): Promise<GHLUser[]> => {
-    if (!accessToken) {
+  /**
+   * Ensures the access token is valid. If expired, refreshes it automatically.
+   * Returns the valid access token or null if refresh failed.
+   */
+  const ensureValidToken = async (
+    locationId: string,
+    subaccountUserId: string,
+    accessToken: string | null,
+    tokenExpiresAt: string | null
+  ): Promise<string | null> => {
+    if (!accessToken) return null;
+
+    // Check if token is expired (with 5 min buffer)
+    if (tokenExpiresAt) {
+      const expiresAt = new Date(tokenExpiresAt);
+      const now = new Date();
+      const bufferMs = 5 * 60 * 1000; // 5 minutes buffer
+
+      if (now.getTime() >= expiresAt.getTime() - bufferMs) {
+        console.log("[useGHLUsers] Token expired, refreshing...");
+        const newToken = await refreshGHLToken(locationId, subaccountUserId);
+        if (newToken) {
+          console.log("[useGHLUsers] Token refreshed successfully");
+          return newToken;
+        }
+        console.error("[useGHLUsers] Token refresh failed");
+        return null;
+      }
+    }
+
+    return accessToken;
+  };
+
+  const fetchLocationUsers = async (
+    locationId: string,
+    accessToken?: string | null,
+    options?: {
+      subaccountUserId?: string;
+      tokenExpiresAt?: string | null;
+    }
+  ): Promise<GHLUser[]> => {
+    let token = accessToken || null;
+
+    // Auto-refresh if expiry info provided
+    if (options?.subaccountUserId && token) {
+      token = await ensureValidToken(
+        locationId,
+        options.subaccountUserId,
+        token,
+        options.tokenExpiresAt ?? null
+      );
+    }
+
+    if (!token) {
       console.warn("Token OAuth não disponível - instale o app na subconta primeiro");
       return [];
     }
@@ -28,7 +103,7 @@ export function useGHLUsers() {
         {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${accessToken}`,
+            "Authorization": `Bearer ${token}`,
             "Version": "2021-07-28",
             "Accept": "application/json",
           },
@@ -42,7 +117,7 @@ export function useGHLUsers() {
           {
             method: "GET",
             headers: {
-              "Authorization": `Bearer ${accessToken}`,
+              "Authorization": `Bearer ${token}`,
               "Version": "2021-07-28",
               "Accept": "application/json",
             },
@@ -86,6 +161,7 @@ export function useGHLUsers() {
 
   return {
     fetchLocationUsers,
+    ensureValidToken,
     loading,
   };
 }

@@ -23,6 +23,8 @@ interface Subaccount {
   id: string;
   location_id: string;
   ghl_access_token: string | null;
+  ghl_token_expires_at: string | null;
+  user_id: string;
 }
 
 interface AssignGHLUserDialogProps {
@@ -68,7 +70,11 @@ export function AssignGHLUserDialog({
     try {
       const users = await fetchLocationUsers(
         subaccount.location_id,
-        subaccount.ghl_access_token
+        subaccount.ghl_access_token,
+        {
+          subaccountUserId: subaccount.user_id,
+          tokenExpiresAt: subaccount.ghl_token_expires_at,
+        }
       );
       setGhlUsers(users);
     } catch (error: any) {

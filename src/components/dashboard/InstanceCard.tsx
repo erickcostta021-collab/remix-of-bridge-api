@@ -94,6 +94,8 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
     id: string;
     location_id: string;
     ghl_access_token: string | null;
+    ghl_token_expires_at: string | null;
+    user_id: string;
   } | null>(null);
 
   // Fetch subaccount data for GHL user assignment
@@ -101,7 +103,7 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
     const fetchSubaccount = async () => {
       const { data } = await supabase
         .from("ghl_subaccounts")
-        .select("id, location_id, ghl_access_token")
+        .select("id, location_id, ghl_access_token, ghl_token_expires_at, user_id")
         .eq("id", instance.subaccount_id)
         .single();
       
@@ -111,7 +113,10 @@ export const InstanceCard = memo(function InstanceCard({ instance }: InstanceCar
         // Fetch GHL user name if assigned (using OAuth token)
         if (instance.ghl_user_id && data.ghl_access_token) {
           try {
-            const users = await fetchLocationUsers(data.location_id, data.ghl_access_token);
+            const users = await fetchLocationUsers(data.location_id, data.ghl_access_token, {
+              subaccountUserId: data.user_id,
+              tokenExpiresAt: data.ghl_token_expires_at,
+            });
             const user = users.find(u => u.id === instance.ghl_user_id);
             if (user) {
               setGhlUserName(user.name);
