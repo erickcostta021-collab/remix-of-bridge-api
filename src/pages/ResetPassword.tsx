@@ -64,12 +64,15 @@ const ResetPassword = () => {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
+      // Sign out to invalidate the recovery session
+      await supabase.auth.signOut();
+
       setSuccess(true);
       toast.success("Senha alterada com sucesso!");
 
-      // Redirect to dashboard after a brief delay
+      // Redirect to login after a brief delay
       setTimeout(() => {
-        navigate("/dashboard", { replace: true });
+        navigate("/login", { replace: true });
       }, 2000);
     } catch (error: any) {
       toast.error(error.message || "Erro ao alterar senha");
@@ -133,7 +136,7 @@ const ResetPassword = () => {
                 <CheckCircle className="h-8 w-8 text-primary" />
               </div>
               <p className="text-sm text-muted-foreground text-center">
-                Sua senha foi alterada com sucesso. Redirecionando para o dashboard...
+                Sua senha foi alterada com sucesso. Redirecionando para o login...
               </p>
             </div>
           ) : (
