@@ -160,24 +160,40 @@ Crie as seguintes tabelas:
 - Zustand para estado da sidebar
 - Sonner para toasts
 - Lucide React para ícones
-- Lovable Cloud (Supabase) para backend
+- **Supabase externo** para backend (NÃO usar Lovable Cloud)
 
-### Trigger importante:
-```sql
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_new_user();
-```
-A função `handle_new_user()` deve criar automaticamente um registro em `profiles` e `user_settings` (com track_id gerado) quando um novo usuário se registra.
+### ⚠️ IMPORTANTE: Supabase Externo (NÃO ativar Lovable Cloud)
 
-### Secrets necessários:
+Este projeto usa um **Supabase externo já existente** com quase tudo criado. **NÃO ative o Lovable Cloud.**
+
+**Como conectar:**
+1. Vá em **Settings → Connectors → Supabase**
+2. Conecte ao projeto Supabase externo existente (ref: `jtabmlyjgtrgimnhvixb`)
+3. O Lovable vai gerar automaticamente o `client.ts` e `types.ts`
+
+**O que já existe no Supabase externo:**
+- ✅ Todas as tabelas: `profiles`, `user_settings`, `user_roles`, `ghl_subaccounts`, `instances`, `message_map`, `ghl_contact_phone_mapping`, `ghl_processed_messages`, `webhook_metrics`, `server_health_alerts`, `cdn_scripts`, `registration_requests`, `contact_instance_preferences`
+- ✅ Todas as RLS policies configuradas
+- ✅ Enums: `app_role` (admin/moderator/user), `instance_status` (connected/connecting/disconnected)
+- ✅ Funções RPC: `is_admin()`, `has_role()`, `get_admin_oauth_credentials()`, `get_effective_user_id()`, `get_token_owner()`, `upsert_subaccounts()`, `generate_embed_token()`, cleanup functions
+- ✅ Trigger `on_auth_user_created` → `handle_new_user()` (cria profile + user_settings automaticamente)
+- ✅ Dados existentes (profiles, instances, subaccounts)
+- ✅ Storage bucket para avatares
+- ✅ Admin já configurado na `user_roles`
+
+**O que NÃO existe ainda no Supabase externo (precisa criar via deploy):**
+- ❌ Edge Functions — precisam ser deployadas com `supabase functions deploy --project-ref jtabmlyjgtrgimnhvixb`
+- ❌ Secrets das edge functions: `RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `FRONTEND_URL`
+
+**Portanto:** O Lovable só precisa recriar o **frontend** (React) e as **edge functions**. **NÃO crie migrations de banco** — tudo já existe. Apenas importe o client Supabase normalmente e use as tabelas/funções que já estão lá.
+
+### Secrets necessários (configurar no Supabase externo):
 - RESEND_API_KEY (para envio de emails)
 - STRIPE_SECRET_KEY (para billing)
 - FRONTEND_URL (URL do frontend publicado)
 
 ---
 
-Comece pela landing page e sistema de autenticação, depois crie o dashboard com gerenciamento de subcontas e instâncias.
+Comece pela landing page e sistema de autenticação, depois crie o dashboard com gerenciamento de subcontas e instâncias. **NÃO crie tabelas nem migrations** — o banco já está pronto.
 
 ## PROMPT FIM
