@@ -1,10 +1,11 @@
 -- ============================================================
 -- BRIDGE API - Schema Completo para Migração
--- Gerado em: 2026-02-14
+-- Atualizado em: 2026-02-16 (sincronizado com Lovable Cloud)
 -- ============================================================
 
 -- 1. ENUM TYPES
 CREATE TYPE public.instance_status AS ENUM ('connected', 'connecting', 'disconnected');
+CREATE TYPE public.app_role AS ENUM ('admin', 'moderator', 'user');
 
 -- 2. TABLES
 
@@ -22,6 +23,13 @@ CREATE TABLE public.profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- user_roles
+CREATE TABLE public.user_roles (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL,
+  role public.app_role NOT NULL
+);
+
 -- user_settings
 CREATE TABLE public.user_settings (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -33,6 +41,8 @@ CREATE TABLE public.user_settings (
   uazapi_admin_token TEXT,
   uazapi_base_url TEXT,
   global_webhook_url TEXT,
+  webhook_inbound_url TEXT,
+  webhook_outbound_url TEXT,
   external_supabase_url TEXT,
   external_supabase_key TEXT,
   external_supabase_pat TEXT,
@@ -222,24 +232,37 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.is_admin()
+CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role app_role)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public' AS $$
   SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid()
-    AND email IN ('erickcostta021@gmail.com', 'erickcostta.br@gmail.com')
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role = _role
   )
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public' AS $$
+  SELECT public.has_role(auth.uid(), 'admin')
 $$;
 
 CREATE OR REPLACE FUNCTION public.get_admin_oauth_credentials()
 RETURNS TABLE(ghl_client_id text, ghl_client_secret text)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public' AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+BEGIN
+  IF NOT public.is_admin() AND current_setting('role', true) != 'service_role' THEN
+    RAISE EXCEPTION 'Access denied: admin or service role required';
+  END IF;
+  
+  RETURN QUERY
   SELECT us.ghl_client_id, us.ghl_client_secret
   FROM public.user_settings us
-  INNER JOIN public.profiles p ON p.user_id = us.user_id
-  WHERE p.email IN ('erickcostta021@gmail.com', 'erickcostta.br@gmail.com')
+  INNER JOIN public.user_roles ur ON ur.user_id = us.user_id
+  WHERE ur.role = 'admin'
     AND us.ghl_client_id IS NOT NULL AND us.ghl_client_secret IS NOT NULL
-  ORDER BY us.created_at ASC LIMIT 1
+  ORDER BY us.created_at ASC LIMIT 1;
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.get_token_owner(p_agency_token text)
@@ -291,31 +314,60 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.cleanup_old_processed_messages()
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN DELETE FROM public.ghl_processed_messages WHERE created_at < now() - INTERVAL '1 hour'; END;
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+BEGIN
+  IF NOT public.is_admin() AND current_setting('role', true) != 'service_role' THEN
+    RAISE EXCEPTION 'Access denied';
+  END IF;
+  DELETE FROM public.ghl_processed_messages WHERE created_at < now() - INTERVAL '1 hour';
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.cleanup_old_phone_mappings()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
-BEGIN DELETE FROM public.ghl_contact_phone_mapping WHERE updated_at < now() - INTERVAL '30 days'; END;
+BEGIN
+  IF NOT public.is_admin() AND current_setting('role', true) != 'service_role' THEN
+    RAISE EXCEPTION 'Access denied';
+  END IF;
+  DELETE FROM public.ghl_contact_phone_mapping WHERE updated_at < now() - INTERVAL '30 days';
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.cleanup_old_webhook_metrics()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
-BEGIN DELETE FROM public.webhook_metrics WHERE created_at < now() - INTERVAL '7 days'; END;
+BEGIN
+  IF NOT public.is_admin() AND current_setting('role', true) != 'service_role' THEN
+    RAISE EXCEPTION 'Access denied';
+  END IF;
+  DELETE FROM public.webhook_metrics
+  WHERE created_at < now() - INTERVAL '12 hours'
+    AND (error_type IS NULL OR error_type = 'success');
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.cleanup_old_health_alerts()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
-BEGIN DELETE FROM public.server_health_alerts WHERE status = 'recovered' AND resolved_at < now() - INTERVAL '30 days'; END;
+BEGIN
+  IF NOT public.is_admin() AND current_setting('role', true) != 'service_role' THEN
+    RAISE EXCEPTION 'Access denied';
+  END IF;
+  DELETE FROM public.server_health_alerts WHERE status = 'recovered' AND resolved_at < now() - INTERVAL '30 days';
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.cleanup_old_message_mappings()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
-BEGIN DELETE FROM public.message_map WHERE created_at < now() - INTERVAL '24 hours'; END;
+BEGIN
+  IF NOT public.is_admin() AND current_setting('role', true) != 'service_role' THEN
+    RAISE EXCEPTION 'Access denied';
+  END IF;
+  DELETE FROM public.message_map WHERE created_at < now() - INTERVAL '24 hours';
+END;
 $$;
 
--- 5. TRIGGER (handle_new_user on auth.users - configure manually no Supabase externo)
+-- 5. TRIGGERS
+
+-- handle_new_user on auth.users - configure manualmente no Supabase externo:
 -- CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
 --   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
@@ -328,6 +380,7 @@ CREATE TRIGGER ensure_single_active_cdn
 
 -- Enable RLS on all tables
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ghl_subaccounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.instances ENABLE ROW LEVEL SECURITY;
@@ -348,11 +401,15 @@ CREATE POLICY "Admin can view all profiles" ON public.profiles FOR SELECT USING 
 CREATE POLICY "Admin can update any profile" ON public.profiles FOR UPDATE USING (is_admin()) WITH CHECK (is_admin());
 CREATE POLICY "Admin can delete any profile" ON public.profiles FOR DELETE USING (is_admin());
 
+-- user_roles
+CREATE POLICY "Users can view own roles" ON public.user_roles FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Admins can view all roles" ON public.user_roles FOR SELECT USING (has_role(auth.uid(), 'admin'));
+CREATE POLICY "Admins can manage roles" ON public.user_roles FOR ALL USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
+
 -- user_settings
 CREATE POLICY "Users can view own settings" ON public.user_settings FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can update own settings" ON public.user_settings FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own settings" ON public.user_settings FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Anyone can view user_settings for embed access" ON public.user_settings FOR SELECT USING (EXISTS (SELECT 1 FROM ghl_subaccounts WHERE ghl_subaccounts.user_id = user_settings.user_id AND ghl_subaccounts.embed_token IS NOT NULL));
 CREATE POLICY "Admin can delete any user_settings" ON public.user_settings FOR DELETE USING (is_admin());
 
 -- ghl_subaccounts
@@ -380,32 +437,23 @@ CREATE POLICY "Users can update own unlinked instances" ON public.instances FOR 
 CREATE POLICY "Anyone can read active cdn scripts" ON public.cdn_scripts FOR SELECT USING (is_active = true);
 CREATE POLICY "Admins can manage cdn scripts" ON public.cdn_scripts FOR ALL USING (is_admin()) WITH CHECK (is_admin());
 
--- registration_requests
-CREATE POLICY "Anyone can create registration request" ON public.registration_requests FOR INSERT WITH CHECK (true);
+-- registration_requests (somente leitura para anon, insert/update via service_role)
 CREATE POLICY "Anyone can read registration requests" ON public.registration_requests FOR SELECT USING (true);
-CREATE POLICY "Anyone can update registration requests" ON public.registration_requests FOR UPDATE USING (true);
 
--- ghl_contact_phone_mapping
-CREATE POLICY "Service role can manage phone mappings" ON public.ghl_contact_phone_mapping FOR ALL USING (true) WITH CHECK (true);
-
--- ghl_processed_messages
-CREATE POLICY "Service role can manage processed messages" ON public.ghl_processed_messages FOR ALL USING (true) WITH CHECK (true);
+-- ghl_contact_phone_mapping (sem policies para anon - acesso apenas via service_role)
+-- ghl_processed_messages (sem policies para anon - acesso apenas via service_role)
+-- message_map (sem policies para anon - acesso apenas via service_role)
 
 -- contact_instance_preferences
 CREATE POLICY "Anyone can manage contact preferences for embed" ON public.contact_instance_preferences FOR ALL USING (EXISTS (SELECT 1 FROM instances i JOIN ghl_subaccounts s ON s.id = i.subaccount_id WHERE i.id = contact_instance_preferences.instance_id AND s.embed_token IS NOT NULL)) WITH CHECK (EXISTS (SELECT 1 FROM instances i JOIN ghl_subaccounts s ON s.id = i.subaccount_id WHERE i.id = contact_instance_preferences.instance_id AND s.embed_token IS NOT NULL));
 CREATE POLICY "Users can manage own contact preferences" ON public.contact_instance_preferences FOR ALL USING (EXISTS (SELECT 1 FROM instances i WHERE i.id = contact_instance_preferences.instance_id AND i.user_id = auth.uid())) WITH CHECK (EXISTS (SELECT 1 FROM instances i WHERE i.id = contact_instance_preferences.instance_id AND i.user_id = auth.uid()));
 
--- message_map
-CREATE POLICY "Service role can manage message_map" ON public.message_map FOR ALL USING (true) WITH CHECK (true);
-
--- webhook_metrics
+-- webhook_metrics (somente leitura para admins, insert via service_role)
 CREATE POLICY "Admins can view webhook_metrics" ON public.webhook_metrics FOR SELECT USING (is_admin());
-CREATE POLICY "Service role can insert webhook_metrics" ON public.webhook_metrics FOR ALL USING (true) WITH CHECK (true);
 
 -- server_health_alerts
 CREATE POLICY "Admins can view all alerts" ON public.server_health_alerts FOR SELECT USING (is_admin());
 CREATE POLICY "Users can view own alerts" ON public.server_health_alerts FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Service role can manage alerts" ON public.server_health_alerts FOR ALL USING (true) WITH CHECK (true);
 
 -- 7. STORAGE BUCKETS (executar no SQL Editor do Supabase)
 INSERT INTO storage.buckets (id, name, public) VALUES ('ghost-audio', 'ghost-audio', true) ON CONFLICT DO NOTHING;
