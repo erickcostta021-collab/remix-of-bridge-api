@@ -22,6 +22,10 @@
 1. Execute `02-data-profiles.sql` 
 2. Execute `03-data-instances.sql`
 3. Para ghl_subaccounts e user_settings, os dados contêm tokens sensíveis - importe manualmente via SQL Editor
+4. **IMPORTANTE**: Após importar os dados, insira o admin na tabela `user_roles`:
+   ```sql
+   INSERT INTO user_roles (user_id, role) VALUES ('SEU_USER_ID', 'admin');
+   ```
 
 ### 3. Edge Functions
 - Copie a pasta `supabase/functions/` do projeto
