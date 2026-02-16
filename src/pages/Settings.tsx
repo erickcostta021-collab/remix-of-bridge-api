@@ -44,6 +44,8 @@ export default function Settings() {
     uazapi_admin_token: "",
     uazapi_base_url: "",
     global_webhook_url: "",
+    webhook_inbound_url: "",
+    webhook_outbound_url: "",
   });
 
   useEffect(() => {
@@ -56,6 +58,8 @@ export default function Settings() {
         uazapi_admin_token: settings.uazapi_admin_token || "",
         uazapi_base_url: settings.uazapi_base_url || "",
         global_webhook_url: settings.global_webhook_url || "",
+        webhook_inbound_url: (settings as any).webhook_inbound_url || "",
+        webhook_outbound_url: (settings as any).webhook_outbound_url || "",
       });
     }
   }, [settings]);
@@ -199,25 +203,35 @@ export default function Settings() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
+                  <Label htmlFor="webhook-inbound" className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                     Webhook Inbound (UAZAPI → GHL)
                   </Label>
-                  <code className="block p-2 bg-secondary rounded text-xs break-all">
-                    {inboundWebhookUrl}
-                  </code>
+                  <Input
+                    id="webhook-inbound"
+                    type="text"
+                    value={formData.webhook_inbound_url || inboundWebhookUrl}
+                    onChange={(e) => setFormData({ ...formData, webhook_inbound_url: e.target.value })}
+                    placeholder={inboundWebhookUrl}
+                    className="bg-secondary border-border"
+                  />
                   <p className="text-xs text-muted-foreground">
                     Configure como Webhook Global da UAZAPI
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
+                  <Label htmlFor="webhook-outbound" className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                     Webhook Outbound (GHL → WhatsApp)
                   </Label>
-                  <code className="block p-2 bg-secondary rounded text-xs break-all">
-                    {outboundWebhookUrl}
-                  </code>
+                  <Input
+                    id="webhook-outbound"
+                    type="text"
+                    value={formData.webhook_outbound_url || outboundWebhookUrl}
+                    onChange={(e) => setFormData({ ...formData, webhook_outbound_url: e.target.value })}
+                    placeholder={outboundWebhookUrl}
+                    className="bg-secondary border-border"
+                  />
                   <p className="text-xs text-muted-foreground">
                     Configure nas Workflows do GHL para enviar mensagens
                   </p>
