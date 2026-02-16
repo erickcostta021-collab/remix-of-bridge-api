@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, RefreshCw, User, AlertCircle } from "lucide-react";
+import { Loader2, RefreshCw, User } from "lucide-react";
 import { toast } from "sonner";
 import { createEmbedSupabaseClient } from "@/hooks/useEmbedSupabase";
 
@@ -27,9 +27,6 @@ interface EmbedAssignUserDialogProps {
   currentUserId: string | null;
   embedToken: string;
   locationId: string;
-  ghlAccessToken: string | null;
-  tokenExpiresAt?: string | null;
-  subaccountUserId?: string;
   onAssigned: (userId: string | null, userName: string | null) => void;
 }
 
@@ -41,67 +38,34 @@ export function EmbedAssignUserDialog({
   currentUserId,
   embedToken,
   locationId,
-  ghlAccessToken,
-  tokenExpiresAt,
-  subaccountUserId,
   onAssigned,
 }: EmbedAssignUserDialogProps) {
   const [ghlUsers, setGhlUsers] = useState<GHLUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>(currentUserId || "none");
   const [saving, setSaving] = useState(false);
+  const [hasToken, setHasToken] = useState(true);
 
   const fetchUsers = async () => {
-    if (!ghlAccessToken) {
-      toast.error("App não instalado na subconta");
-      return;
-    }
-
     setLoadingUsers(true);
     try {
-      let token = ghlAccessToken;
+      // Use server-side proxy to fetch GHL users - no tokens exposed to client
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/uazapi-proxy-embed`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ embedToken, instanceId, action: "ghl-users", locationId }),
+      });
 
-      // Auto-refresh token if expired
-      if (tokenExpiresAt) {
-        const expiresAt = new Date(tokenExpiresAt);
-        const now = new Date();
-        if (now.getTime() >= expiresAt.getTime() - 5 * 60 * 1000) {
-          try {
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-            const refreshRes = await fetch(`${supabaseUrl}/functions/v1/refresh-token`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ locationId, userId: subaccountUserId }),
-            });
-            if (refreshRes.ok) {
-              const refreshData = await refreshRes.json();
-              if (refreshData.access_token) {
-                token = refreshData.access_token;
-              }
-            }
-          } catch (e) {
-            console.error("Token refresh failed:", e);
-          }
-        }
+      const data = await res.json().catch(() => ({}));
+      
+      if (data.error === "App não instalado na subconta") {
+        setHasToken(false);
+        setGhlUsers([]);
+        return;
       }
 
-      const response = await fetch(
-        `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
-        {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Version": "2021-07-28",
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Falha ao buscar usuários");
-      }
-
-      const data = await response.json();
+      setHasToken(true);
       setGhlUsers(data.users || []);
     } catch (error) {
       console.error("Error fetching GHL users:", error);
@@ -155,10 +119,9 @@ export function EmbedAssignUserDialog({
           Vincule um usuário do GoHighLevel à instância <strong>{instanceName}</strong>
         </p>
 
-        {!ghlAccessToken ? (
-          <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/30 rounded-lg mb-4">
-            <AlertCircle className="h-4 w-4 text-warning" />
-            <span className="text-sm text-warning">App não instalado na subconta</span>
+        {!hasToken ? (
+          <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg mb-4">
+            <span className="text-sm text-destructive">App não instalado na subconta</span>
           </div>
         ) : (
           <div className="space-y-4">
@@ -207,7 +170,7 @@ export function EmbedAssignUserDialog({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={saving || !ghlAccessToken}
+            disabled={saving || !hasToken}
             className="bg-primary hover:bg-primary/90"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

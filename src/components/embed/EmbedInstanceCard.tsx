@@ -40,9 +40,6 @@ interface EmbedInstanceCardProps {
   subaccountId: string;
   embedToken: string;
   locationId: string;
-  ghlAccessToken: string | null;
-  uazapiBaseUrl: string;
-  uazapiAdminToken: string;
   onStatusChange?: () => void;
 }
 
@@ -51,13 +48,9 @@ export function EmbedInstanceCard({
   subaccountId,
   embedToken,
   locationId,
-  ghlAccessToken,
-  uazapiBaseUrl,
-  uazapiAdminToken,
   onStatusChange 
 }: EmbedInstanceCardProps) {
   const [syncing, setSyncing] = useState(false);
-  // Use cached values from DB as initial state
   const [connectedPhone, setConnectedPhone] = useState<string | null>(instance.phone || null);
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(instance.profile_pic_url || null);
   const [currentStatus, setCurrentStatus] = useState(instance.instance_status);
@@ -74,24 +67,21 @@ export function EmbedInstanceCard({
     const s = String(raw);
     if (!s) return null;
     if (s.startsWith("data:image")) return s;
-    // base64 PNG without prefix
     if (/^[A-Za-z0-9+/=]+$/.test(s) && s.length > 200) {
       return `data:image/png;base64,${s}`;
     }
     return s;
   };
 
-  const callUazapiProxy = async (action: "status" | "connect" | "qrcode") => {
+  const callUazapiProxy = async (action: "status" | "connect" | "qrcode" | "disconnect" | "ghl-users", extra?: Record<string, string>) => {
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/uazapi-proxy-embed`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embedToken, instanceId: instance.id, action }),
+      body: JSON.stringify({ embedToken, instanceId: instance.id, action, ...extra }),
     });
     const json = await res.json().catch(() => null);
-    return json as
-      | { ok: boolean; status: number; data: any; usedUrl?: string }
-      | null;
+    return json;
   };
 
   const fetchInstanceStatus = async (): Promise<{
@@ -103,29 +93,24 @@ export function EmbedInstanceCard({
     jid?: string | null;
   } | null> => {
     try {
-      // Use backend proxy to avoid CORS/iframe restrictions inside GHL
       const proxied = await callUazapiProxy("status");
       if (!proxied?.data) return null;
       const data = proxied.data;
       
-       // Extract connection indicators (some servers set status.connected=true incorrectly)
-       const loggedIn = data.status?.loggedIn === true || data.instance?.loggedIn === true;
-       const jid: string | null =
-         data.status?.jid || data.instance?.jid || data.jid || null;
+      const loggedIn = data.status?.loggedIn === true || data.instance?.loggedIn === true;
+      const jid: string | null =
+        data.status?.jid || data.instance?.jid || data.jid || null;
 
-       // Extract status with multiple fallbacks
-       const rawStatus =
-         data.instance?.status ||
-         data.instance?.connectionState ||
-         data.instance?.state ||
-         data.status ||
-         data.state ||
-         data.connection ||
-         data.connectionState ||
-         "disconnected";
+      const rawStatus =
+        data.instance?.status ||
+        data.instance?.connectionState ||
+        data.instance?.state ||
+        data.status ||
+        data.state ||
+        data.connection ||
+        data.connectionState ||
+        "disconnected";
       
-      // Extract phone number with multiple fallbacks - check nested structures
-      // UAZAPI returns: instance.owner or status.jid
       const phone = data.instance?.owner
         || data.instance?.phoneNumber 
         || data.instance?.phone 
@@ -140,8 +125,6 @@ export function EmbedInstanceCard({
         || data.instance?.jid?.split("@")?.[0]
         || "";
       
-       // Extract profile picture with multiple fallbacks - check nested structures
-      // UAZAPI returns: instance.profilePicUrl
       const pic = data.instance?.profilePicUrl
         || data.instance?.profilePic
         || data.instance?.picture
@@ -152,87 +135,56 @@ export function EmbedInstanceCard({
         || data.imgUrl
         || "";
       
-       // Extract QR Code when available (some servers return it from /instance/status)
-       const qrcodeRaw =
-          data.instance?.qrcode ||
-          data.qrcode ||
-          data.qr ||
-          data.base64 ||
-          data.qr_code ||
-          data.data?.qrcode ||
-          data.data?.qr ||
-          null;
+      const qrcodeRaw =
+        data.instance?.qrcode ||
+        data.qrcode ||
+        data.qr ||
+        data.base64 ||
+        data.qr_code ||
+        data.data?.qrcode ||
+        data.data?.qr ||
+        null;
 
-       const qrcode = normalizeQr(qrcodeRaw);
+      const qrcode = normalizeQr(qrcodeRaw);
 
-       // Determine status reliably: require loggedIn/jid or connected-like instance.status,
-       // and require phone/jid/owner to consider it truly connected.
-       const statusLower = String(rawStatus).toLowerCase();
-       const instanceStatusConnected = ["connected", "open", "authenticated"].includes(statusLower);
-       const sessionConnected = loggedIn || !!jid;
-       const connectedSignals = sessionConnected || instanceStatusConnected;
+      const statusLower = String(rawStatus).toLowerCase();
+      const instanceStatusConnected = ["connected", "open", "authenticated"].includes(statusLower);
+      const sessionConnected = loggedIn || !!jid;
+      const connectedSignals = sessionConnected || instanceStatusConnected;
 
-       let mapped: "connected" | "connecting" | "disconnected" = "disconnected";
-       if (connectedSignals) {
-         mapped = phone ? "connected" : "connecting";
-       } else if (["connecting", "qr", "waiting", "pairing"].includes(statusLower)) {
-         mapped = "connecting";
-       } else {
-         mapped = "disconnected";
-       }
+      let mapped: "connected" | "connecting" | "disconnected" = "disconnected";
+      if (connectedSignals) {
+        mapped = phone ? "connected" : "connecting";
+      } else if (["connecting", "qr", "waiting", "pairing"].includes(statusLower)) {
+        mapped = "connecting";
+      } else {
+        mapped = "disconnected";
+      }
 
-       return {
-         status: mapped,
-         phone,
-         profilePicUrl: pic,
-         qrcode: qrcode || undefined,
-         loggedIn,
-         jid,
-       };
+      return {
+        status: mapped,
+        phone,
+        profilePicUrl: pic,
+        qrcode: qrcode || undefined,
+        loggedIn,
+        jid,
+      };
     } catch (error) {
       console.error("[EmbedInstanceCard] Error fetching status:", error);
       return null;
     }
   };
 
-  const mapUazapiStatus = (uazapiStatus: string): "connected" | "connecting" | "disconnected" => {
-    const statusMap: Record<string, "connected" | "connecting" | "disconnected"> = {
-      "CONNECTED": "connected",
-      "connected": "connected",
-      "open": "connected",
-      "CONNECTING": "connecting",
-      "connecting": "connecting",
-      "DISCONNECTED": "disconnected",
-      "disconnected": "disconnected",
-      "close": "disconnected",
-      "closed": "disconnected",
-    };
-    return statusMap[uazapiStatus] || "disconnected";
-  };
-
-  // Fetch GHL user name on mount (using OAuth token)
+  // Fetch GHL user name via server-side proxy
   useEffect(() => {
     const fetchGhlUserName = async () => {
-      if (currentGhlUserId && ghlAccessToken && locationId) {
+      if (currentGhlUserId && locationId) {
         try {
-          const response = await fetch(
-            `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
-            {
-              method: "GET",
-              headers: {
-                "Authorization": `Bearer ${ghlAccessToken}`,
-                "Version": "2021-07-28",
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          if (response.ok) {
-            const data = await response.json();
-            const user = data.users?.find((u: any) => u.id === currentGhlUserId);
-            if (user) {
-              setGhlUserName(user.name);
-            }
+          const result = await callUazapiProxy("ghl-users", { locationId });
+          const users = result?.users || [];
+          const user = users.find((u: any) => u.id === currentGhlUserId);
+          if (user) {
+            setGhlUserName(user.name);
           }
         } catch (error) {
           console.error("Failed to fetch GHL user name:", error);
@@ -241,10 +193,9 @@ export function EmbedInstanceCard({
     };
 
     fetchGhlUserName();
-  }, [currentGhlUserId, ghlAccessToken, locationId]);
+  }, [currentGhlUserId, locationId]);
 
   useEffect(() => {
-    // Only fetch from UAZAPI if we don't have cached data
     if (!instance.phone || !instance.profile_pic_url) {
       fetchInstanceStatus().then((result) => {
         if (result) {
@@ -258,7 +209,6 @@ export function EmbedInstanceCard({
             setProfilePicUrl(null);
           }
 
-          // Persist status and prevent stale cache when disconnected
           persistStatusToDb({
             status: result.status,
             phone: result.phone,
@@ -332,64 +282,12 @@ export function EmbedInstanceCard({
   const handleDisconnect = async () => {
     setDisconnecting(true);
     try {
-      const base = uazapiBaseUrl.replace(/\/$/, "");
+      // Use server-side proxy for disconnect - no tokens exposed to client
+      const result = await callUazapiProxy("disconnect");
       
-      // Try multiple endpoints and methods as different UAZAPI versions use different endpoints
-      const endpoints = [
-        { path: "/instance/disconnect", method: "POST" },
-        { path: "/instance/disconnect", method: "DELETE" },
-        { path: "/instance/disconnect", method: "GET" },
-        { path: "/instance/logout", method: "POST" },
-        { path: "/instance/logout", method: "DELETE" },
-        { path: "/instance/logout", method: "GET" },
-      ];
-
-      let success = false;
-      let lastError = "";
-
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(`${base}${endpoint.path}`, {
-            method: endpoint.method,
-            headers: {
-              "Content-Type": "application/json",
-              token: instance.uazapi_instance_token,
-            },
-          });
-
-          if (response.ok || response.status === 200) {
-            success = true;
-            break;
-          }
-
-          // If we get 404/405, try next endpoint
-          if (response.status === 404 || response.status === 405) {
-            continue;
-          }
-
-          const errorData = await response.json().catch(() => ({}));
-          lastError = errorData.message || `Erro ${response.status}`;
-        } catch {
-          // Network error, try next
-          continue;
-        }
+      if (!result?.ok) {
+        throw new Error("Falha ao desconectar");
       }
-
-      if (!success) {
-        throw new Error(lastError || "Nenhum endpoint de desconexão funcionou");
-      }
-
-      // Update database to reflect disconnection
-      const { createEmbedSupabaseClient } = await import("@/hooks/useEmbedSupabase");
-      const supabase = createEmbedSupabaseClient();
-      await supabase
-        .from("instances")
-        .update({ 
-          instance_status: "disconnected",
-          phone: null,
-          profile_pic_url: null
-        })
-        .eq("id", instance.id);
 
       setCurrentStatus("disconnected");
       setConnectedPhone(null);
@@ -406,7 +304,6 @@ export function EmbedInstanceCard({
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      // 1) Try getting QR from status (common)
       const statusWithQr = await fetchInstanceStatus();
       if (statusWithQr?.qrcode) {
         setQrCode(statusWithQr.qrcode);
@@ -414,7 +311,6 @@ export function EmbedInstanceCard({
         return;
       }
 
-      // 2) Trigger connect via proxy (server-side, avoids CORS)
       const connectRes = await callUazapiProxy("connect");
       const connectData = connectRes?.data || {};
       const immediateQr =
@@ -437,7 +333,6 @@ export function EmbedInstanceCard({
         return;
       }
 
-      // 3) Re-check status after connect (some servers only expose QR here)
       const statusAfter = await fetchInstanceStatus();
       if (statusAfter?.qrcode) {
         setQrCode(statusAfter.qrcode);
@@ -445,7 +340,6 @@ export function EmbedInstanceCard({
         return;
       }
 
-      // 4) Fallback to dedicated qrcode endpoint via proxy
       const qrRes = await callUazapiProxy("qrcode");
       const qrData = qrRes?.data || {};
       const qr =
@@ -460,7 +354,6 @@ export function EmbedInstanceCard({
         qrData.data?.qrcode ||
         qrData.data?.qr ||
         null;
-
 
       const normalizedQr = normalizeQr(qr);
       if (normalizedQr) {
@@ -523,7 +416,6 @@ export function EmbedInstanceCard({
           <div className="p-4 pb-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                {/* Profile Picture or Default Icon */}
                 {profilePicUrl ? (
                   <Avatar className="h-11 w-11 shrink-0 border-2 border-primary/20">
                     <AvatarImage src={profilePicUrl} alt="WhatsApp Profile" />
@@ -547,7 +439,6 @@ export function EmbedInstanceCard({
                     </Badge>
                   </div>
                   
-                  {/* Phone number */}
                   {connectedPhone ? (
                     <div className="flex items-center gap-1.5 mt-1">
                       <Phone className="h-3.5 w-3.5 text-emerald-400" />
@@ -561,7 +452,6 @@ export function EmbedInstanceCard({
                     </p>
                   )}
                   
-                  {/* GHL User */}
                   {currentGhlUserId && (
                     <div className="flex items-center gap-1.5 mt-1">
                       <User className="h-3.5 w-3.5 text-primary" />
@@ -685,7 +575,6 @@ export function EmbedInstanceCard({
         currentUserId={currentGhlUserId || null}
         embedToken={embedToken}
         locationId={locationId}
-        ghlAccessToken={ghlAccessToken}
         onAssigned={handleUserAssigned}
       />
     </>

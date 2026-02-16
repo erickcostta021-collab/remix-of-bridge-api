@@ -9,13 +9,7 @@ interface SubaccountData {
   id: string;
   account_name: string;
   location_id: string;
-  ghl_access_token: string | null;
   user_id: string;
-}
-
-interface UserSettings {
-  uazapi_base_url: string | null;
-  uazapi_admin_token: string | null;
 }
 
 export default function EmbedInstances() {
@@ -27,7 +21,6 @@ export default function EmbedInstances() {
   const [loading, setLoading] = useState(true);
   const [subaccount, setSubaccount] = useState<SubaccountData | null>(null);
   const [instances, setInstances] = useState<EmbedInstance[]>([]);
-  const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -41,10 +34,10 @@ export default function EmbedInstances() {
     try {
       console.log("[EmbedInstances] Fetching subaccount for token:", embedToken);
       
-      // Fetch subaccount by embed token
+      // Fetch subaccount by embed token - only safe columns, NO tokens
       const { data: subData, error: subError } = await supabase
         .from("ghl_subaccounts")
-        .select("id, account_name, location_id, ghl_access_token, user_id")
+        .select("id, account_name, location_id, user_id")
         .eq("embed_token", embedToken)
         .single();
 
@@ -65,19 +58,10 @@ export default function EmbedInstances() {
 
       setSubaccount(subData);
 
-      // Fetch user settings for UAZAPI config
-      const { data: settingsData } = await supabase
-        .from("user_settings")
-        .select("uazapi_base_url, uazapi_admin_token")
-        .eq("user_id", subData.user_id)
-        .single();
-
-      setUserSettings(settingsData);
-
-      // Fetch instances for this subaccount
+      // Fetch instances for this subaccount - only safe columns, NO tokens
       const { data: instData, error: instError } = await supabase
         .from("instances")
-        .select("id, instance_name, instance_status, uazapi_instance_token, ghl_user_id")
+        .select("id, instance_name, instance_status, ghl_user_id, phone, profile_pic_url")
         .eq("subaccount_id", subData.id)
         .order("instance_name");
 
@@ -85,7 +69,11 @@ export default function EmbedInstances() {
         console.error("Error fetching instances:", instError);
         setInstances([]);
       } else {
-        setInstances(instData || []);
+        // Map to EmbedInstance - uazapi_instance_token is no longer needed client-side
+        setInstances((instData || []).map(i => ({
+          ...i,
+          uazapi_instance_token: "", // Not exposed to client
+        })));
       }
     } catch (err) {
       console.error("Error:", err);
@@ -163,9 +151,6 @@ export default function EmbedInstances() {
                 subaccountId={subaccount!.id}
                 embedToken={embedToken!}
                 locationId={subaccount!.location_id}
-                ghlAccessToken={subaccount!.ghl_access_token}
-                uazapiBaseUrl={userSettings?.uazapi_base_url || "https://atllassa.uazapi.com"}
-                uazapiAdminToken={userSettings?.uazapi_admin_token || ""}
                 onStatusChange={handleRefresh}
               />
             ))}

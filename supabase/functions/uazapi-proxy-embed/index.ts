@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-type Action = "status" | "connect" | "qrcode";
+type Action = "status" | "connect" | "qrcode" | "disconnect" | "ghl-users";
 
 function normalizeBaseUrl(url: string) {
   return url.replace(/\/+$/, "");
@@ -23,7 +23,6 @@ async function tryFetchJson(
   for (const path of candidatePaths) {
     const url = `${base}${path}`;
     try {
-      // eslint-disable-next-line no-await-in-loop
       const res = await fetch(url, init);
       if (res.status === 404) continue;
 
@@ -57,8 +56,16 @@ Deno.serve(async (req) => {
     const instanceId = String(body?.instanceId || "").trim();
     const action = String(body?.action || "").trim() as Action;
 
-    if (!embedToken || !instanceId || !["status", "connect", "qrcode"].includes(action)) {
+    if (!embedToken || !["status", "connect", "qrcode", "disconnect", "ghl-users"].includes(action)) {
       return new Response(JSON.stringify({ error: "Parâmetros inválidos" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // For ghl-users action, instanceId is optional (we use locationId from subaccount)
+    if (!instanceId && action !== "ghl-users") {
+      return new Response(JSON.stringify({ error: "instanceId obrigatório" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -70,6 +77,131 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // ============ GHL Users Action ============
+    if (action === "ghl-users") {
+      const locationId = String(body?.locationId || "").trim();
+      if (!locationId) {
+        return new Response(JSON.stringify({ error: "locationId obrigatório" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Validate embed token belongs to this location
+      const { data: sub, error: subErr } = await admin
+        .from("ghl_subaccounts")
+        .select("id, user_id, ghl_access_token, ghl_refresh_token, ghl_token_expires_at, location_id")
+        .eq("embed_token", embedToken)
+        .eq("location_id", locationId)
+        .maybeSingle();
+
+      if (subErr || !sub) {
+        return new Response(JSON.stringify({ error: "Subconta não encontrada" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!sub.ghl_access_token) {
+        return new Response(JSON.stringify({ error: "App não instalado na subconta", users: [] }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Auto-refresh token if needed
+      let token = sub.ghl_access_token;
+      if (sub.ghl_token_expires_at && sub.ghl_refresh_token) {
+        const expiresAt = new Date(sub.ghl_token_expires_at);
+        const now = new Date();
+        if (now.getTime() >= expiresAt.getTime() - 5 * 60 * 1000) {
+          // Get OAuth credentials
+          const { data: settings } = await admin
+            .from("user_settings")
+            .select("ghl_client_id, ghl_client_secret")
+            .eq("user_id", sub.user_id)
+            .maybeSingle();
+
+          let clientId = settings?.ghl_client_id;
+          let clientSecret = settings?.ghl_client_secret;
+
+          if (!clientId || !clientSecret) {
+            const { data: adminCreds } = await admin.rpc("get_admin_oauth_credentials");
+            if (adminCreds?.[0]) {
+              clientId = adminCreds[0].ghl_client_id;
+              clientSecret = adminCreds[0].ghl_client_secret;
+            }
+          }
+
+          if (clientId && clientSecret) {
+            try {
+              const tokenRes = await fetch("https://services.leadconnectorhq.com/oauth/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+                body: new URLSearchParams({
+                  client_id: clientId,
+                  client_secret: clientSecret,
+                  grant_type: "refresh_token",
+                  refresh_token: sub.ghl_refresh_token,
+                  user_type: "Location",
+                }).toString(),
+              });
+              if (tokenRes.ok) {
+                const tokenData = await tokenRes.json();
+                token = tokenData.access_token;
+                await admin
+                  .from("ghl_subaccounts")
+                  .update({
+                    ghl_access_token: tokenData.access_token,
+                    ghl_refresh_token: tokenData.refresh_token,
+                    ghl_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+                    oauth_last_refresh: new Date().toISOString(),
+                  })
+                  .eq("id", sub.id);
+              }
+            } catch (e) {
+              console.error("Token refresh failed in proxy:", e);
+            }
+          }
+        }
+      }
+
+      // Fetch GHL users server-side
+      const ghlRes = await fetch(
+        `https://services.leadconnectorhq.com/users/?locationId=${locationId}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Version": "2021-07-28",
+            "Accept": "application/json",
+          },
+        }
+      );
+
+      if (!ghlRes.ok) {
+        return new Response(JSON.stringify({ error: "Falha ao buscar usuários", users: [] }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const ghlData = await ghlRes.json();
+      // Only return safe fields (id, name, email) - no tokens
+      const safeUsers = (ghlData.users || []).map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+      }));
+
+      return new Response(JSON.stringify({ users: safeUsers }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ============ Instance-based Actions ============
     // Validar se a instância pertence a uma subconta que possui esse embedToken
     const { data: inst, error: instErr } = await admin
       .from("instances")
@@ -146,6 +278,48 @@ Deno.serve(async (req) => {
         { method: "POST", headers: commonHeaders }
       );
       return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "disconnect") {
+      // Try multiple disconnect endpoints
+      const endpoints = [
+        { path: "/instance/disconnect", method: "POST" },
+        { path: "/instance/disconnect", method: "DELETE" },
+        { path: "/instance/disconnect", method: "GET" },
+        { path: "/instance/logout", method: "POST" },
+        { path: "/instance/logout", method: "DELETE" },
+        { path: "/instance/logout", method: "GET" },
+      ];
+
+      const base = normalizeBaseUrl(uazapiBaseUrl);
+      let success = false;
+
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(`${base}${ep.path}`, {
+            method: ep.method,
+            headers: commonHeaders,
+          });
+          if (res.ok || res.status === 200) {
+            success = true;
+            break;
+          }
+          if (res.status === 404 || res.status === 405) continue;
+        } catch {
+          continue;
+        }
+      }
+
+      // Update DB
+      await admin
+        .from("instances")
+        .update({ instance_status: "disconnected", phone: null, profile_pic_url: null })
+        .eq("id", instanceId);
+
+      return new Response(JSON.stringify({ ok: success }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
