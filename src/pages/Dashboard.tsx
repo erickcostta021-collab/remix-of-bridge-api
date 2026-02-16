@@ -292,7 +292,9 @@ export default function Dashboard() {
             </h3>
             <p className="text-muted-foreground max-w-md">
               {subaccounts.length === 0
-                ? "Clique em 'Sincronizar CRM' para importar suas subcontas do GoHighLevel."
+                ? hasGHLToken
+                  ? "Clique em 'Sincronizar CRM' para importar suas subcontas do GoHighLevel."
+                  : "Conecte uma subconta clicando no botão acima para começar."
                 : "Tente ajustar sua busca."}
             </p>
           </div>
